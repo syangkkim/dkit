@@ -16,6 +16,8 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
     match operation {
         Operation::Where(condition) => apply_where(value, condition),
         Operation::Select(fields) => apply_select(value, fields),
+        Operation::Sort { field, descending } => apply_sort(value, field, *descending),
+        Operation::Limit(n) => apply_limit(value, *n),
     }
 }
 
@@ -48,6 +50,91 @@ fn apply_select(value: Value, fields: &[String]) -> Result<Value, DkitError> {
         Value::Object(_) => Ok(select_fields(value, fields)),
         _ => Err(DkitError::QueryError(
             "select clause requires an array or object input".to_string(),
+        )),
+    }
+}
+
+/// sort 절: 배열의 요소를 지정된 필드 기준으로 정렬
+fn apply_sort(value: Value, field: &str, descending: bool) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(mut arr) => {
+            arr.sort_by(|a, b| {
+                let va = extract_sort_key(a, field);
+                let vb = extract_sort_key(b, field);
+                let ord = compare_sort_keys(&va, &vb);
+                if descending {
+                    ord.reverse()
+                } else {
+                    ord
+                }
+            });
+            Ok(Value::Array(arr))
+        }
+        _ => Err(DkitError::QueryError(
+            "sort clause requires an array input".to_string(),
+        )),
+    }
+}
+
+/// 정렬용 키 값 추출
+fn extract_sort_key(value: &Value, field: &str) -> Option<Value> {
+    match value {
+        Value::Object(map) => map.get(field).cloned(),
+        _ => None,
+    }
+}
+
+/// 정렬 키 비교 (None은 항상 뒤로)
+fn compare_sort_keys(a: &Option<Value>, b: &Option<Value>) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (a, b) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(va), Some(vb)) => compare_value_ordering(va, vb),
+    }
+}
+
+/// Value 간 순서 비교
+fn compare_value_ordering(a: &Value, b: &Value) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (a, b) {
+        (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
+        (Value::Integer(x), Value::Float(y)) => {
+            (*x as f64).partial_cmp(y).unwrap_or(Ordering::Equal)
+        }
+        (Value::Float(x), Value::Integer(y)) => {
+            x.partial_cmp(&(*y as f64)).unwrap_or(Ordering::Equal)
+        }
+        (Value::Float(x), Value::Float(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+        (Value::String(x), Value::String(y)) => x.cmp(y),
+        (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
+        // 타입이 다른 경우 타입 순서로 정렬: Null < Bool < Integer/Float < String
+        _ => type_order(a).cmp(&type_order(b)),
+    }
+}
+
+/// 타입별 정렬 우선순위
+fn type_order(v: &Value) -> u8 {
+    match v {
+        Value::Null => 0,
+        Value::Bool(_) => 1,
+        Value::Integer(_) | Value::Float(_) => 2,
+        Value::String(_) => 3,
+        Value::Array(_) => 4,
+        Value::Object(_) => 5,
+    }
+}
+
+/// limit 절: 배열의 처음 N개 요소만 반환
+fn apply_limit(value: Value, n: usize) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let limited: Vec<Value> = arr.into_iter().take(n).collect();
+            Ok(Value::Array(limited))
+        }
+        _ => Err(DkitError::QueryError(
+            "limit clause requires an array input".to_string(),
         )),
     }
 }
@@ -742,5 +829,275 @@ mod tests {
             assert_eq!(obj.len(), 1);
             assert!(obj.contains_key("name"));
         }
+    }
+
+    // --- sort 절 ---
+
+    #[test]
+    fn test_sort_asc_integer() {
+        let data = sample_users();
+        let result = apply_sort(data, "age", false).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        ); // 25
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        ); // 30
+        assert_eq!(
+            arr[2].as_object().unwrap().get("name"),
+            Some(&Value::String("Charlie".to_string()))
+        ); // 35
+    }
+
+    #[test]
+    fn test_sort_desc_integer() {
+        let data = sample_users();
+        let result = apply_sort(data, "age", true).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Charlie".to_string()))
+        ); // 35
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        ); // 30
+        assert_eq!(
+            arr[2].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        ); // 25
+    }
+
+    #[test]
+    fn test_sort_asc_string() {
+        let data = sample_users();
+        let result = apply_sort(data, "name", false).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap().get("name"),
+            Some(&Value::String("Charlie".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_sort_desc_string() {
+        let data = sample_users();
+        let result = apply_sort(data, "name", true).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Charlie".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_sort_missing_field() {
+        // 일부 요소에 필드가 없으면 뒤로 정렬
+        let data = Value::Array(vec![
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                m
+            }),
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("age".to_string(), Value::Integer(25));
+                m
+            }),
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Bob".to_string()));
+                m.insert("age".to_string(), Value::Integer(30));
+                m
+            }),
+        ]);
+        let result = apply_sort(data, "age", false).unwrap();
+        let arr = result.as_array().unwrap();
+        // Alice has no age → goes to end
+        assert_eq!(
+            arr[0].as_object().unwrap().get("age"),
+            Some(&Value::Integer(25))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("age"),
+            Some(&Value::Integer(30))
+        );
+        assert_eq!(arr[2].as_object().unwrap().get("age"), None);
+    }
+
+    #[test]
+    fn test_sort_empty_array() {
+        let data = Value::Array(vec![]);
+        let result = apply_sort(data, "age", false).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_sort_on_non_array() {
+        let data = Value::Integer(42);
+        let result = apply_sort(data, "age", false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sort_float() {
+        let data = Value::Array(vec![
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("score".to_string(), Value::Float(3.14));
+                m
+            }),
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("score".to_string(), Value::Float(1.41));
+                m
+            }),
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("score".to_string(), Value::Float(2.71));
+                m
+            }),
+        ]);
+        let result = apply_sort(data, "score", false).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap().get("score"),
+            Some(&Value::Float(1.41))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("score"),
+            Some(&Value::Float(2.71))
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap().get("score"),
+            Some(&Value::Float(3.14))
+        );
+    }
+
+    // --- limit 절 ---
+
+    #[test]
+    fn test_limit_basic() {
+        let data = sample_users();
+        let result = apply_limit(data, 2).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_limit_larger_than_array() {
+        let data = sample_users();
+        let result = apply_limit(data, 100).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+    }
+
+    #[test]
+    fn test_limit_zero() {
+        let data = sample_users();
+        let result = apply_limit(data, 0).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 0);
+    }
+
+    #[test]
+    fn test_limit_one() {
+        let data = sample_users();
+        let result = apply_limit(data, 1).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn test_limit_empty_array() {
+        let data = Value::Array(vec![]);
+        let result = apply_limit(data, 5).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_limit_on_non_array() {
+        let data = Value::Integer(42);
+        let result = apply_limit(data, 5);
+        assert!(result.is_err());
+    }
+
+    // --- 통합: sort + limit ---
+
+    #[test]
+    fn test_integration_sort_then_limit() {
+        let data = sample_users();
+        let query = parse_query(".[] | sort age desc | limit 2").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Charlie".to_string()))
+        ); // 35
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        ); // 30
+    }
+
+    #[test]
+    fn test_integration_where_sort_limit() {
+        let data = sample_users();
+        let query = parse_query(".[] | where city == \"Seoul\" | sort age | limit 1").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        ); // Alice(30, Seoul) is younger than Charlie(35, Seoul)
+    }
+
+    #[test]
+    fn test_integration_where_select_sort() {
+        let data = sample_users();
+        let query = parse_query(".[] | where age > 25 | select name, age | sort name").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Charlie".to_string()))
+        );
     }
 }
