@@ -56,6 +56,7 @@ All 12 conversion paths (4 x 3) are supported.
 dkit convert data.json --to yaml
 dkit convert users.csv --to json
 dkit convert config.yaml --to toml
+dkit convert config.toml --to json
 
 # Output to file
 dkit convert data.json --to csv -o output.csv
@@ -77,6 +78,7 @@ dkit convert data.csv --to json --no-header    # CSV without header
 ```bash
 # Field access
 dkit query config.yaml '.database.host'
+dkit query config.toml '.server.port'
 
 # Nested path
 dkit query data.json '.users[0].name'
