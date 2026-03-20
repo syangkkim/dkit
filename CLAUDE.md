@@ -43,16 +43,29 @@ JSON, CSV, YAML, TOML 간 양방향 변환 + 통합 쿼리 + 테이블 출력.
 - `docs/cli-spec.md` — 서브커맨드별 CLI 인터페이스 명세 (옵션, 사용법)
 - `docs/query-syntax.md` — 쿼리 문법 명세 (EBNF, 연산자, 예제)
 
-### Labels
+### 이슈 레이블 체계
 
-- `v0.1.0` ~ `v0.4.0`: 버전 마일스톤
-- `core`: 핵심 기능 (Value, 트레이트, 에러)
-- `format`: 데이터 포맷 관련 (JSON, CSV, YAML, TOML)
-- `cli`: CLI 인터페이스 및 서브커맨드
-- `query`: 쿼리 엔진
-- `testing`: 테스트 관련
-- `infra`: 인프라 및 CI/CD
-- `release`: 릴리스 관련
+레이블은 접두사 기반으로 분류한다. 이슈 생성 시 `type:` + `area:` 조합을 기본으로 사용하고, 필요 시 `p0:`~`p2:` 우선순위를 추가한다.
+
+| 카테고리 | 레이블 | 설명 |
+|---------|--------|------|
+| **타입** | `type:feature` | 새 기능 |
+| | `type:bug` | 버그 수정 |
+| | `type:refactor` | 리팩토링/개선 |
+| | `type:docs` | 문서 작업 |
+| | `type:infra` | CI/CD, 빌드 |
+| **우선순위** | `p0:critical` | 즉시 해결 |
+| | `p1:high` | 다음 작업 |
+| | `p2:normal` | 일반 (기본값) |
+| **컴포넌트** | `area:core` | 핵심 기능 (Value, 트레이트, 에러) |
+| | `area:cli` | CLI 인터페이스 |
+| | `area:format` | 데이터 포맷 (JSON, CSV, YAML, TOML) |
+| | `area:query` | 쿼리 엔진 |
+
+### 마일스톤 관리
+
+버전 마일스톤은 GitHub Milestones 기능으로 관리한다 (레이블 아님).
+이슈 생성 시 해당 마일스톤에 할당한다.
 
 ## Build & Test Commands
 
