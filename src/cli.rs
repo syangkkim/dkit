@@ -77,9 +77,29 @@ pub enum Commands {
         /// Input file path (use - for stdin)
         input: String,
 
+        /// Input format (required when reading from stdin)
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Path to nested data (e.g. '.users' or '.config.db')
+        #[arg(long)]
+        path: Option<String>,
+
         /// Maximum number of rows to display
         #[arg(short = 'n', long)]
-        max_rows: Option<usize>,
+        limit: Option<usize>,
+
+        /// Columns to display (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        columns: Option<Vec<String>>,
+
+        /// CSV delimiter character
+        #[arg(long)]
+        delimiter: Option<char>,
+
+        /// CSV without header row
+        #[arg(long)]
+        no_header: bool,
     },
 
     /// Show statistics about data
