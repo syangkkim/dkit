@@ -39,8 +39,18 @@ fn main() -> anyhow::Result<()> {
                 flow,
             })?;
         }
-        Commands::Query { .. } => {
-            eprintln!("query command is not yet implemented");
+        Commands::Query {
+            input,
+            query,
+            from,
+            to,
+        } => {
+            commands::query::run(&commands::query::QueryArgs {
+                input: &input,
+                query: &query,
+                from: from.as_deref(),
+                to: to.as_deref(),
+            })?;
         }
         Commands::View {
             input,
