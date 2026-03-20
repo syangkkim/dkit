@@ -10,6 +10,7 @@ use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
 use crate::format::{detect_format, Format, FormatOptions, FormatReader, FormatWriter};
 use crate::query::evaluator::evaluate_path;
+use crate::query::filter::apply_operations;
 use crate::query::parser::parse_query;
 use crate::value::Value;
 
@@ -50,7 +51,8 @@ pub fn run(args: &QueryArgs) -> Result<()> {
 
     // 쿼리 파싱 및 실행
     let query = parse_query(args.query)?;
-    let result = evaluate_path(&value, &query.path)?;
+    let path_result = evaluate_path(&value, &query.path)?;
+    let result = apply_operations(path_result, &query.operations)?;
 
     // 출력 포맷 결정: -o 파일 확장자 → --to → 기본 JSON
     let output_format = match args.to {

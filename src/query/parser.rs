@@ -5,6 +5,8 @@ use crate::error::DkitError;
 pub struct Query {
     /// 경로 접근 (`.users[0].name`)
     pub path: Path,
+    /// 파이프라인 연산 (`| where ...`)
+    pub operations: Vec<Operation>,
 }
 
 /// 경로: `.` + 세그먼트들
@@ -22,6 +24,49 @@ pub enum Segment {
     Index(i64),
     /// 배열 이터레이션 (`[]`)
     Iterate,
+}
+
+/// 파이프라인 연산
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operation {
+    /// `where` 필터링
+    Where(Condition),
+}
+
+/// 조건식 (where 절)
+#[derive(Debug, Clone, PartialEq)]
+pub enum Condition {
+    /// 단일 비교: `field op value`
+    Comparison(Comparison),
+}
+
+/// 비교식: `IDENTIFIER compare_op value`
+#[derive(Debug, Clone, PartialEq)]
+pub struct Comparison {
+    pub field: String,
+    pub op: CompareOp,
+    pub value: LiteralValue,
+}
+
+/// 비교 연산자
+#[derive(Debug, Clone, PartialEq)]
+pub enum CompareOp {
+    Eq, // ==
+    Ne, // !=
+    Gt, // >
+    Lt, // <
+    Ge, // >=
+    Le, // <=
+}
+
+/// 리터럴 값 (비교 대상)
+#[derive(Debug, Clone, PartialEq)]
+pub enum LiteralValue {
+    String(String),
+    Integer(i64),
+    Float(f64),
+    Bool(bool),
+    Null,
 }
 
 /// 쿼리 문자열을 파싱하는 파서
@@ -44,6 +89,15 @@ impl Parser {
         let path = self.parse_path()?;
         self.skip_whitespace();
 
+        // 파이프라인 연산 파싱: `| where ...`
+        let mut operations = Vec::new();
+        while self.peek() == Some('|') {
+            self.advance(); // consume '|'
+            self.skip_whitespace();
+            operations.push(self.parse_operation()?);
+            self.skip_whitespace();
+        }
+
         if self.pos != self.input.len() {
             return Err(DkitError::QueryError(format!(
                 "unexpected character '{}' at position {}",
@@ -51,7 +105,7 @@ impl Parser {
             )));
         }
 
-        Ok(Query { path })
+        Ok(Query { path, operations })
     }
 
     /// 경로를 파싱: `.` 으로 시작
@@ -163,6 +217,237 @@ impl Parser {
         }
 
         Ok(Segment::Index(if negative { -index } else { index }))
+    }
+
+    // --- 파이프라인 연산 파싱 ---
+
+    /// 연산 파싱: `where ...`
+    fn parse_operation(&mut self) -> Result<Operation, DkitError> {
+        let keyword = self.parse_keyword()?;
+        match keyword.as_str() {
+            "where" => {
+                self.skip_whitespace();
+                let condition = self.parse_condition()?;
+                Ok(Operation::Where(condition))
+            }
+            _ => Err(DkitError::QueryError(format!(
+                "unknown operation '{}' at position {}",
+                keyword,
+                self.pos - keyword.len()
+            ))),
+        }
+    }
+
+    /// 키워드 파싱 (알파벳 + 언더스코어)
+    fn parse_keyword(&mut self) -> Result<String, DkitError> {
+        let start = self.pos;
+        while !self.is_at_end() {
+            let c = self.input[self.pos];
+            if c.is_alphabetic() || c == '_' {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        if self.pos == start {
+            return Err(DkitError::QueryError(format!(
+                "expected operation keyword at position {}",
+                self.pos
+            )));
+        }
+        Ok(self.input[start..self.pos].iter().collect())
+    }
+
+    /// 조건식 파싱: `field op value`
+    fn parse_condition(&mut self) -> Result<Condition, DkitError> {
+        let comparison = self.parse_comparison()?;
+        Ok(Condition::Comparison(comparison))
+    }
+
+    /// 비교식 파싱: `IDENTIFIER compare_op literal_value`
+    fn parse_comparison(&mut self) -> Result<Comparison, DkitError> {
+        // 필드 이름
+        let field = self.parse_identifier()?;
+        self.skip_whitespace();
+
+        // 비교 연산자
+        let op = self.parse_compare_op()?;
+        self.skip_whitespace();
+
+        // 리터럴 값
+        let value = self.parse_literal_value()?;
+
+        Ok(Comparison { field, op, value })
+    }
+
+    /// 식별자 파싱 (필드 이름)
+    fn parse_identifier(&mut self) -> Result<String, DkitError> {
+        let start = self.pos;
+        while !self.is_at_end() {
+            let c = self.input[self.pos];
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        if self.pos == start {
+            return Err(DkitError::QueryError(format!(
+                "expected field name at position {}",
+                self.pos
+            )));
+        }
+        Ok(self.input[start..self.pos].iter().collect())
+    }
+
+    /// 비교 연산자 파싱: ==, !=, >=, <=, >, <
+    fn parse_compare_op(&mut self) -> Result<CompareOp, DkitError> {
+        let c1 = self.peek().ok_or_else(|| {
+            DkitError::QueryError(format!(
+                "expected comparison operator at position {}",
+                self.pos
+            ))
+        })?;
+
+        match c1 {
+            '=' => {
+                self.advance();
+                if self.consume_char('=') {
+                    Ok(CompareOp::Eq)
+                } else {
+                    Err(DkitError::QueryError(format!(
+                        "expected '==' at position {}",
+                        self.pos - 1
+                    )))
+                }
+            }
+            '!' => {
+                self.advance();
+                if self.consume_char('=') {
+                    Ok(CompareOp::Ne)
+                } else {
+                    Err(DkitError::QueryError(format!(
+                        "expected '!=' at position {}",
+                        self.pos - 1
+                    )))
+                }
+            }
+            '>' => {
+                self.advance();
+                if self.consume_char('=') {
+                    Ok(CompareOp::Ge)
+                } else {
+                    Ok(CompareOp::Gt)
+                }
+            }
+            '<' => {
+                self.advance();
+                if self.consume_char('=') {
+                    Ok(CompareOp::Le)
+                } else {
+                    Ok(CompareOp::Lt)
+                }
+            }
+            _ => Err(DkitError::QueryError(format!(
+                "expected comparison operator at position {}, found '{}'",
+                self.pos, c1
+            ))),
+        }
+    }
+
+    /// 리터럴 값 파싱: 문자열, 숫자, bool, null
+    fn parse_literal_value(&mut self) -> Result<LiteralValue, DkitError> {
+        match self.peek() {
+            Some('"') => self.parse_string_literal(),
+            Some(c) if c.is_ascii_digit() || c == '-' => self.parse_number_literal(),
+            Some(c) if c.is_alphabetic() => {
+                let word = self.parse_keyword()?;
+                match word.as_str() {
+                    "true" => Ok(LiteralValue::Bool(true)),
+                    "false" => Ok(LiteralValue::Bool(false)),
+                    "null" => Ok(LiteralValue::Null),
+                    _ => Err(DkitError::QueryError(format!(
+                        "unexpected value '{}' at position {}",
+                        word,
+                        self.pos - word.len()
+                    ))),
+                }
+            }
+            Some(c) => Err(DkitError::QueryError(format!(
+                "unexpected character '{}' at position {}",
+                c, self.pos
+            ))),
+            None => Err(DkitError::QueryError(format!(
+                "expected value at position {}",
+                self.pos
+            ))),
+        }
+    }
+
+    /// 문자열 리터럴 파싱: `"..."`
+    fn parse_string_literal(&mut self) -> Result<LiteralValue, DkitError> {
+        if !self.consume_char('"') {
+            return Err(DkitError::QueryError(format!(
+                "expected '\"' at position {}",
+                self.pos
+            )));
+        }
+        let start = self.pos;
+        while !self.is_at_end() && self.input[self.pos] != '"' {
+            self.pos += 1;
+        }
+        if self.is_at_end() {
+            return Err(DkitError::QueryError(format!(
+                "unterminated string starting at position {}",
+                start - 1
+            )));
+        }
+        let s: String = self.input[start..self.pos].iter().collect();
+        self.advance(); // consume closing '"'
+        Ok(LiteralValue::String(s))
+    }
+
+    /// 숫자 리터럴 파싱: 정수 또는 부동소수점
+    fn parse_number_literal(&mut self) -> Result<LiteralValue, DkitError> {
+        let start = self.pos;
+        if self.peek() == Some('-') {
+            self.advance();
+        }
+        while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
+            self.pos += 1;
+        }
+        let mut is_float = false;
+        if self.peek() == Some('.') {
+            is_float = true;
+            self.advance();
+            while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
+                self.pos += 1;
+            }
+        }
+        if self.pos == start || (self.pos == start + 1 && self.input[start] == '-') {
+            return Err(DkitError::QueryError(format!(
+                "expected number at position {}",
+                start
+            )));
+        }
+        let num_str: String = self.input[start..self.pos].iter().collect();
+        if is_float {
+            let f: f64 = num_str.parse().map_err(|_| {
+                DkitError::QueryError(format!(
+                    "invalid number '{}' at position {}",
+                    num_str, start
+                ))
+            })?;
+            Ok(LiteralValue::Float(f))
+        } else {
+            let n: i64 = num_str.parse().map_err(|_| {
+                DkitError::QueryError(format!(
+                    "invalid number '{}' at position {}",
+                    num_str, start
+                ))
+            })?;
+            Ok(LiteralValue::Integer(n))
+        }
     }
 
     // --- 유틸리티 ---
@@ -426,5 +711,173 @@ mod tests {
             q.path.segments,
             vec![Segment::Iterate, Segment::Field("name".to_string()),]
         );
+    }
+
+    // --- where 절 파싱 ---
+
+    #[test]
+    fn test_where_eq_integer() {
+        let q = parse_query(".users[] | where age == 30").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Field("users".to_string()), Segment::Iterate]
+        );
+        assert_eq!(q.operations.len(), 1);
+        assert_eq!(
+            q.operations[0],
+            Operation::Where(Condition::Comparison(Comparison {
+                field: "age".to_string(),
+                op: CompareOp::Eq,
+                value: LiteralValue::Integer(30),
+            }))
+        );
+    }
+
+    #[test]
+    fn test_where_ne_string() {
+        let q = parse_query(".items[] | where status != \"inactive\"").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Where(Condition::Comparison(Comparison {
+                field: "status".to_string(),
+                op: CompareOp::Ne,
+                value: LiteralValue::String("inactive".to_string()),
+            }))
+        );
+    }
+
+    #[test]
+    fn test_where_gt() {
+        let q = parse_query(".[] | where age > 25").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.field, "age");
+                assert_eq!(cmp.op, CompareOp::Gt);
+                assert_eq!(cmp.value, LiteralValue::Integer(25));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_lt() {
+        let q = parse_query(".[] | where price < 100").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.op, CompareOp::Lt);
+                assert_eq!(cmp.value, LiteralValue::Integer(100));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_ge() {
+        let q = parse_query(".[] | where score >= 80").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.op, CompareOp::Ge);
+                assert_eq!(cmp.value, LiteralValue::Integer(80));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_le() {
+        let q = parse_query(".[] | where price <= 1000").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.op, CompareOp::Le);
+                assert_eq!(cmp.value, LiteralValue::Integer(1000));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_float_literal() {
+        let q = parse_query(".[] | where score > 3.14").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.value, LiteralValue::Float(3.14));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_negative_number() {
+        let q = parse_query(".[] | where temp > -10").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.value, LiteralValue::Integer(-10));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_bool_literal() {
+        let q = parse_query(".[] | where active == true").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.value, LiteralValue::Bool(true));
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_null_literal() {
+        let q = parse_query(".[] | where value == null").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.value, LiteralValue::Null);
+            }
+        }
+    }
+
+    #[test]
+    fn test_where_no_operations_for_path_only() {
+        let q = parse_query(".users[0].name").unwrap();
+        assert!(q.operations.is_empty());
+    }
+
+    #[test]
+    fn test_where_with_extra_whitespace() {
+        let q = parse_query(".[]  |  where  age  >  30  ").unwrap();
+        match &q.operations[0] {
+            Operation::Where(Condition::Comparison(cmp)) => {
+                assert_eq!(cmp.field, "age");
+                assert_eq!(cmp.op, CompareOp::Gt);
+                assert_eq!(cmp.value, LiteralValue::Integer(30));
+            }
+        }
+    }
+
+    // --- where 파싱 에러 ---
+
+    #[test]
+    fn test_error_where_missing_field() {
+        let err = parse_query(".[] | where == 30").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_error_where_missing_operator() {
+        let err = parse_query(".[] | where age 30").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_error_where_missing_value() {
+        let err = parse_query(".[] | where age >").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_error_where_unterminated_string() {
+        let err = parse_query(".[] | where name == \"hello").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_error_unknown_operation() {
+        let err = parse_query(".[] | foobar age > 30").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
     }
 }
