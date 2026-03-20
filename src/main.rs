@@ -6,13 +6,44 @@ mod output;
 mod query;
 mod value;
 
+use std::process;
+
 use clap::Parser;
+use colored::Colorize;
 
 use cli::{Cli, Commands};
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     let cli = Cli::parse();
 
+    if let Err(err) = run_command(cli) {
+        print_error(&err);
+        process::exit(1);
+    }
+}
+
+/// 에러를 색상 강조와 함께 stderr에 출력
+fn print_error(err: &anyhow::Error) {
+    let msg = format!("{err:#}");
+    let mut lines = msg.lines();
+
+    // 첫 줄은 "error:" 접두사와 빨간색
+    if let Some(first) = lines.next() {
+        eprintln!("{} {}", "error:".red().bold(), first);
+    }
+
+    // 나머지 줄 (힌트 등)은 노란색
+    for line in lines {
+        let line = line.trim();
+        if line.starts_with("Hint:") || line.starts_with("Supported formats:") {
+            eprintln!("  {}", line.yellow());
+        } else if !line.is_empty() {
+            eprintln!("  {line}");
+        }
+    }
+}
+
+fn run_command(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Commands::Convert {
             input,

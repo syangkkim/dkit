@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
+use super::read_file;
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
@@ -44,7 +45,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     if args.input.is_empty() {
         let source_format = match args.from {
             Some(f) => Format::from_str(f)?,
-            None => bail!("--from is required when reading from stdin"),
+            None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
         };
         let mut buf = String::new();
         io::stdin()
@@ -72,7 +73,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     if args.input.len() > 1 {
         let outdir = match args.outdir {
             Some(d) => d,
-            None => bail!("--outdir is required when converting multiple files"),
+            None => bail!("--outdir is required when converting multiple files\n  Hint: specify an output directory, e.g. --outdir ./output"),
         };
         fs::create_dir_all(outdir)
             .with_context(|| format!("Failed to create directory {}", outdir.display()))?;
@@ -89,8 +90,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
                 ..Default::default()
             };
 
-            let content = fs::read_to_string(path)
-                .with_context(|| format!("Failed to read {}", path.display()))?;
+            let content = read_file(path)?;
             let value = read_value(&content, source_format, &read_options)?;
             let result = write_value(&value, target_format, &write_options)?;
 
@@ -121,8 +121,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         ..Default::default()
     };
 
-    let content =
-        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let content = read_file(path)?;
     let value = read_value(&content, source_format, &read_options)?;
     let result = write_value(&value, target_format, &write_options)?;
 

@@ -1,4 +1,3 @@
-use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
 
@@ -51,7 +50,7 @@ fn read_input(args: &ViewArgs) -> Result<(String, Format)> {
     if args.input == "-" {
         let format = match args.from {
             Some(f) => Format::from_str(f)?,
-            None => bail!("--from is required when reading from stdin"),
+            None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
         };
         let mut buf = String::new();
         io::stdin()
@@ -64,8 +63,7 @@ fn read_input(args: &ViewArgs) -> Result<(String, Format)> {
             Some(f) => Format::from_str(f)?,
             None => detect_format(path)?,
         };
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read {}", path.display()))?;
+        let content = super::read_file(path)?;
         Ok((content, format))
     }
 }

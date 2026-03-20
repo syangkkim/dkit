@@ -1,13 +1,16 @@
+/// 지원하는 포맷 목록 (에러 메시지용)
+pub const SUPPORTED_FORMATS: &[&str] = &["json", "csv", "yaml", "yml", "toml"];
+
 /// dkit 에러 타입 정의
 ///
 /// 포맷 파싱, 쓰기, IO, 쿼리 등 카테고리별 에러를 구분하며,
 /// `thiserror`로 `Display`와 `Error`를 자동 구현한다.
 #[derive(Debug, thiserror::Error)]
 pub enum DkitError {
-    #[error("Unknown format: {0}")]
+    #[error("Unknown format: '{0}'\n  Supported formats: {}", SUPPORTED_FORMATS.join(", "))]
     UnknownFormat(String),
 
-    #[error("Failed to parse {format}: {source}")]
+    #[error("Failed to parse {format}: {source}\n  Hint: check that the input is valid {format}")]
     ParseError {
         format: String,
         #[source]
@@ -22,7 +25,7 @@ pub enum DkitError {
     },
 
     #[allow(dead_code)]
-    #[error("Invalid query: {0}")]
+    #[error("Invalid query: {0}\n  Hint: use 'dkit query --help' for query syntax")]
     QueryError(String),
 
     #[error("IO error: {0}")]
@@ -46,7 +49,12 @@ mod tests {
     #[test]
     fn test_unknown_format_display() {
         let err = DkitError::UnknownFormat("xml".to_string());
-        assert_eq!(err.to_string(), "Unknown format: xml");
+        let msg = err.to_string();
+        assert!(msg.contains("Unknown format: 'xml'"));
+        assert!(msg.contains("Supported formats:"));
+        assert!(msg.contains("json"));
+        assert!(msg.contains("csv"));
+        assert!(msg.contains("toml"));
     }
 
     #[test]
@@ -57,7 +65,9 @@ mod tests {
             format: "JSON".to_string(),
             source,
         };
-        assert_eq!(err.to_string(), "Failed to parse JSON: unexpected token");
+        let msg = err.to_string();
+        assert!(msg.contains("Failed to parse JSON: unexpected token"));
+        assert!(msg.contains("Hint:"));
     }
 
     #[test]
@@ -77,10 +87,9 @@ mod tests {
     #[test]
     fn test_query_error_display() {
         let err = DkitError::QueryError("invalid syntax at position 5".to_string());
-        assert_eq!(
-            err.to_string(),
-            "Invalid query: invalid syntax at position 5"
-        );
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid query: invalid syntax at position 5"));
+        assert!(msg.contains("Hint:"));
     }
 
     #[test]
@@ -102,7 +111,7 @@ mod tests {
         // DkitError는 anyhow::Error로 변환 가능해야 한다
         let err = DkitError::UnknownFormat("bin".to_string());
         let anyhow_err: anyhow::Error = err.into();
-        assert_eq!(anyhow_err.to_string(), "Unknown format: bin");
+        assert!(anyhow_err.to_string().contains("Unknown format: 'bin'"));
     }
 
     #[test]
