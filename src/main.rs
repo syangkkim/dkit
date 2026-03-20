@@ -121,6 +121,27 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 no_header,
             })?;
         }
+        Commands::Merge {
+            input,
+            to,
+            output,
+            delimiter,
+            pretty,
+            compact,
+            no_header,
+            flow,
+        } => {
+            commands::merge::run(&commands::merge::MergeArgs {
+                input: &input,
+                to: to.as_deref(),
+                output: output.as_deref(),
+                delimiter,
+                no_header,
+                pretty,
+                compact,
+                flow,
+            })?;
+        }
         Commands::Schema { input, from } => {
             commands::schema::run(&commands::schema::SchemaArgs {
                 input: &input,
