@@ -38,6 +38,10 @@ pub enum Operation {
 pub enum Condition {
     /// 단일 비교: `field op value`
     Comparison(Comparison),
+    /// 논리 AND: `condition and condition`
+    And(Box<Condition>, Box<Condition>),
+    /// 논리 OR: `condition or condition`
+    Or(Box<Condition>, Box<Condition>),
 }
 
 /// 비교식: `IDENTIFIER compare_op value`
@@ -51,12 +55,15 @@ pub struct Comparison {
 /// 비교 연산자
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompareOp {
-    Eq, // ==
-    Ne, // !=
-    Gt, // >
-    Lt, // <
-    Ge, // >=
-    Le, // <=
+    Eq,         // ==
+    Ne,         // !=
+    Gt,         // >
+    Lt,         // <
+    Ge,         // >=
+    Le,         // <=
+    Contains,   // contains
+    StartsWith, // starts_with
+    EndsWith,   // ends_with
 }
 
 /// 리터럴 값 (비교 대상)
@@ -258,10 +265,37 @@ impl Parser {
         Ok(self.input[start..self.pos].iter().collect())
     }
 
-    /// 조건식 파싱: `field op value`
+    /// 조건식 파싱: `comparison (and|or comparison)*`
     fn parse_condition(&mut self) -> Result<Condition, DkitError> {
-        let comparison = self.parse_comparison()?;
-        Ok(Condition::Comparison(comparison))
+        let mut left = Condition::Comparison(self.parse_comparison()?);
+
+        loop {
+            self.skip_whitespace();
+            let saved_pos = self.pos;
+            if let Ok(keyword) = self.parse_keyword() {
+                match keyword.as_str() {
+                    "and" => {
+                        self.skip_whitespace();
+                        let right = Condition::Comparison(self.parse_comparison()?);
+                        left = Condition::And(Box::new(left), Box::new(right));
+                    }
+                    "or" => {
+                        self.skip_whitespace();
+                        let right = Condition::Comparison(self.parse_comparison()?);
+                        left = Condition::Or(Box::new(left), Box::new(right));
+                    }
+                    _ => {
+                        // Not a logical operator, restore position
+                        self.pos = saved_pos;
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
     }
 
     /// 비교식 파싱: `IDENTIFIER compare_op literal_value`
@@ -300,7 +334,7 @@ impl Parser {
         Ok(self.input[start..self.pos].iter().collect())
     }
 
-    /// 비교 연산자 파싱: ==, !=, >=, <=, >, <
+    /// 비교 연산자 파싱: ==, !=, >=, <=, >, <, contains, starts_with, ends_with
     fn parse_compare_op(&mut self) -> Result<CompareOp, DkitError> {
         let c1 = self.peek().ok_or_else(|| {
             DkitError::QueryError(format!(
@@ -346,6 +380,22 @@ impl Parser {
                     Ok(CompareOp::Le)
                 } else {
                     Ok(CompareOp::Lt)
+                }
+            }
+            c if c.is_alphabetic() => {
+                let saved_pos = self.pos;
+                let keyword = self.parse_keyword()?;
+                match keyword.as_str() {
+                    "contains" => Ok(CompareOp::Contains),
+                    "starts_with" => Ok(CompareOp::StartsWith),
+                    "ends_with" => Ok(CompareOp::EndsWith),
+                    _ => {
+                        self.pos = saved_pos;
+                        Err(DkitError::QueryError(format!(
+                            "expected comparison operator at position {}, found '{}'",
+                            saved_pos, keyword
+                        )))
+                    }
                 }
             }
             _ => Err(DkitError::QueryError(format!(
@@ -749,86 +799,78 @@ mod tests {
     #[test]
     fn test_where_gt() {
         let q = parse_query(".[] | where age > 25").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.field, "age");
-                assert_eq!(cmp.op, CompareOp::Gt);
-                assert_eq!(cmp.value, LiteralValue::Integer(25));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "age");
+        assert_eq!(cmp.op, CompareOp::Gt);
+        assert_eq!(cmp.value, LiteralValue::Integer(25));
     }
 
     #[test]
     fn test_where_lt() {
         let q = parse_query(".[] | where price < 100").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.op, CompareOp::Lt);
-                assert_eq!(cmp.value, LiteralValue::Integer(100));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.op, CompareOp::Lt);
+        assert_eq!(cmp.value, LiteralValue::Integer(100));
     }
 
     #[test]
     fn test_where_ge() {
         let q = parse_query(".[] | where score >= 80").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.op, CompareOp::Ge);
-                assert_eq!(cmp.value, LiteralValue::Integer(80));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.op, CompareOp::Ge);
+        assert_eq!(cmp.value, LiteralValue::Integer(80));
     }
 
     #[test]
     fn test_where_le() {
         let q = parse_query(".[] | where price <= 1000").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.op, CompareOp::Le);
-                assert_eq!(cmp.value, LiteralValue::Integer(1000));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.op, CompareOp::Le);
+        assert_eq!(cmp.value, LiteralValue::Integer(1000));
     }
 
     #[test]
     fn test_where_float_literal() {
         let q = parse_query(".[] | where score > 3.14").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.value, LiteralValue::Float(3.14));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.value, LiteralValue::Float(3.14));
     }
 
     #[test]
     fn test_where_negative_number() {
         let q = parse_query(".[] | where temp > -10").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.value, LiteralValue::Integer(-10));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.value, LiteralValue::Integer(-10));
     }
 
     #[test]
     fn test_where_bool_literal() {
         let q = parse_query(".[] | where active == true").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.value, LiteralValue::Bool(true));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.value, LiteralValue::Bool(true));
     }
 
     #[test]
     fn test_where_null_literal() {
         let q = parse_query(".[] | where value == null").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.value, LiteralValue::Null);
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.value, LiteralValue::Null);
     }
 
     #[test]
@@ -840,13 +882,12 @@ mod tests {
     #[test]
     fn test_where_with_extra_whitespace() {
         let q = parse_query(".[]  |  where  age  >  30  ").unwrap();
-        match &q.operations[0] {
-            Operation::Where(Condition::Comparison(cmp)) => {
-                assert_eq!(cmp.field, "age");
-                assert_eq!(cmp.op, CompareOp::Gt);
-                assert_eq!(cmp.value, LiteralValue::Integer(30));
-            }
-        }
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "age");
+        assert_eq!(cmp.op, CompareOp::Gt);
+        assert_eq!(cmp.value, LiteralValue::Integer(30));
     }
 
     // --- where 파싱 에러 ---
@@ -879,5 +920,107 @@ mod tests {
     fn test_error_unknown_operation() {
         let err = parse_query(".[] | foobar age > 30").unwrap_err();
         assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    // --- 문자열 연산자 파싱 ---
+
+    #[test]
+    fn test_where_contains() {
+        let q = parse_query(".[] | where email contains \"@gmail\"").unwrap();
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "email");
+        assert_eq!(cmp.op, CompareOp::Contains);
+        assert_eq!(cmp.value, LiteralValue::String("@gmail".to_string()));
+    }
+
+    #[test]
+    fn test_where_starts_with() {
+        let q = parse_query(".[] | where name starts_with \"A\"").unwrap();
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "name");
+        assert_eq!(cmp.op, CompareOp::StartsWith);
+        assert_eq!(cmp.value, LiteralValue::String("A".to_string()));
+    }
+
+    #[test]
+    fn test_where_ends_with() {
+        let q = parse_query(".[] | where file ends_with \".json\"").unwrap();
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "file");
+        assert_eq!(cmp.op, CompareOp::EndsWith);
+        assert_eq!(cmp.value, LiteralValue::String(".json".to_string()));
+    }
+
+    // --- 논리 연산자 파싱 ---
+
+    #[test]
+    fn test_where_and() {
+        let q = parse_query(".[] | where age > 25 and city == \"Seoul\"").unwrap();
+        let Operation::Where(cond) = &q.operations[0];
+        match cond {
+            Condition::And(left, right) => {
+                let Condition::Comparison(l) = left.as_ref() else {
+                    panic!("expected left Comparison");
+                };
+                assert_eq!(l.field, "age");
+                assert_eq!(l.op, CompareOp::Gt);
+                assert_eq!(l.value, LiteralValue::Integer(25));
+                let Condition::Comparison(r) = right.as_ref() else {
+                    panic!("expected right Comparison");
+                };
+                assert_eq!(r.field, "city");
+                assert_eq!(r.op, CompareOp::Eq);
+                assert_eq!(r.value, LiteralValue::String("Seoul".to_string()));
+            }
+            _ => panic!("expected And condition"),
+        }
+    }
+
+    #[test]
+    fn test_where_or() {
+        let q = parse_query(".[] | where role == \"admin\" or role == \"manager\"").unwrap();
+        let Operation::Where(cond) = &q.operations[0];
+        match cond {
+            Condition::Or(left, right) => {
+                let Condition::Comparison(l) = left.as_ref() else {
+                    panic!("expected left Comparison");
+                };
+                assert_eq!(l.field, "role");
+                assert_eq!(l.value, LiteralValue::String("admin".to_string()));
+                let Condition::Comparison(r) = right.as_ref() else {
+                    panic!("expected right Comparison");
+                };
+                assert_eq!(r.field, "role");
+                assert_eq!(r.value, LiteralValue::String("manager".to_string()));
+            }
+            _ => panic!("expected Or condition"),
+        }
+    }
+
+    #[test]
+    fn test_where_and_with_string_op() {
+        let q = parse_query(".[] | where name starts_with \"A\" and age > 20").unwrap();
+        let Operation::Where(cond) = &q.operations[0];
+        assert!(matches!(cond, Condition::And(_, _)));
+    }
+
+    #[test]
+    fn test_where_chained_and() {
+        let q = parse_query(".[] | where a == 1 and b == 2 and c == 3").unwrap();
+        let Operation::Where(cond) = &q.operations[0];
+        // Left-associative: ((a==1 and b==2) and c==3)
+        match cond {
+            Condition::And(left, right) => {
+                assert!(matches!(left.as_ref(), Condition::And(_, _)));
+                assert!(matches!(right.as_ref(), Condition::Comparison(_)));
+            }
+            _ => panic!("expected And condition"),
+        }
     }
 }
