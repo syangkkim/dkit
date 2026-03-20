@@ -154,9 +154,16 @@ pub enum Commands {
     },
 
     /// Show schema/structure of data
+    #[command(
+        after_help = "Examples:\n  dkit schema config.yaml\n  dkit schema data.json\n  cat data.json | dkit schema - --from json"
+    )]
     Schema {
         /// Input file path (use '-' for stdin)
         #[arg(value_name = "INPUT")]
         input: String,
+
+        /// Input format (required for stdin)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
     },
 }

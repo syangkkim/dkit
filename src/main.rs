@@ -121,8 +121,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 no_header,
             })?;
         }
-        Commands::Schema { .. } => {
-            eprintln!("schema command is not yet implemented");
+        Commands::Schema { input, from } => {
+            commands::schema::run(&commands::schema::SchemaArgs {
+                input: &input,
+                from: from.as_deref(),
+            })?;
         }
     }
 
