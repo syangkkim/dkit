@@ -83,6 +83,10 @@ pub enum Commands {
         /// Output format (default: json)
         #[arg(long, value_name = "FORMAT")]
         to: Option<String>,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
     },
 
     /// View data in a formatted table
