@@ -63,12 +63,15 @@ pub enum Commands {
         /// Input file path (use - for stdin)
         input: String,
 
-        /// Query expression
-        #[arg(short, long)]
+        /// Query expression (e.g. '.users[0].name')
         query: String,
 
+        /// Input format (required when reading from stdin)
+        #[arg(long)]
+        from: Option<String>,
+
         /// Output format (default: same as input)
-        #[arg(short, long)]
+        #[arg(long)]
         to: Option<String>,
     },
 
