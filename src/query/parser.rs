@@ -31,6 +31,8 @@ pub enum Segment {
 pub enum Operation {
     /// `where` 필터링
     Where(Condition),
+    /// `select` 컬럼 선택: `select name, email`
+    Select(Vec<String>),
 }
 
 /// 조건식 (where 절)
@@ -228,7 +230,7 @@ impl Parser {
 
     // --- 파이프라인 연산 파싱 ---
 
-    /// 연산 파싱: `where ...`
+    /// 연산 파싱: `where ...`, `select ...`
     fn parse_operation(&mut self) -> Result<Operation, DkitError> {
         let keyword = self.parse_keyword()?;
         match keyword.as_str() {
@@ -237,12 +239,32 @@ impl Parser {
                 let condition = self.parse_condition()?;
                 Ok(Operation::Where(condition))
             }
+            "select" => {
+                self.skip_whitespace();
+                let fields = self.parse_identifier_list()?;
+                Ok(Operation::Select(fields))
+            }
             _ => Err(DkitError::QueryError(format!(
                 "unknown operation '{}' at position {}",
                 keyword,
                 self.pos - keyword.len()
             ))),
         }
+    }
+
+    /// 쉼표로 구분된 식별자 목록 파싱: `IDENTIFIER ( "," IDENTIFIER )*`
+    fn parse_identifier_list(&mut self) -> Result<Vec<String>, DkitError> {
+        let mut fields = vec![self.parse_identifier()?];
+        loop {
+            self.skip_whitespace();
+            if self.consume_char(',') {
+                self.skip_whitespace();
+                fields.push(self.parse_identifier()?);
+            } else {
+                break;
+            }
+        }
+        Ok(fields)
     }
 
     /// 키워드 파싱 (알파벳 + 언더스코어)
@@ -962,7 +984,9 @@ mod tests {
     #[test]
     fn test_where_and() {
         let q = parse_query(".[] | where age > 25 and city == \"Seoul\"").unwrap();
-        let Operation::Where(cond) = &q.operations[0];
+        let Operation::Where(cond) = &q.operations[0] else {
+            panic!("expected Where operation");
+        };
         match cond {
             Condition::And(left, right) => {
                 let Condition::Comparison(l) = left.as_ref() else {
@@ -985,7 +1009,9 @@ mod tests {
     #[test]
     fn test_where_or() {
         let q = parse_query(".[] | where role == \"admin\" or role == \"manager\"").unwrap();
-        let Operation::Where(cond) = &q.operations[0];
+        let Operation::Where(cond) = &q.operations[0] else {
+            panic!("expected Where operation");
+        };
         match cond {
             Condition::Or(left, right) => {
                 let Condition::Comparison(l) = left.as_ref() else {
@@ -1006,14 +1032,18 @@ mod tests {
     #[test]
     fn test_where_and_with_string_op() {
         let q = parse_query(".[] | where name starts_with \"A\" and age > 20").unwrap();
-        let Operation::Where(cond) = &q.operations[0];
+        let Operation::Where(cond) = &q.operations[0] else {
+            panic!("expected Where operation");
+        };
         assert!(matches!(cond, Condition::And(_, _)));
     }
 
     #[test]
     fn test_where_chained_and() {
         let q = parse_query(".[] | where a == 1 and b == 2 and c == 3").unwrap();
-        let Operation::Where(cond) = &q.operations[0];
+        let Operation::Where(cond) = &q.operations[0] else {
+            panic!("expected Where operation");
+        };
         // Left-associative: ((a==1 and b==2) and c==3)
         match cond {
             Condition::And(left, right) => {
@@ -1022,5 +1052,80 @@ mod tests {
             }
             _ => panic!("expected And condition"),
         }
+    }
+
+    // --- select 절 파싱 ---
+
+    #[test]
+    fn test_select_single_field() {
+        let q = parse_query(".users[] | select name").unwrap();
+        assert_eq!(q.operations.len(), 1);
+        assert_eq!(q.operations[0], Operation::Select(vec!["name".to_string()]));
+    }
+
+    #[test]
+    fn test_select_multiple_fields() {
+        let q = parse_query(".users[] | select name, email").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec!["name".to_string(), "email".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_select_three_fields() {
+        let q = parse_query(".users[] | select name, age, email").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec![
+                "name".to_string(),
+                "age".to_string(),
+                "email".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_select_with_extra_whitespace() {
+        let q = parse_query(".[]  |  select  name ,  email  ").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec!["name".to_string(), "email".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_select_field_with_underscore() {
+        let q = parse_query(".[] | select user_name, created_at").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec!["user_name".to_string(), "created_at".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_select_field_with_hyphen() {
+        let q = parse_query(".[] | select content-type").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec!["content-type".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_where_then_select() {
+        let q = parse_query(".users[] | where age > 30 | select name, email").unwrap();
+        assert_eq!(q.operations.len(), 2);
+        assert!(matches!(&q.operations[0], Operation::Where(_)));
+        assert_eq!(
+            q.operations[1],
+            Operation::Select(vec!["name".to_string(), "email".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_error_select_missing_fields() {
+        let err = parse_query(".[] | select").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
     }
 }
