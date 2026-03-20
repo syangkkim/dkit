@@ -38,6 +38,12 @@ fn apply_where(value: Value, condition: &Condition) -> Result<Value, DkitError> 
 fn evaluate_condition(value: &Value, condition: &Condition) -> Result<bool, DkitError> {
     match condition {
         Condition::Comparison(cmp) => evaluate_comparison(value, cmp),
+        Condition::And(left, right) => {
+            Ok(evaluate_condition(value, left)? && evaluate_condition(value, right)?)
+        }
+        Condition::Or(left, right) => {
+            Ok(evaluate_condition(value, left)? || evaluate_condition(value, right)?)
+        }
     }
 }
 
@@ -70,9 +76,12 @@ fn compare_values(
         // 부동소수점 필드 vs 정수 리터럴
         (Value::Float(a), LiteralValue::Integer(b)) => Ok(apply_compare_op(*a, op, *b as f64)),
         // 문자열 비교
-        (Value::String(a), LiteralValue::String(b)) => {
-            Ok(apply_compare_op(a.as_str(), op, b.as_str()))
-        }
+        (Value::String(a), LiteralValue::String(b)) => match op {
+            CompareOp::Contains => Ok(a.contains(b.as_str())),
+            CompareOp::StartsWith => Ok(a.starts_with(b.as_str())),
+            CompareOp::EndsWith => Ok(a.ends_with(b.as_str())),
+            _ => Ok(apply_compare_op(a.as_str(), op, b.as_str())),
+        },
         // 불리언: == 와 != 만 지원
         (Value::Bool(a), LiteralValue::Bool(b)) => match op {
             CompareOp::Eq => Ok(a == b),
@@ -113,6 +122,7 @@ fn apply_compare_op<T: PartialOrd>(a: T, op: &CompareOp, b: T) -> bool {
         CompareOp::Lt => a < b,
         CompareOp::Ge => a >= b,
         CompareOp::Le => a <= b,
+        CompareOp::Contains | CompareOp::StartsWith | CompareOp::EndsWith => false,
     }
 }
 
@@ -398,5 +408,181 @@ mod tests {
         let cond = make_condition("age", CompareOp::Ne, LiteralValue::String("30".to_string()));
         let result = run_where(&data, &cond).unwrap();
         assert_eq!(result.as_array().unwrap().len(), 3);
+    }
+
+    // --- 문자열 연산자 ---
+
+    fn sample_files() -> Value {
+        let files = vec![
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("readme.md".to_string()));
+                m.insert(
+                    "email".to_string(),
+                    Value::String("alice@gmail.com".to_string()),
+                );
+                m
+            }),
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("config.json".to_string()));
+                m.insert(
+                    "email".to_string(),
+                    Value::String("bob@yahoo.com".to_string()),
+                );
+                m
+            }),
+            Value::Object({
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("data.json".to_string()));
+                m.insert(
+                    "email".to_string(),
+                    Value::String("charlie@gmail.com".to_string()),
+                );
+                m
+            }),
+        ];
+        Value::Array(files)
+    }
+
+    #[test]
+    fn test_where_contains() {
+        let data = sample_files();
+        let cond = make_condition(
+            "email",
+            CompareOp::Contains,
+            LiteralValue::String("@gmail".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_where_starts_with() {
+        let data = sample_files();
+        let cond = make_condition(
+            "name",
+            CompareOp::StartsWith,
+            LiteralValue::String("config".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_where_ends_with() {
+        let data = sample_files();
+        let cond = make_condition(
+            "name",
+            CompareOp::EndsWith,
+            LiteralValue::String(".json".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_where_contains_no_match() {
+        let data = sample_files();
+        let cond = make_condition(
+            "email",
+            CompareOp::Contains,
+            LiteralValue::String("@hotmail".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    // --- 논리 연산자 ---
+
+    #[test]
+    fn test_where_and() {
+        let data = sample_users();
+        let cond = Condition::And(
+            Box::new(make_condition(
+                "age",
+                CompareOp::Gt,
+                LiteralValue::Integer(25),
+            )),
+            Box::new(make_condition(
+                "city",
+                CompareOp::Eq,
+                LiteralValue::String("Seoul".to_string()),
+            )),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Alice(30, Seoul), Charlie(35, Seoul)
+    }
+
+    #[test]
+    fn test_where_or() {
+        let data = sample_users();
+        let cond = Condition::Or(
+            Box::new(make_condition(
+                "name",
+                CompareOp::Eq,
+                LiteralValue::String("Alice".to_string()),
+            )),
+            Box::new(make_condition(
+                "name",
+                CompareOp::Eq,
+                LiteralValue::String("Bob".to_string()),
+            )),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn test_where_and_no_match() {
+        let data = sample_users();
+        let cond = Condition::And(
+            Box::new(make_condition(
+                "age",
+                CompareOp::Lt,
+                LiteralValue::Integer(26),
+            )),
+            Box::new(make_condition(
+                "city",
+                CompareOp::Eq,
+                LiteralValue::String("Seoul".to_string()),
+            )),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 0); // Bob is 25 but in Busan
+    }
+
+    // --- 통합: 파서 + 필터 ---
+
+    #[test]
+    fn test_integration_string_op() {
+        let data = sample_files();
+        let query = parse_query(".[] | where name ends_with \".json\"").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_integration_logical_and() {
+        let data = sample_users();
+        let query = parse_query(".[] | where age > 25 and city == \"Seoul\"").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Alice(30, Seoul), Charlie(35, Seoul)
+    }
+
+    #[test]
+    fn test_integration_logical_or() {
+        let data = sample_users();
+        let query = parse_query(".[] | where age == 25 or age == 35").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Bob(25), Charlie(35)
     }
 }
