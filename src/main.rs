@@ -75,12 +75,14 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             query,
             from,
             to,
+            output,
         } => {
             commands::query::run(&commands::query::QueryArgs {
                 input: &input,
                 query: &query,
                 from: from.as_deref(),
                 to: to.as_deref(),
+                output: output.as_deref(),
             })?;
         }
         Commands::View {

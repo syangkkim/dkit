@@ -1,5 +1,6 @@
+use std::fs;
 use std::io::{self, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
@@ -17,6 +18,7 @@ pub struct QueryArgs<'a> {
     pub query: &'a str,
     pub from: Option<&'a str>,
     pub to: Option<&'a str>,
+    pub output: Option<&'a Path>,
 }
 
 /// query 서브커맨드 실행
@@ -50,10 +52,13 @@ pub fn run(args: &QueryArgs) -> Result<()> {
     let query = parse_query(args.query)?;
     let result = evaluate_path(&value, &query.path)?;
 
-    // 출력 포맷 결정 (--to 지정 시 해당 포맷, 아니면 JSON 기본)
+    // 출력 포맷 결정: -o 파일 확장자 → --to → 기본 JSON
     let output_format = match args.to {
         Some(f) => Format::from_str(f)?,
-        None => Format::Json,
+        None => match args.output {
+            Some(p) => detect_format(p).unwrap_or(Format::Json),
+            None => Format::Json,
+        },
     };
 
     let write_options = FormatOptions {
@@ -61,11 +66,25 @@ pub fn run(args: &QueryArgs) -> Result<()> {
         ..Default::default()
     };
     let output = write_value(&result, output_format, &write_options)?;
-    // 출력 끝에 줄바꿈이 없으면 추가
-    if output.ends_with('\n') {
-        print!("{output}");
-    } else {
-        println!("{output}");
+
+    // 출력: -o 지정 시 파일에 쓰기, 아니면 stdout
+    match args.output {
+        Some(path) => {
+            let content = if output.ends_with('\n') {
+                output
+            } else {
+                format!("{output}\n")
+            };
+            fs::write(path, &content)
+                .with_context(|| format!("Failed to write to {}", path.display()))?;
+        }
+        None => {
+            if output.ends_with('\n') {
+                print!("{output}");
+            } else {
+                println!("{output}");
+            }
+        }
     }
 
     Ok(())
