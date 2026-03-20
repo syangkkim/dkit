@@ -124,10 +124,33 @@ pub enum Commands {
     },
 
     /// Show statistics about data
+    #[command(
+        after_help = "Examples:\n  dkit stats data.csv\n  dkit stats data.json --path .users\n  dkit stats data.csv --column revenue"
+    )]
     Stats {
         /// Input file path (use '-' for stdin)
         #[arg(value_name = "INPUT")]
         input: String,
+
+        /// Input format (required for stdin)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
+
+        /// Navigate to nested data path (e.g. '.users')
+        #[arg(long, value_name = "QUERY")]
+        path: Option<String>,
+
+        /// Get statistics for a specific column
+        #[arg(long, value_name = "NAME")]
+        column: Option<String>,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
     },
 
     /// Show schema/structure of data

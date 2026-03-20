@@ -104,8 +104,22 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 no_header,
             })?;
         }
-        Commands::Stats { .. } => {
-            eprintln!("stats command is not yet implemented");
+        Commands::Stats {
+            input,
+            from,
+            path,
+            column,
+            delimiter,
+            no_header,
+        } => {
+            commands::stats::run(&commands::stats::StatsArgs {
+                input: &input,
+                from: from.as_deref(),
+                path: path.as_deref(),
+                column: column.as_deref(),
+                delimiter,
+                no_header,
+            })?;
         }
         Commands::Schema { .. } => {
             eprintln!("schema command is not yet implemented");
