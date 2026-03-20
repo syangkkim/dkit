@@ -15,6 +15,7 @@ pub fn apply_operations(value: Value, operations: &[Operation]) -> Result<Value,
 fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitError> {
     match operation {
         Operation::Where(condition) => apply_where(value, condition),
+        Operation::Select(fields) => apply_select(value, fields),
     }
 }
 
@@ -31,6 +32,39 @@ fn apply_where(value: Value, condition: &Condition) -> Result<Value, DkitError> 
         _ => Err(DkitError::QueryError(
             "where clause requires an array input".to_string(),
         )),
+    }
+}
+
+/// select 절: 배열의 각 요소에서 지정된 필드만 추출
+fn apply_select(value: Value, fields: &[String]) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let projected: Vec<Value> = arr
+                .into_iter()
+                .map(|item| select_fields(item, fields))
+                .collect();
+            Ok(Value::Array(projected))
+        }
+        Value::Object(_) => Ok(select_fields(value, fields)),
+        _ => Err(DkitError::QueryError(
+            "select clause requires an array or object input".to_string(),
+        )),
+    }
+}
+
+/// 오브젝트에서 지정된 필드만 추출
+fn select_fields(value: Value, fields: &[String]) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut new_map = indexmap::IndexMap::new();
+            for field in fields {
+                if let Some(v) = map.get(field) {
+                    new_map.insert(field.clone(), v.clone());
+                }
+            }
+            Value::Object(new_map)
+        }
+        _ => value,
     }
 }
 
@@ -584,5 +618,129 @@ mod tests {
         let result = apply_operations(path_result, &query.operations).unwrap();
         let arr = result.as_array().unwrap();
         assert_eq!(arr.len(), 2); // Bob(25), Charlie(35)
+    }
+
+    // --- select 절 ---
+
+    #[test]
+    fn test_select_single_field() {
+        let data = sample_users();
+        let result = apply_select(data, &["name".to_string()]).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        // 각 요소에 name만 있어야 함
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 1);
+            assert!(obj.contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn test_select_multiple_fields() {
+        let data = sample_users();
+        let result = apply_select(data, &["name".to_string(), "age".to_string()]).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 2);
+            assert!(obj.contains_key("name"));
+            assert!(obj.contains_key("age"));
+        }
+    }
+
+    #[test]
+    fn test_select_preserves_order() {
+        let data = sample_users();
+        let result = apply_select(data, &["city".to_string(), "name".to_string()]).unwrap();
+        let arr = result.as_array().unwrap();
+        let obj = arr[0].as_object().unwrap();
+        let keys: Vec<&String> = obj.keys().collect();
+        assert_eq!(keys, vec!["city", "name"]);
+    }
+
+    #[test]
+    fn test_select_missing_field_skipped() {
+        let data = sample_users();
+        let result = apply_select(data, &["name".to_string(), "nonexistent".to_string()]).unwrap();
+        let arr = result.as_array().unwrap();
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 1);
+            assert!(obj.contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn test_select_on_single_object() {
+        let mut m = IndexMap::new();
+        m.insert("name".to_string(), Value::String("Alice".to_string()));
+        m.insert("age".to_string(), Value::Integer(30));
+        m.insert("city".to_string(), Value::String("Seoul".to_string()));
+        let data = Value::Object(m);
+
+        let result = apply_select(data, &["name".to_string(), "city".to_string()]).unwrap();
+        let obj = result.as_object().unwrap();
+        assert_eq!(obj.len(), 2);
+        assert!(obj.contains_key("name"));
+        assert!(obj.contains_key("city"));
+    }
+
+    #[test]
+    fn test_select_on_non_object_array() {
+        // 배열 안에 비-오브젝트 요소는 그대로 반환
+        let data = Value::Array(vec![Value::Integer(1), Value::Integer(2)]);
+        let result = apply_select(data, &["name".to_string()]).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0], Value::Integer(1));
+    }
+
+    #[test]
+    fn test_select_on_non_array_non_object_error() {
+        let data = Value::Integer(42);
+        let result = apply_select(data, &["name".to_string()]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_select_empty_array() {
+        let data = Value::Array(vec![]);
+        let result = apply_select(data, &["name".to_string()]).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    // --- 통합: where + select ---
+
+    #[test]
+    fn test_integration_where_then_select() {
+        let data = sample_users();
+        let query = parse_query(".[] | where age > 25 | select name, city").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Alice(30), Charlie(35)
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 2);
+            assert!(obj.contains_key("name"));
+            assert!(obj.contains_key("city"));
+            assert!(!obj.contains_key("age"));
+        }
+    }
+
+    #[test]
+    fn test_integration_select_only() {
+        let data = sample_users();
+        let query = parse_query(".[] | select name").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 1);
+            assert!(obj.contains_key("name"));
+        }
     }
 }
