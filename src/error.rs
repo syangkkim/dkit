@@ -21,12 +21,14 @@ pub enum DkitError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[allow(dead_code)]
     #[error("Invalid query: {0}")]
     QueryError(String),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
+    #[allow(dead_code)]
     #[error("Path not found: {0}")]
     PathNotFound(String),
 }
@@ -34,6 +36,7 @@ pub enum DkitError {
 /// `anyhow` 통합을 위한 `Result` 타입 별칭.
 /// 라이브러리 내부에서는 `DkitError`를 직접 사용하고,
 /// 애플리케이션 레벨에서는 `anyhow::Result`로 변환하여 사용한다.
+#[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, DkitError>;
 
 #[cfg(test)]

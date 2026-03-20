@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -15,24 +17,45 @@ pub struct Cli {
 pub enum Commands {
     /// Convert between data formats (JSON, CSV, YAML, TOML)
     Convert {
-        /// Input file path (use - for stdin)
-        input: String,
+        /// Input file path(s). Use stdin if not provided (requires --from)
+        #[arg(value_name = "INPUT")]
+        input: Vec<PathBuf>,
 
-        /// Output format
-        #[arg(short, long)]
+        /// Output format (json, csv, yaml, toml)
+        #[arg(long)]
         to: String,
+
+        /// Input format (required when reading from stdin)
+        #[arg(long)]
+        from: Option<String>,
 
         /// Output file path (default: stdout)
         #[arg(short, long)]
-        output: Option<String>,
+        output: Option<PathBuf>,
 
-        /// Pretty-print output
+        /// Output directory for multiple file conversion
+        #[arg(long)]
+        outdir: Option<PathBuf>,
+
+        /// CSV delimiter character
+        #[arg(long)]
+        delimiter: Option<char>,
+
+        /// Pretty-print output (default for JSON)
         #[arg(long)]
         pretty: bool,
 
-        /// Compact output
-        #[arg(long)]
+        /// Compact output (single-line JSON)
+        #[arg(long, conflicts_with = "pretty")]
         compact: bool,
+
+        /// CSV without header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// YAML inline/flow style
+        #[arg(long)]
+        flow: bool,
     },
 
     /// Query data using dkit query syntax
