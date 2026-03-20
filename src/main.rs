@@ -42,8 +42,24 @@ fn main() -> anyhow::Result<()> {
         Commands::Query { .. } => {
             eprintln!("query command is not yet implemented");
         }
-        Commands::View { .. } => {
-            eprintln!("view command is not yet implemented");
+        Commands::View {
+            input,
+            from,
+            path,
+            limit,
+            columns,
+            delimiter,
+            no_header,
+        } => {
+            commands::view::run(&commands::view::ViewArgs {
+                input: &input,
+                from: from.as_deref(),
+                path: path.as_deref(),
+                limit,
+                columns,
+                delimiter,
+                no_header,
+            })?;
         }
         Commands::Stats { .. } => {
             eprintln!("stats command is not yet implemented");
