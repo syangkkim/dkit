@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Swiss army knife for data format conversion and querying"
 license = "MIT"
+repository = "https://github.com/syangkkim/dkit"
+homepage = "https://github.com/syangkkim/dkit"
+keywords = ["cli", "json", "csv", "yaml", "toml"]
+categories = ["command-line-utilities", "encoding"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
