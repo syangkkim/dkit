@@ -33,6 +33,10 @@ pub enum Operation {
     Where(Condition),
     /// `select` 컬럼 선택: `select name, email`
     Select(Vec<String>),
+    /// `sort` 정렬: `sort age` (오름차순) / `sort age desc` (내림차순)
+    Sort { field: String, descending: bool },
+    /// `limit` 결과 제한: `limit 10`
+    Limit(usize),
 }
 
 /// 조건식 (where 절)
@@ -243,6 +247,18 @@ impl Parser {
                 self.skip_whitespace();
                 let fields = self.parse_identifier_list()?;
                 Ok(Operation::Select(fields))
+            }
+            "sort" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                self.skip_whitespace();
+                let descending = self.try_consume_keyword("desc");
+                Ok(Operation::Sort { field, descending })
+            }
+            "limit" => {
+                self.skip_whitespace();
+                let n = self.parse_positive_integer()?;
+                Ok(Operation::Limit(n))
             }
             _ => Err(DkitError::QueryError(format!(
                 "unknown operation '{}' at position {}",
@@ -553,6 +569,39 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         self.pos >= self.input.len()
+    }
+
+    /// 키워드를 시도적으로 소비: 매치하면 true, 아니면 위치를 복원하고 false
+    fn try_consume_keyword(&mut self, keyword: &str) -> bool {
+        let saved_pos = self.pos;
+        if let Ok(word) = self.parse_keyword() {
+            if word == keyword {
+                return true;
+            }
+        }
+        self.pos = saved_pos;
+        false
+    }
+
+    /// 양의 정수 파싱 (limit 절용)
+    fn parse_positive_integer(&mut self) -> Result<usize, DkitError> {
+        let start = self.pos;
+        while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
+            self.pos += 1;
+        }
+        if self.pos == start {
+            return Err(DkitError::QueryError(format!(
+                "expected positive integer at position {}",
+                self.pos
+            )));
+        }
+        let num_str: String = self.input[start..self.pos].iter().collect();
+        num_str.parse().map_err(|_| {
+            DkitError::QueryError(format!(
+                "invalid integer '{}' at position {}",
+                num_str, start
+            ))
+        })
     }
 }
 
@@ -1127,5 +1176,143 @@ mod tests {
     fn test_error_select_missing_fields() {
         let err = parse_query(".[] | select").unwrap_err();
         assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    // --- sort 절 파싱 ---
+
+    #[test]
+    fn test_sort_asc() {
+        let q = parse_query(".users[] | sort age").unwrap();
+        assert_eq!(q.operations.len(), 1);
+        assert_eq!(
+            q.operations[0],
+            Operation::Sort {
+                field: "age".to_string(),
+                descending: false,
+            }
+        );
+    }
+
+    #[test]
+    fn test_sort_desc() {
+        let q = parse_query(".users[] | sort age desc").unwrap();
+        assert_eq!(q.operations.len(), 1);
+        assert_eq!(
+            q.operations[0],
+            Operation::Sort {
+                field: "age".to_string(),
+                descending: true,
+            }
+        );
+    }
+
+    #[test]
+    fn test_sort_with_extra_whitespace() {
+        let q = parse_query(".[]  |  sort  name  ").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Sort {
+                field: "name".to_string(),
+                descending: false,
+            }
+        );
+    }
+
+    #[test]
+    fn test_sort_desc_with_extra_whitespace() {
+        let q = parse_query(".[]  |  sort  name  desc  ").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Sort {
+                field: "name".to_string(),
+                descending: true,
+            }
+        );
+    }
+
+    #[test]
+    fn test_sort_field_with_underscore() {
+        let q = parse_query(".[] | sort created_at").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Sort {
+                field: "created_at".to_string(),
+                descending: false,
+            }
+        );
+    }
+
+    #[test]
+    fn test_error_sort_missing_field() {
+        let err = parse_query(".[] | sort").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    // --- limit 절 파싱 ---
+
+    #[test]
+    fn test_limit() {
+        let q = parse_query(".users[] | limit 10").unwrap();
+        assert_eq!(q.operations.len(), 1);
+        assert_eq!(q.operations[0], Operation::Limit(10));
+    }
+
+    #[test]
+    fn test_limit_one() {
+        let q = parse_query(".[] | limit 1").unwrap();
+        assert_eq!(q.operations[0], Operation::Limit(1));
+    }
+
+    #[test]
+    fn test_limit_with_extra_whitespace() {
+        let q = parse_query(".[]  |  limit  5  ").unwrap();
+        assert_eq!(q.operations[0], Operation::Limit(5));
+    }
+
+    #[test]
+    fn test_error_limit_missing_number() {
+        let err = parse_query(".[] | limit").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_error_limit_negative() {
+        let err = parse_query(".[] | limit -5").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    // --- 복합 파이프라인 ---
+
+    #[test]
+    fn test_where_sort_limit() {
+        let q = parse_query(".users[] | where age > 20 | sort age desc | limit 5").unwrap();
+        assert_eq!(q.operations.len(), 3);
+        assert!(matches!(&q.operations[0], Operation::Where(_)));
+        assert_eq!(
+            q.operations[1],
+            Operation::Sort {
+                field: "age".to_string(),
+                descending: true,
+            }
+        );
+        assert_eq!(q.operations[2], Operation::Limit(5));
+    }
+
+    #[test]
+    fn test_where_select_sort() {
+        let q = parse_query(".users[] | where age > 30 | select name, email | sort name").unwrap();
+        assert_eq!(q.operations.len(), 3);
+        assert!(matches!(&q.operations[0], Operation::Where(_)));
+        assert_eq!(
+            q.operations[1],
+            Operation::Select(vec!["name".to_string(), "email".to_string()])
+        );
+        assert_eq!(
+            q.operations[2],
+            Operation::Sort {
+                field: "name".to_string(),
+                descending: false,
+            }
+        );
     }
 }
