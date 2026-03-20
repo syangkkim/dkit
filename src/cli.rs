@@ -153,6 +153,44 @@ pub enum Commands {
         no_header: bool,
     },
 
+    /// Merge multiple data files into one
+    #[command(
+        after_help = "Examples:\n  dkit merge a.json b.json --to json\n  dkit merge users1.csv users2.csv --to json -o merged.json\n  dkit merge config1.yaml config2.yaml --to yaml"
+    )]
+    Merge {
+        /// Input file paths (at least 2 required)
+        #[arg(value_name = "INPUT", required = true)]
+        input: Vec<PathBuf>,
+
+        /// Output format (json, csv, yaml, toml). Defaults to first input's format
+        #[arg(long, value_name = "FORMAT")]
+        to: Option<String>,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Pretty-print output
+        #[arg(long)]
+        pretty: bool,
+
+        /// Compact single-line output (JSON)
+        #[arg(long, conflicts_with = "pretty")]
+        compact: bool,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// Use YAML inline/flow style
+        #[arg(long)]
+        flow: bool,
+    },
+
     /// Show schema/structure of data
     #[command(
         after_help = "Examples:\n  dkit schema config.yaml\n  dkit schema data.json\n  cat data.json | dkit schema - --from json"
