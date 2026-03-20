@@ -81,12 +81,14 @@ impl Default for FormatOptions {
 }
 
 /// 데이터 포맷 읽기 트레이트
+#[allow(dead_code)]
 pub trait FormatReader {
     fn read(&self, input: &str) -> anyhow::Result<Value>;
     fn read_from_reader(&self, reader: impl Read) -> anyhow::Result<Value>;
 }
 
 /// 데이터 포맷 쓰기 트레이트
+#[allow(dead_code)]
 pub trait FormatWriter {
     fn write(&self, value: &Value) -> anyhow::Result<String>;
     fn write_to_writer(&self, value: &Value, writer: impl Write) -> anyhow::Result<()>;

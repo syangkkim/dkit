@@ -14,8 +14,30 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Convert { .. } => {
-            eprintln!("convert command is not yet implemented");
+        Commands::Convert {
+            input,
+            to,
+            from,
+            output,
+            outdir,
+            delimiter,
+            pretty,
+            compact,
+            no_header,
+            flow,
+        } => {
+            commands::convert::run(&commands::convert::ConvertArgs {
+                input: &input,
+                to: &to,
+                from: from.as_deref(),
+                output: output.as_deref(),
+                outdir: outdir.as_deref(),
+                delimiter,
+                pretty,
+                compact,
+                no_header,
+                flow,
+            })?;
         }
         Commands::Query { .. } => {
             eprintln!("query command is not yet implemented");

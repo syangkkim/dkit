@@ -58,6 +58,7 @@ impl fmt::Display for Value {
     }
 }
 
+#[allow(dead_code)]
 impl Value {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
