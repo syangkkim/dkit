@@ -1,6 +1,7 @@
 pub mod csv;
 pub mod json;
 pub mod toml;
+pub mod xml;
 pub mod yaml;
 
 use std::io::{Read, Write};
@@ -16,6 +17,7 @@ pub enum Format {
     Csv,
     Yaml,
     Toml,
+    Xml,
 }
 
 impl Format {
@@ -25,6 +27,7 @@ impl Format {
             "csv" => Ok(Format::Csv),
             "yaml" | "yml" => Ok(Format::Yaml),
             "toml" => Ok(Format::Toml),
+            "xml" => Ok(Format::Xml),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -37,6 +40,7 @@ impl std::fmt::Display for Format {
             Format::Csv => write!(f, "CSV"),
             Format::Yaml => write!(f, "YAML"),
             Format::Toml => write!(f, "TOML"),
+            Format::Xml => write!(f, "XML"),
         }
     }
 }
@@ -48,6 +52,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("csv" | "tsv") => Ok(Format::Csv),
         Some("yaml" | "yml") => Ok(Format::Yaml),
         Some("toml") => Ok(Format::Toml),
+        Some("xml") => Ok(Format::Xml),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
@@ -112,9 +117,14 @@ mod tests {
     }
 
     #[test]
+    fn test_format_from_str_xml() {
+        assert_eq!(Format::from_str("xml").unwrap(), Format::Xml);
+    }
+
+    #[test]
     fn test_format_from_str_unknown() {
-        let err = Format::from_str("xml").unwrap_err();
-        assert!(matches!(err, DkitError::UnknownFormat(s) if s == "xml"));
+        let err = Format::from_str("bin").unwrap_err();
+        assert!(matches!(err, DkitError::UnknownFormat(s) if s == "bin"));
     }
 
     // --- Format::Display ---
@@ -125,6 +135,7 @@ mod tests {
         assert_eq!(Format::Csv.to_string(), "CSV");
         assert_eq!(Format::Yaml.to_string(), "YAML");
         assert_eq!(Format::Toml.to_string(), "TOML");
+        assert_eq!(Format::Xml.to_string(), "XML");
     }
 
     // --- detect_format ---
@@ -170,9 +181,17 @@ mod tests {
     }
 
     #[test]
+    fn test_detect_format_xml() {
+        assert_eq!(
+            detect_format(&PathBuf::from("data.xml")).unwrap(),
+            Format::Xml
+        );
+    }
+
+    #[test]
     fn test_detect_format_unknown_ext() {
-        let err = detect_format(&PathBuf::from("data.xml")).unwrap_err();
-        assert!(matches!(err, DkitError::UnknownFormat(s) if s == "xml"));
+        let err = detect_format(&PathBuf::from("data.bin")).unwrap_err();
+        assert!(matches!(err, DkitError::UnknownFormat(s) if s == "bin"));
     }
 
     #[test]

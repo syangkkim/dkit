@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
 use crate::format::toml::TomlReader;
+use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
 use crate::format::{detect_format, Format, FormatOptions, FormatReader};
 use crate::output::table::render_table;
@@ -74,6 +75,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
+        Format::Xml => XmlReader.read(content),
     }
 }
 

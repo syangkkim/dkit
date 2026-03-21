@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<users>
+  <user>
+    <name>Alice</name>
+    <age>30</age>
+    <email>alice@example.com</email>
+    <active>true</active>
+  </user>
+  <user>
+    <name>Bob</name>
+    <age>25</age>
+    <email>bob@example.com</email>
+    <active>false</active>
+  </user>
+  <user>
+    <name>Charlie</name>
+    <age>35</age>
+    <email>charlie@example.com</email>
+    <active>true</active>
+  </user>
+</users>
