@@ -251,9 +251,27 @@ fn convert_missing_to_flag() {
 #[test]
 fn convert_unknown_format() {
     dkit()
-        .args(&["convert", "tests/fixtures/users.json", "--to", "xml"])
+        .args(&["convert", "tests/fixtures/users.json", "--to", "bin"])
         .assert()
         .failure();
+}
+
+#[test]
+fn convert_json_to_xml() {
+    dkit()
+        .args(&["convert", "tests/fixtures/users.json", "--to", "xml"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("<name>Alice</name>"));
+}
+
+#[test]
+fn convert_xml_to_json() {
+    dkit()
+        .args(&["convert", "tests/fixtures/users.xml", "--to", "json"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Alice"));
 }
 
 #[test]

@@ -7,6 +7,7 @@ use super::read_file;
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
+use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
 use crate::format::{detect_format, Format, FormatOptions, FormatReader, FormatWriter};
 use crate::value::Value;
@@ -136,6 +137,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
+        Format::Xml => XmlReader.read(content),
     }
 }
 
@@ -145,6 +147,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Csv => CsvWriter::new(options.clone()).write(value),
         Format::Yaml => YamlWriter::new(options.clone()).write(value),
         Format::Toml => TomlWriter::new(options.clone()).write(value),
+        Format::Xml => XmlWriter::new(options.pretty).write(value),
     }
 }
 

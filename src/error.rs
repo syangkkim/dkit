@@ -1,5 +1,5 @@
 /// 지원하는 포맷 목록 (에러 메시지용)
-pub const SUPPORTED_FORMATS: &[&str] = &["json", "csv", "yaml", "yml", "toml"];
+pub const SUPPORTED_FORMATS: &[&str] = &["json", "csv", "yaml", "yml", "toml", "xml"];
 
 /// dkit 에러 타입 정의
 ///
@@ -48,9 +48,9 @@ mod tests {
 
     #[test]
     fn test_unknown_format_display() {
-        let err = DkitError::UnknownFormat("xml".to_string());
+        let err = DkitError::UnknownFormat("bin".to_string());
         let msg = err.to_string();
-        assert!(msg.contains("Unknown format: 'xml'"));
+        assert!(msg.contains("Unknown format: 'bin'"));
         assert!(msg.contains("Supported formats:"));
         assert!(msg.contains("json"));
         assert!(msg.contains("csv"));
