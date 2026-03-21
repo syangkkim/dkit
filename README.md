@@ -2,7 +2,7 @@
 
 **Swiss army knife for data format conversion and querying.**
 
-Convert between JSON, CSV, YAML, and TOML with a single CLI. Query nested data, preview as tables, and pipe everything together.
+Convert between JSON, CSV, YAML, TOML, XML, TSV, and MessagePack with a single CLI. Query nested data, compare files, preview as tables, and pipe everything together.
 
 ## Quick Start
 
@@ -38,14 +38,17 @@ cargo install --path .
 
 ## Supported Formats
 
-| Format | Extensions | Read | Write |
-|--------|-----------|------|-------|
-| JSON   | `.json`   | O    | O     |
-| CSV    | `.csv`    | O    | O     |
-| YAML   | `.yaml`, `.yml` | O | O  |
-| TOML   | `.toml`   | O    | O     |
+| Format      | Extensions       | Read | Write |
+|-------------|-----------------|------|-------|
+| JSON        | `.json`         | O    | O     |
+| CSV         | `.csv`          | O    | O     |
+| TSV         | `.tsv`          | O    | O     |
+| YAML        | `.yaml`, `.yml` | O    | O     |
+| TOML        | `.toml`         | O    | O     |
+| XML         | `.xml`          | O    | O     |
+| MessagePack | `.msgpack`      | O    | O     |
 
-All 12 conversion paths (4 x 3) are supported.
+All conversion paths between supported formats are available.
 
 ## Commands
 
@@ -156,6 +159,23 @@ dkit schema data.json
 cat data.json | dkit schema - --from json
 ```
 
+### `diff` — Compare data files
+
+```bash
+# Compare same-format files
+dkit diff old.json new.json
+dkit diff config_dev.yaml config_prod.yaml
+
+# Cross-format comparison
+dkit diff data.json data.yaml
+
+# Compare nested path only
+dkit diff old.json new.json --path '.database'
+
+# Quiet mode (exit code: 0=same, 1=different)
+dkit diff a.json b.json --quiet && echo 'same' || echo 'different'
+```
+
 ### `merge` — Combine multiple files
 
 ```bash
@@ -174,9 +194,11 @@ dkit merge config1.yaml config2.yaml --to yaml
 | Feature | dkit | jq | miller | yq |
 |---------|------|-----|--------|----|
 | JSON | O | O | O | O |
-| CSV | O | X | O | X |
+| CSV/TSV | O | X | O | X |
 | YAML | O | X | X | O |
 | TOML | O | X | X | X |
+| XML | O | X | X | O |
+| MessagePack | O | X | X | X |
 | Cross-format convert | O | X | Partial | Partial |
 | Table output | O | X | O | X |
 | Query (where/select/sort) | O | O | O | O |
@@ -184,6 +206,7 @@ dkit merge config1.yaml config2.yaml --to yaml
 | Statistics | O | X | O | X |
 | Schema inspection | O | X | X | X |
 | File merging | O | X | O | X |
+| File diff | O | X | X | X |
 | Single binary | O | O | O | O |
 
 dkit focuses on **seamless conversion between all supported formats** with a unified query syntax, eliminating the need for separate tools per format.

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-21
+
+### Added
+
+- **XML format support**: Read and write XML files via `quick-xml` crate. Supports conversion between XML and all other formats. (#22)
+- **TSV format support**: Tab-separated values with automatic `.tsv` extension detection. Leverages CSV Reader's delimiter option. (#23)
+- **MessagePack format support**: Binary MessagePack format via `rmp-serde` crate. Read and write `.msgpack` files. (#24)
+- **`diff` subcommand**: Compare two data files and display differences with colored output (added: green, removed: red, changed: yellow). Supports cross-format comparison, `--path` for nested data, and `--quiet` mode. (#35)
+- **Comprehensive v0.3.0 integration tests**: End-to-end tests for XML, TSV, MessagePack formats, diff subcommand, and cross-format conversions. (#52)
+
 ## [0.2.0] - 2026-03-21
 
 ### Added
@@ -38,5 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[0.3.0]: https://github.com/syangkkim/dkit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/syangkkim/dkit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/syangkkim/dkit/releases/tag/v0.1.0
