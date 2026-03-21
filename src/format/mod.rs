@@ -24,7 +24,7 @@ impl Format {
     pub fn from_str(s: &str) -> Result<Self, DkitError> {
         match s.to_lowercase().as_str() {
             "json" => Ok(Format::Json),
-            "csv" => Ok(Format::Csv),
+            "csv" | "tsv" => Ok(Format::Csv),
             "yaml" | "yml" => Ok(Format::Yaml),
             "toml" => Ok(Format::Toml),
             "xml" => Ok(Format::Xml),
@@ -55,6 +55,23 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("xml") => Ok(Format::Xml),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
+    }
+}
+
+/// 파일 확장자에 따른 기본 delimiter 반환
+/// `.tsv` 파일은 탭 구분자를 사용한다.
+pub fn default_delimiter(path: &Path) -> Option<char> {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("tsv") => Some('\t'),
+        _ => None,
+    }
+}
+
+/// `--to` 포맷 문자열에 따른 기본 delimiter 반환
+pub fn default_delimiter_for_format(format_str: &str) -> Option<char> {
+    match format_str.to_lowercase().as_str() {
+        "tsv" => Some('\t'),
+        _ => None,
     }
 }
 
@@ -111,6 +128,8 @@ mod tests {
         assert_eq!(Format::from_str("json").unwrap(), Format::Json);
         assert_eq!(Format::from_str("JSON").unwrap(), Format::Json);
         assert_eq!(Format::from_str("csv").unwrap(), Format::Csv);
+        assert_eq!(Format::from_str("tsv").unwrap(), Format::Csv);
+        assert_eq!(Format::from_str("TSV").unwrap(), Format::Csv);
         assert_eq!(Format::from_str("yaml").unwrap(), Format::Yaml);
         assert_eq!(Format::from_str("yml").unwrap(), Format::Yaml);
         assert_eq!(Format::from_str("toml").unwrap(), Format::Toml);
@@ -198,6 +217,36 @@ mod tests {
     fn test_detect_format_no_extension() {
         let err = detect_format(&PathBuf::from("Makefile")).unwrap_err();
         assert!(matches!(err, DkitError::UnknownFormat(s) if s == "(no extension)"));
+    }
+
+    // --- FormatOptions ---
+
+    // --- default_delimiter ---
+
+    #[test]
+    fn test_default_delimiter_tsv() {
+        assert_eq!(default_delimiter(&PathBuf::from("data.tsv")), Some('\t'));
+    }
+
+    #[test]
+    fn test_default_delimiter_csv() {
+        assert_eq!(default_delimiter(&PathBuf::from("data.csv")), None);
+    }
+
+    #[test]
+    fn test_default_delimiter_json() {
+        assert_eq!(default_delimiter(&PathBuf::from("data.json")), None);
+    }
+
+    #[test]
+    fn test_default_delimiter_for_format_tsv() {
+        assert_eq!(default_delimiter_for_format("tsv"), Some('\t'));
+        assert_eq!(default_delimiter_for_format("TSV"), Some('\t'));
+    }
+
+    #[test]
+    fn test_default_delimiter_for_format_csv() {
+        assert_eq!(default_delimiter_for_format("csv"), None);
     }
 
     // --- FormatOptions ---

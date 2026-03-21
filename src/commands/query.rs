@@ -9,7 +9,10 @@ use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
-use crate::format::{detect_format, Format, FormatOptions, FormatReader, FormatWriter};
+use crate::format::{
+    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
+    FormatReader, FormatWriter,
+};
 use crate::query::evaluator::evaluate_path;
 use crate::query::filter::apply_operations;
 use crate::query::parser::parse_query;
@@ -47,7 +50,15 @@ pub fn run(args: &QueryArgs) -> Result<()> {
     };
 
     // 파싱
-    let read_options = FormatOptions::default();
+    let auto_delimiter = if args.input == "-" {
+        args.from.and_then(default_delimiter_for_format)
+    } else {
+        default_delimiter(Path::new(args.input))
+    };
+    let read_options = FormatOptions {
+        delimiter: auto_delimiter,
+        ..Default::default()
+    };
     let value = read_value(&content, source_format, &read_options)?;
 
     // 쿼리 파싱 및 실행

@@ -9,7 +9,10 @@ use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
-use crate::format::{detect_format, Format, FormatOptions, FormatReader, FormatWriter};
+use crate::format::{
+    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
+    FormatReader, FormatWriter,
+};
 use crate::value::Value;
 
 pub struct MergeArgs<'a> {
@@ -30,15 +33,15 @@ pub fn run(args: &MergeArgs) -> Result<()> {
     }
 
     // 각 파일을 Value로 읽기
-    let read_options = FormatOptions {
-        delimiter: args.delimiter,
-        no_header: args.no_header,
-        ..Default::default()
-    };
-
     let mut values = Vec::with_capacity(args.input.len());
     for path in args.input {
         let format = detect_format(path)?;
+        let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
+        let read_options = FormatOptions {
+            delimiter: read_delimiter,
+            no_header: args.no_header,
+            ..Default::default()
+        };
         let content = read_file(path)?;
         let value = read_value(&content, format, &read_options)?;
         values.push(value);
@@ -56,8 +59,11 @@ pub fn run(args: &MergeArgs) -> Result<()> {
         },
     };
 
+    let write_delimiter = args
+        .delimiter
+        .or_else(|| args.to.and_then(default_delimiter_for_format));
     let write_options = FormatOptions {
-        delimiter: args.delimiter,
+        delimiter: write_delimiter,
         no_header: args.no_header,
         pretty: if args.compact {
             false

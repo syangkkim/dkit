@@ -6,7 +6,10 @@ use crate::format::json::JsonReader;
 use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
-use crate::format::{detect_format, Format, FormatOptions, FormatReader};
+use crate::format::{
+    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
+    FormatReader,
+};
 use crate::value::Value;
 use anyhow::{bail, Result};
 
@@ -17,7 +20,15 @@ pub struct SchemaArgs<'a> {
 
 pub fn run(args: &SchemaArgs) -> Result<()> {
     let (content, source_format) = read_input(args)?;
-    let options = FormatOptions::default();
+    let auto_delimiter = if args.input == "-" {
+        args.from.and_then(default_delimiter_for_format)
+    } else {
+        default_delimiter(Path::new(args.input))
+    };
+    let options = FormatOptions {
+        delimiter: auto_delimiter,
+        ..Default::default()
+    };
     let value = read_value(&content, source_format, &options)?;
 
     let mut output = String::new();
