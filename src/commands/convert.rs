@@ -10,7 +10,10 @@ use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
-use crate::format::{detect_format, Format, FormatOptions, FormatReader, FormatWriter};
+use crate::format::{
+    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
+    FormatReader, FormatWriter,
+};
 use crate::value::Value;
 
 pub struct ConvertArgs<'a> {
@@ -30,8 +33,11 @@ pub struct ConvertArgs<'a> {
 pub fn run(args: &ConvertArgs) -> Result<()> {
     let target_format = Format::from_str(args.to)?;
 
+    let write_delimiter = args
+        .delimiter
+        .or_else(|| default_delimiter_for_format(args.to));
     let write_options = FormatOptions {
-        delimiter: args.delimiter,
+        delimiter: write_delimiter,
         no_header: args.no_header,
         pretty: if args.compact {
             false
@@ -53,8 +59,11 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
             .read_to_string(&mut buf)
             .context("Failed to read from stdin")?;
 
+        let read_delimiter = args
+            .delimiter
+            .or_else(|| args.from.and_then(default_delimiter_for_format));
         let read_options = FormatOptions {
-            delimiter: args.delimiter,
+            delimiter: read_delimiter,
             no_header: args.no_header,
             ..Default::default()
         };
@@ -85,8 +94,9 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
                 None => detect_format(path)?,
             };
 
+            let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
             let read_options = FormatOptions {
-                delimiter: args.delimiter,
+                delimiter: read_delimiter,
                 no_header: args.no_header,
                 ..Default::default()
             };
@@ -116,8 +126,9 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         None => detect_format(path)?,
     };
 
+    let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
     let read_options = FormatOptions {
-        delimiter: args.delimiter,
+        delimiter: read_delimiter,
         no_header: args.no_header,
         ..Default::default()
     };

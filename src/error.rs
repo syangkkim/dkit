@@ -1,5 +1,5 @@
 /// 지원하는 포맷 목록 (에러 메시지용)
-pub const SUPPORTED_FORMATS: &[&str] = &["json", "csv", "yaml", "yml", "toml", "xml"];
+pub const SUPPORTED_FORMATS: &[&str] = &["json", "csv", "tsv", "yaml", "yml", "toml", "xml"];
 
 /// dkit 에러 타입 정의
 ///
