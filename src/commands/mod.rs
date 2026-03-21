@@ -1,4 +1,5 @@
 pub mod convert;
+pub mod diff;
 pub mod merge;
 pub mod query;
 pub mod schema;

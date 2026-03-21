@@ -204,4 +204,26 @@ pub enum Commands {
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
     },
+
+    /// Compare two data files and show differences
+    #[command(
+        after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'"
+    )]
+    Diff {
+        /// First input file
+        #[arg(value_name = "FILE1")]
+        file1: PathBuf,
+
+        /// Second input file
+        #[arg(value_name = "FILE2")]
+        file2: PathBuf,
+
+        /// Compare only a nested data path (e.g. '.database')
+        #[arg(long, value_name = "QUERY")]
+        path: Option<String>,
+
+        /// Only report whether files differ (exit code: 0=same, 1=different)
+        #[arg(long)]
+        quiet: bool,
+    },
 }
