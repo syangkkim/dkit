@@ -99,6 +99,22 @@ dkit query data.json '.items[-1]'
 | `.[0]` | Array index (0-based) |
 | `.[-1]` | Negative index (from end) |
 | `.[]` | Iterate all elements |
+| `where .field == value` | Filter with comparison (`==`, `!=`, `>`, `<`, `>=`, `<=`) |
+| `where .field contains "str"` | Filter with string operators (`contains`, `starts_with`, `ends_with`) |
+| `select .field1, .field2` | Select specific fields |
+| `sort .field` / `sort .field desc` | Sort by field (ascending/descending) |
+| `limit N` | Limit number of results |
+| `\|` | Pipeline chaining (pass results between operations) |
+
+```bash
+# Advanced query examples
+dkit query data.json '.users[] | where .age > 20 | select .name, .email'
+dkit query data.json '.items[] | sort .price desc | limit 5'
+dkit query data.json '.users[] | where .name contains "Kim"'
+
+# Output query results in different formats
+dkit query data.json '.users[]' --to csv -o users.csv
+```
 
 ### `view` — Table preview
 
@@ -116,6 +132,43 @@ dkit view data.json --path '.users'
 dkit view users.csv --columns name,email
 ```
 
+### `stats` — Data statistics
+
+```bash
+# Show overall statistics
+dkit stats data.csv
+
+# Navigate to nested data
+dkit stats data.json --path .users
+
+# Statistics for a specific column
+dkit stats data.csv --column revenue
+```
+
+### `schema` — Data structure inspection
+
+```bash
+# Show schema as a tree
+dkit schema config.yaml
+dkit schema data.json
+
+# From stdin
+cat data.json | dkit schema - --from json
+```
+
+### `merge` — Combine multiple files
+
+```bash
+# Merge JSON files
+dkit merge a.json b.json --to json
+
+# Merge CSV files and convert to JSON
+dkit merge users1.csv users2.csv --to json -o merged.json
+
+# Merge YAML configs
+dkit merge config1.yaml config2.yaml --to yaml
+```
+
 ## Comparison with Existing Tools
 
 | Feature | dkit | jq | miller | yq |
@@ -126,7 +179,11 @@ dkit view users.csv --columns name,email
 | TOML | O | X | X | X |
 | Cross-format convert | O | X | Partial | Partial |
 | Table output | O | X | O | X |
-| Query | O | O | O | O |
+| Query (where/select/sort) | O | O | O | O |
+| Pipeline chaining | O | O | O | X |
+| Statistics | O | X | O | X |
+| Schema inspection | O | X | X | X |
+| File merging | O | X | O | X |
 | Single binary | O | O | O | O |
 
 dkit focuses on **seamless conversion between all supported formats** with a unified query syntax, eliminating the need for separate tools per format.
