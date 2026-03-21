@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use super::read_file;
+use super::{read_file, read_file_bytes};
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::json::{JsonReader, JsonWriter};
+use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
@@ -42,8 +43,13 @@ pub fn run(args: &MergeArgs) -> Result<()> {
             no_header: args.no_header,
             ..Default::default()
         };
-        let content = read_file(path)?;
-        let value = read_value(&content, format, &read_options)?;
+        let value = if format == Format::Msgpack {
+            let bytes = read_file_bytes(path)?;
+            MsgpackReader.read_from_bytes(&bytes)?
+        } else {
+            let content = read_file(path)?;
+            read_value(&content, format, &read_options)?
+        };
         values.push(value);
     }
 
@@ -74,19 +80,39 @@ pub fn run(args: &MergeArgs) -> Result<()> {
         flow_style: args.flow,
     };
 
-    let result = write_value(&merged, target_format, &write_options)?;
-
-    if let Some(out_path) = args.output {
-        if let Some(parent) = out_path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("Failed to create directory {}", parent.display()))?;
+    if target_format == Format::Msgpack {
+        let bytes = MsgpackWriter.write_bytes(&merged)?;
+        if let Some(out_path) = args.output {
+            if let Some(parent) = out_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create directory {}", parent.display())
+                    })?;
+                }
             }
+            fs::write(out_path, &bytes)
+                .with_context(|| format!("Failed to write to {}", out_path.display()))?;
+        } else {
+            use std::io::Write as _;
+            std::io::stdout()
+                .write_all(&bytes)
+                .context("Failed to write to stdout")?;
         }
-        fs::write(out_path, &result)
-            .with_context(|| format!("Failed to write to {}", out_path.display()))?;
     } else {
-        print!("{result}");
+        let result = write_value(&merged, target_format, &write_options)?;
+        if let Some(out_path) = args.output {
+            if let Some(parent) = out_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create directory {}", parent.display())
+                    })?;
+                }
+            }
+            fs::write(out_path, &result)
+                .with_context(|| format!("Failed to write to {}", out_path.display()))?;
+        } else {
+            print!("{result}");
+        }
     }
 
     Ok(())
@@ -144,6 +170,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader.read(content),
+        Format::Msgpack => MsgpackReader.read(content),
     }
 }
 
@@ -154,6 +181,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Yaml => YamlWriter::new(options.clone()).write(value),
         Format::Toml => TomlWriter::new(options.clone()).write(value),
         Format::Xml => XmlWriter::new(options.pretty).write(value),
+        Format::Msgpack => MsgpackWriter.write(value),
     }
 }
 

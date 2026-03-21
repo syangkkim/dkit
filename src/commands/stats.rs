@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
+use crate::format::msgpack::MsgpackReader;
 use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
@@ -23,20 +24,7 @@ pub struct StatsArgs<'a> {
 }
 
 pub fn run(args: &StatsArgs) -> Result<()> {
-    let (content, source_format) = read_input(args)?;
-
-    let auto_delimiter = if args.input == "-" {
-        args.from.and_then(default_delimiter_for_format)
-    } else {
-        default_delimiter(Path::new(args.input))
-    };
-    let read_options = FormatOptions {
-        delimiter: args.delimiter.or(auto_delimiter),
-        no_header: args.no_header,
-        ..Default::default()
-    };
-
-    let value = read_value(&content, source_format, &read_options)?;
+    let (value, _source_format) = read_input_as_value(args)?;
 
     // --path 옵션으로 중첩 데이터 접근
     let target = match args.path {
@@ -277,6 +265,51 @@ fn read_input(args: &StatsArgs) -> Result<(String, Format)> {
     }
 }
 
+/// MessagePack 바이너리 입력을 처리하여 Value를 반환
+fn read_input_as_value(args: &StatsArgs) -> Result<(Value, Format)> {
+    let format = if args.input == "-" {
+        match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => bail!(
+                "--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"
+            ),
+        }
+    } else {
+        match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(Path::new(args.input))?,
+        }
+    };
+
+    if format == Format::Msgpack {
+        let bytes = if args.input == "-" {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .context("Failed to read from stdin")?;
+            buf
+        } else {
+            super::read_file_bytes(Path::new(args.input))?
+        };
+        let value = MsgpackReader.read_from_bytes(&bytes)?;
+        Ok((value, format))
+    } else {
+        let (content, format) = read_input(args)?;
+        let auto_delimiter = if args.input == "-" {
+            args.from.and_then(default_delimiter_for_format)
+        } else {
+            default_delimiter(Path::new(args.input))
+        };
+        let read_options = FormatOptions {
+            delimiter: args.delimiter.or(auto_delimiter),
+            no_header: args.no_header,
+            ..Default::default()
+        };
+        let value = read_value(&content, format, &read_options)?;
+        Ok((value, format))
+    }
+}
+
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {
     match format {
         Format::Json => JsonReader.read(content),
@@ -284,6 +317,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader.read(content),
+        Format::Msgpack => MsgpackReader.read(content),
     }
 }
 

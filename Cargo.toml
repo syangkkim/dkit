@@ -17,6 +17,7 @@ serde_yaml = "0.9"
 csv = "1"
 toml = "0.8"
 quick-xml = "0.37"
+rmp-serde = "1"
 indexmap = { version = "2", features = ["serde"] }
 comfy-table = "7"
 colored = "2"

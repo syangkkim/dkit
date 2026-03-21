@@ -1,5 +1,6 @@
 pub mod csv;
 pub mod json;
+pub mod msgpack;
 pub mod toml;
 pub mod xml;
 pub mod yaml;
@@ -18,6 +19,7 @@ pub enum Format {
     Yaml,
     Toml,
     Xml,
+    Msgpack,
 }
 
 impl Format {
@@ -28,6 +30,7 @@ impl Format {
             "yaml" | "yml" => Ok(Format::Yaml),
             "toml" => Ok(Format::Toml),
             "xml" => Ok(Format::Xml),
+            "msgpack" | "messagepack" => Ok(Format::Msgpack),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -41,6 +44,7 @@ impl std::fmt::Display for Format {
             Format::Yaml => write!(f, "YAML"),
             Format::Toml => write!(f, "TOML"),
             Format::Xml => write!(f, "XML"),
+            Format::Msgpack => write!(f, "MessagePack"),
         }
     }
 }
@@ -53,6 +57,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("yaml" | "yml") => Ok(Format::Yaml),
         Some("toml") => Ok(Format::Toml),
         Some("xml") => Ok(Format::Xml),
+        Some("msgpack") => Ok(Format::Msgpack),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
@@ -141,6 +146,12 @@ mod tests {
     }
 
     #[test]
+    fn test_format_from_str_msgpack() {
+        assert_eq!(Format::from_str("msgpack").unwrap(), Format::Msgpack);
+        assert_eq!(Format::from_str("messagepack").unwrap(), Format::Msgpack);
+    }
+
+    #[test]
     fn test_format_from_str_unknown() {
         let err = Format::from_str("bin").unwrap_err();
         assert!(matches!(err, DkitError::UnknownFormat(s) if s == "bin"));
@@ -155,6 +166,7 @@ mod tests {
         assert_eq!(Format::Yaml.to_string(), "YAML");
         assert_eq!(Format::Toml.to_string(), "TOML");
         assert_eq!(Format::Xml.to_string(), "XML");
+        assert_eq!(Format::Msgpack.to_string(), "MessagePack");
     }
 
     // --- detect_format ---
@@ -204,6 +216,14 @@ mod tests {
         assert_eq!(
             detect_format(&PathBuf::from("data.xml")).unwrap(),
             Format::Xml
+        );
+    }
+
+    #[test]
+    fn test_detect_format_msgpack() {
+        assert_eq!(
+            detect_format(&PathBuf::from("data.msgpack")).unwrap(),
+            Format::Msgpack
         );
     }
 
