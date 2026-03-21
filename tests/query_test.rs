@@ -276,6 +276,272 @@ fn query_with_to_toml() {
     assert!(stdout.contains("localhost"));
 }
 
+// --- 파이프라인 체이닝 ---
+
+#[test]
+fn query_pipeline_where() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where age > 30",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Charlie"));
+    assert!(stdout.contains("Eve"));
+    assert!(!stdout.contains("Bob"));
+    assert!(!stdout.contains("Diana"));
+}
+
+#[test]
+fn query_pipeline_where_select() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where city == \"Seoul\" | select name, role",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Alice"));
+    assert!(stdout.contains("Charlie"));
+    assert!(stdout.contains("Eve"));
+    assert!(!stdout.contains("Busan"));
+    assert!(!stdout.contains("Incheon"));
+    // select should exclude age, city, score
+    assert!(!stdout.contains("score"));
+}
+
+#[test]
+fn query_pipeline_where_sort() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where role == \"engineer\" | sort score desc",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Diana(95) > Eve(88) > Alice(85)
+    let diana_pos = stdout.find("Diana").unwrap();
+    let eve_pos = stdout.find("Eve").unwrap();
+    let alice_pos = stdout.find("Alice").unwrap();
+    assert!(diana_pos < eve_pos);
+    assert!(eve_pos < alice_pos);
+}
+
+#[test]
+fn query_pipeline_where_sort_limit() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where role == \"engineer\" | sort score desc | limit 2",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Diana"));
+    assert!(stdout.contains("Eve"));
+    assert!(!stdout.contains("Alice")); // 3rd engineer, excluded by limit
+}
+
+#[test]
+fn query_pipeline_where_select_sort() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where age > 25 | select name, age | sort name",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Sorted by name: Alice, Charlie, Diana, Eve (Bob age=25 excluded)
+    let alice_pos = stdout.find("Alice").unwrap();
+    let charlie_pos = stdout.find("Charlie").unwrap();
+    let diana_pos = stdout.find("Diana").unwrap();
+    let eve_pos = stdout.find("Eve").unwrap();
+    assert!(alice_pos < charlie_pos);
+    assert!(charlie_pos < diana_pos);
+    assert!(diana_pos < eve_pos);
+    assert!(!stdout.contains("Bob"));
+}
+
+#[test]
+fn query_pipeline_full_chain() {
+    // where + select + sort + limit
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where city == \"Seoul\" | select name, score | sort score desc | limit 2",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Seoul: Alice(85), Charlie(78), Eve(88) → sort desc: Eve(88), Alice(85), Charlie(78) → limit 2
+    assert!(stdout.contains("Eve"));
+    assert!(stdout.contains("Alice"));
+    assert!(!stdout.contains("Charlie"));
+}
+
+#[test]
+fn query_pipeline_sort_limit() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | sort age | limit 3",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Youngest 3: Bob(25), Diana(28), Alice(30)
+    assert!(stdout.contains("Bob"));
+    assert!(stdout.contains("Diana"));
+    assert!(stdout.contains("Alice"));
+    assert!(!stdout.contains("Charlie")); // 35
+    assert!(!stdout.contains("Eve")); // 32
+}
+
+#[test]
+fn query_pipeline_select_only() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | select name, city",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("name"));
+    assert!(stdout.contains("city"));
+    assert!(!stdout.contains("age"));
+    assert!(!stdout.contains("score"));
+    assert!(!stdout.contains("role"));
+}
+
+#[test]
+fn query_pipeline_limit_only() {
+    let output = dkit()
+        .args(["query", "tests/fixtures/employees.json", ".[] | limit 1"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Alice"));
+    assert!(!stdout.contains("Bob"));
+}
+
+#[test]
+fn query_pipeline_where_and_condition() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where city == \"Seoul\" and role == \"engineer\"",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Alice"));
+    assert!(stdout.contains("Eve"));
+    assert!(!stdout.contains("Charlie")); // manager
+    assert!(!stdout.contains("Bob")); // Busan
+}
+
+#[test]
+fn query_pipeline_where_or_condition() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where role == \"manager\" or role == \"designer\"",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Charlie"));
+    assert!(stdout.contains("Bob"));
+    assert!(!stdout.contains("Alice"));
+}
+
+#[test]
+fn query_pipeline_where_string_op() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where name starts_with \"A\" | select name",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Alice"));
+    assert!(!stdout.contains("Bob"));
+}
+
+#[test]
+fn query_pipeline_with_output_format() {
+    // Pipeline + --to yaml
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where age > 30 | select name",
+            "--to",
+            "yaml",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Charlie"));
+    assert!(stdout.contains("Eve"));
+}
+
+#[test]
+fn query_pipeline_empty_result() {
+    let output = dkit()
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | where age > 100",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "[]");
+}
+
+#[test]
+fn query_pipeline_with_nested_path() {
+    // Test pipeline with object having nested structure
+    let output = dkit()
+        .args(["query", "tests/fixtures/nested.json", "."])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+}
+
 #[test]
 fn query_with_to_csv() {
     let output = dkit()
