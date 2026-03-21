@@ -148,6 +148,22 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 from: from.as_deref(),
             })?;
         }
+        Commands::Diff {
+            file1,
+            file2,
+            path,
+            quiet,
+        } => {
+            let has_diff = commands::diff::run(&commands::diff::DiffArgs {
+                file1: &file1,
+                file2: &file2,
+                path: path.as_deref(),
+                quiet,
+            })?;
+            if has_diff {
+                process::exit(1);
+            }
+        }
     }
 
     Ok(())
