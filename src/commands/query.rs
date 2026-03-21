@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::format::csv::CsvReader;
 use crate::format::json::{JsonReader, JsonWriter};
+use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
@@ -28,38 +29,52 @@ pub struct QueryArgs<'a> {
 
 /// query 서브커맨드 실행
 pub fn run(args: &QueryArgs) -> Result<()> {
-    // 입력 읽기
-    let (content, source_format) = if args.input == "-" {
-        let format = match args.from {
+    // 입력 포맷 결정
+    let source_format = if args.input == "-" {
+        match args.from {
             Some(f) => Format::from_str(f)?,
             None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
-        };
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .context("Failed to read from stdin")?;
-        (buf, format)
+        }
     } else {
-        let path = PathBuf::from(args.input);
-        let format = match args.from {
+        match args.from {
             Some(f) => Format::from_str(f)?,
-            None => detect_format(&path)?,
-        };
-        let content = super::read_file(&path)?;
-        (content, format)
+            None => detect_format(&PathBuf::from(args.input))?,
+        }
     };
 
-    // 파싱
-    let auto_delimiter = if args.input == "-" {
-        args.from.and_then(default_delimiter_for_format)
+    // 입력 읽기 (바이너리 포맷 자동 처리)
+    let value = if source_format == Format::Msgpack {
+        if args.input == "-" {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .context("Failed to read from stdin")?;
+            MsgpackReader.read_from_bytes(&buf)?
+        } else {
+            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            MsgpackReader.read_from_bytes(&bytes)?
+        }
     } else {
-        default_delimiter(Path::new(args.input))
+        let content = if args.input == "-" {
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .context("Failed to read from stdin")?;
+            buf
+        } else {
+            super::read_file(&PathBuf::from(args.input))?
+        };
+        let auto_delimiter = if args.input == "-" {
+            args.from.and_then(default_delimiter_for_format)
+        } else {
+            default_delimiter(Path::new(args.input))
+        };
+        let read_options = FormatOptions {
+            delimiter: auto_delimiter,
+            ..Default::default()
+        };
+        read_value(&content, source_format, &read_options)?
     };
-    let read_options = FormatOptions {
-        delimiter: auto_delimiter,
-        ..Default::default()
-    };
-    let value = read_value(&content, source_format, &read_options)?;
 
     // 쿼리 파싱 및 실행
     let query = parse_query(args.query)?;
@@ -75,28 +90,44 @@ pub fn run(args: &QueryArgs) -> Result<()> {
         },
     };
 
-    let write_options = FormatOptions {
-        pretty: true,
-        ..Default::default()
-    };
-    let output = write_value(&result, output_format, &write_options)?;
-
-    // 출력: -o 지정 시 파일에 쓰기, 아니면 stdout
-    match args.output {
-        Some(path) => {
-            let content = if output.ends_with('\n') {
-                output
-            } else {
-                format!("{output}\n")
-            };
-            fs::write(path, &content)
-                .with_context(|| format!("Failed to write to {}", path.display()))?;
+    // 출력
+    if output_format == Format::Msgpack {
+        let bytes = MsgpackWriter.write_bytes(&result)?;
+        match args.output {
+            Some(path) => {
+                fs::write(path, &bytes)
+                    .with_context(|| format!("Failed to write to {}", path.display()))?;
+            }
+            None => {
+                use std::io::Write as _;
+                std::io::stdout()
+                    .write_all(&bytes)
+                    .context("Failed to write to stdout")?;
+            }
         }
-        None => {
-            if output.ends_with('\n') {
-                print!("{output}");
-            } else {
-                println!("{output}");
+    } else {
+        let write_options = FormatOptions {
+            pretty: true,
+            ..Default::default()
+        };
+        let output = write_value(&result, output_format, &write_options)?;
+
+        match args.output {
+            Some(path) => {
+                let content = if output.ends_with('\n') {
+                    output
+                } else {
+                    format!("{output}\n")
+                };
+                fs::write(path, &content)
+                    .with_context(|| format!("Failed to write to {}", path.display()))?;
+            }
+            None => {
+                if output.ends_with('\n') {
+                    print!("{output}");
+                } else {
+                    println!("{output}");
+                }
             }
         }
     }
@@ -111,6 +142,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader.read(content),
+        Format::Msgpack => MsgpackReader.read(content),
     }
 }
 
@@ -130,5 +162,6 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Yaml => YamlWriter::new(options.clone()).write(value),
         Format::Toml => TomlWriter::new(options.clone()).write(value),
         Format::Xml => XmlWriter::new(options.pretty).write(value),
+        Format::Msgpack => MsgpackWriter.write(value),
     }
 }

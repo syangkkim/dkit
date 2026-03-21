@@ -5,6 +5,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
+use crate::format::msgpack::MsgpackReader;
 use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
@@ -27,7 +28,7 @@ pub struct ViewArgs<'a> {
 
 /// view 서브커맨드 실행
 pub fn run(args: &ViewArgs) -> Result<()> {
-    let (content, source_format) = read_input(args)?;
+    let source_format = determine_format(args)?;
 
     let auto_delimiter = if args.input == "-" {
         args.from.and_then(default_delimiter_for_format)
@@ -40,7 +41,7 @@ pub fn run(args: &ViewArgs) -> Result<()> {
         ..Default::default()
     };
 
-    let value = read_value(&content, source_format, &read_options)?;
+    let value = read_input_value(args, source_format, &read_options)?;
 
     // --path 옵션으로 중첩 데이터 접근
     let target = match args.path {
@@ -54,26 +55,45 @@ pub fn run(args: &ViewArgs) -> Result<()> {
     Ok(())
 }
 
-/// 입력 소스에서 콘텐츠와 포맷을 읽어온다
-fn read_input(args: &ViewArgs) -> Result<(String, Format)> {
+/// 입력 포맷을 결정한다
+fn determine_format(args: &ViewArgs) -> Result<Format> {
     if args.input == "-" {
-        let format = match args.from {
-            Some(f) => Format::from_str(f)?,
+        match args.from {
+            Some(f) => Format::from_str(f),
             None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
-        };
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .context("Failed to read from stdin")?;
-        Ok((buf, format))
+        }
     } else {
-        let path = Path::new(args.input);
-        let format = match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => detect_format(path)?,
+        match args.from {
+            Some(f) => Format::from_str(f),
+            None => detect_format(Path::new(args.input)),
+        }
+    }.map_err(Into::into)
+}
+
+/// 입력 소스에서 Value를 읽어온다 (바이너리 포맷 자동 처리)
+fn read_input_value(args: &ViewArgs, format: Format, options: &FormatOptions) -> Result<Value> {
+    if format == Format::Msgpack {
+        if args.input == "-" {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .context("Failed to read from stdin")?;
+            MsgpackReader.read_from_bytes(&buf)
+        } else {
+            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            MsgpackReader.read_from_bytes(&bytes)
+        }
+    } else {
+        let content = if args.input == "-" {
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .context("Failed to read from stdin")?;
+            buf
+        } else {
+            super::read_file(Path::new(args.input))?
         };
-        let content = super::read_file(path)?;
-        Ok((content, format))
+        read_value(&content, format, options)
     }
 }
 
@@ -84,6 +104,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader.read(content),
+        Format::Msgpack => MsgpackReader.read(content),
     }
 }
 

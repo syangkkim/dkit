@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
+use crate::format::msgpack::MsgpackReader;
 use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
@@ -19,17 +20,50 @@ pub struct SchemaArgs<'a> {
 }
 
 pub fn run(args: &SchemaArgs) -> Result<()> {
-    let (content, source_format) = read_input(args)?;
-    let auto_delimiter = if args.input == "-" {
-        args.from.and_then(default_delimiter_for_format)
+    let source_format = if args.input == "-" {
+        match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
+        }
     } else {
-        default_delimiter(Path::new(args.input))
+        match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(Path::new(args.input))?,
+        }
     };
-    let options = FormatOptions {
-        delimiter: auto_delimiter,
-        ..Default::default()
+
+    let value = if source_format == Format::Msgpack {
+        let bytes = if args.input == "-" {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .map_err(|e| anyhow::anyhow!("Failed to read from stdin: {e}"))?;
+            buf
+        } else {
+            super::read_file_bytes(Path::new(args.input))?
+        };
+        MsgpackReader.read_from_bytes(&bytes)?
+    } else {
+        let content = if args.input == "-" {
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .map_err(|e| anyhow::anyhow!("Failed to read from stdin: {e}"))?;
+            buf
+        } else {
+            super::read_file(Path::new(args.input))?
+        };
+        let auto_delimiter = if args.input == "-" {
+            args.from.and_then(default_delimiter_for_format)
+        } else {
+            default_delimiter(Path::new(args.input))
+        };
+        let options = FormatOptions {
+            delimiter: auto_delimiter,
+            ..Default::default()
+        };
+        read_value(&content, source_format, &options)?
     };
-    let value = read_value(&content, source_format, &options)?;
 
     let mut output = String::new();
     format_schema(&value, "", true, &mut output);
@@ -160,30 +194,6 @@ fn format_array_children(arr: &[Value], prefix: &str, output: &mut String) {
     }
 }
 
-fn read_input(args: &SchemaArgs) -> Result<(String, Format)> {
-    if args.input == "-" {
-        let format = match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => bail!(
-                "--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"
-            ),
-        };
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .map_err(|e| anyhow::anyhow!("Failed to read from stdin: {e}"))?;
-        Ok((buf, format))
-    } else {
-        let path = Path::new(args.input);
-        let format = match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => detect_format(path)?,
-        };
-        let content = super::read_file(path)?;
-        Ok((content, format))
-    }
-}
-
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {
     match format {
         Format::Json => JsonReader.read(content),
@@ -191,6 +201,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader.read(content),
+        Format::Msgpack => MsgpackReader.read(content),
     }
 }
 
