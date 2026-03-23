@@ -8,6 +8,7 @@ use super::{read_file, read_file_bytes};
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::jsonl::{JsonlReader, JsonlWriter};
+use crate::format::html::HtmlWriter;
 use crate::format::markdown::MarkdownWriter;
 use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
@@ -31,6 +32,8 @@ pub struct ConvertArgs<'a> {
     pub no_header: bool,
     pub flow: bool,
     pub root_element: Option<String>,
+    pub styled: bool,
+    pub full_html: bool,
 }
 
 /// convert 서브커맨드 실행
@@ -51,6 +54,8 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         compact: args.compact,
         flow_style: args.flow,
         root_element: args.root_element.clone(),
+        styled: args.styled,
+        full_html: args.full_html,
     };
 
     // stdin mode: no input files
@@ -185,6 +190,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
+        Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
     }
 }
 
@@ -227,5 +233,6 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Markdown => MarkdownWriter.write(value),
+        Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
     }
 }

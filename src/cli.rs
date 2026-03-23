@@ -65,6 +65,14 @@ pub enum Commands {
         /// XML root element name (default: "root")
         #[arg(long, value_name = "NAME")]
         root_element: Option<String>,
+
+        /// Include inline CSS styles (HTML output)
+        #[arg(long)]
+        styled: bool,
+
+        /// Output a complete HTML document (HTML output)
+        #[arg(long)]
+        full_html: bool,
     },
 
     /// Query data using path expressions
