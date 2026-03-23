@@ -200,7 +200,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
-        Format::Xml => XmlReader.read(content),
+        Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
     }
 }
