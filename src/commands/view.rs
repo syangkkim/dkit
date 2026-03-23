@@ -14,7 +14,7 @@ use crate::format::{
     default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
     Format, FormatOptions, FormatReader,
 };
-use crate::output::table::render_table;
+use crate::output::table::{render_table, TableOptions};
 use crate::value::Value;
 
 pub struct ViewArgs<'a> {
@@ -25,6 +25,11 @@ pub struct ViewArgs<'a> {
     pub columns: Option<Vec<String>>,
     pub delimiter: Option<char>,
     pub no_header: bool,
+    pub max_width: Option<u16>,
+    pub hide_header: bool,
+    pub row_numbers: bool,
+    pub border: &'a str,
+    pub color: bool,
 }
 
 /// view 서브커맨드 실행
@@ -73,7 +78,16 @@ pub fn run(args: &ViewArgs) -> Result<()> {
         None => value,
     };
 
-    let output = render_table(&target, args.limit, args.columns.as_deref());
+    let table_opts = TableOptions {
+        limit: args.limit,
+        columns: args.columns.as_deref(),
+        max_width: args.max_width,
+        hide_header: args.hide_header,
+        row_numbers: args.row_numbers,
+        border: args.border,
+        color: args.color,
+    };
+    let output = render_table(&target, &table_opts);
 
     println!("{output}");
     Ok(())

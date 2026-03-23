@@ -103,13 +103,7 @@ fn convert_md_nested_json_inline() {
 #[test]
 fn query_output_as_md() {
     dkit()
-        .args(&[
-            "query",
-            "tests/fixtures/users.json",
-            ".",
-            "--to",
-            "md",
-        ])
+        .args(&["query", "tests/fixtures/users.json", ".", "--to", "md"])
         .assert()
         .success()
         .stdout(predicate::str::contains("| name |"));

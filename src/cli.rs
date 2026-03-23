@@ -103,7 +103,7 @@ pub enum Commands {
 
     /// View data in a formatted table
     #[command(
-        after_help = "Examples:\n  dkit view data.csv\n  dkit view data.json --path .users --limit 5\n  dkit view data.json --columns name,email"
+        after_help = "Examples:\n  dkit view data.csv\n  dkit view data.json --path .users --limit 5\n  dkit view data.json --columns name,email\n  dkit view data.csv --border rounded --color\n  dkit view data.json --row-numbers --max-width 30"
     )]
     View {
         /// Input file path (use '-' for stdin)
@@ -133,6 +133,26 @@ pub enum Commands {
         /// Treat CSV as having no header row
         #[arg(long)]
         no_header: bool,
+
+        /// Maximum column width (truncate longer values)
+        #[arg(long, value_name = "N")]
+        max_width: Option<u16>,
+
+        /// Hide header row in table output
+        #[arg(long)]
+        hide_header: bool,
+
+        /// Show row numbers
+        #[arg(long)]
+        row_numbers: bool,
+
+        /// Table border style
+        #[arg(long, value_name = "STYLE", default_value = "simple")]
+        border: String,
+
+        /// Colorize output by data type (numbers=blue, null=gray)
+        #[arg(long)]
+        color: bool,
     },
 
     /// Show statistics about data
