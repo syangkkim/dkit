@@ -314,6 +314,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
+        Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
     }
 }
 

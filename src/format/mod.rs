@@ -1,4 +1,5 @@
 pub mod csv;
+pub mod html;
 pub mod json;
 pub mod jsonl;
 pub mod markdown;
@@ -24,6 +25,7 @@ pub enum Format {
     Xml,
     Msgpack,
     Markdown,
+    Html,
 }
 
 impl Format {
@@ -37,6 +39,7 @@ impl Format {
             "xml" => Ok(Format::Xml),
             "msgpack" | "messagepack" => Ok(Format::Msgpack),
             "md" | "markdown" => Ok(Format::Markdown),
+            "html" => Ok(Format::Html),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -53,6 +56,7 @@ impl std::fmt::Display for Format {
             Format::Xml => write!(f, "XML"),
             Format::Msgpack => write!(f, "MessagePack"),
             Format::Markdown => write!(f, "Markdown"),
+            Format::Html => write!(f, "HTML"),
         }
     }
 }
@@ -68,6 +72,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("xml") => Ok(Format::Xml),
         Some("msgpack") => Ok(Format::Msgpack),
         Some("md") => Ok(Format::Markdown),
+        Some("html") => Ok(Format::Html),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
@@ -202,6 +207,10 @@ pub struct FormatOptions {
     pub flow_style: bool,
     /// XML 루트 엘리먼트 이름 (기본: "root")
     pub root_element: Option<String>,
+    /// HTML 인라인 CSS 스타일 포함
+    pub styled: bool,
+    /// HTML 완전한 문서 출력
+    pub full_html: bool,
 }
 
 impl Default for FormatOptions {
@@ -213,6 +222,8 @@ impl Default for FormatOptions {
             compact: false,
             flow_style: false,
             root_element: None,
+            styled: false,
+            full_html: false,
         }
     }
 }

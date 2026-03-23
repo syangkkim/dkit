@@ -57,6 +57,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             no_header,
             flow,
             root_element,
+            styled,
+            full_html,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -70,6 +72,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 no_header,
                 flow,
                 root_element,
+                styled,
+                full_html,
             })?;
         }
         Commands::Query {
