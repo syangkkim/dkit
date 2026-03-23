@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::format::csv::CsvReader;
 use crate::format::json::{JsonReader, JsonWriter};
@@ -12,8 +12,8 @@ use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
 use crate::format::{
-    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
-    FormatReader, FormatWriter,
+    default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
+    Format, FormatOptions, FormatReader, FormatWriter,
 };
 use crate::query::evaluator::evaluate_path;
 use crate::query::filter::apply_operations;
@@ -30,51 +30,48 @@ pub struct QueryArgs<'a> {
 
 /// query 서브커맨드 실행
 pub fn run(args: &QueryArgs) -> Result<()> {
-    // 입력 포맷 결정
-    let source_format = if args.input == "-" {
-        match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
-        }
-    } else {
-        match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => detect_format(&PathBuf::from(args.input))?,
-        }
-    };
-
     // 입력 읽기 (바이너리 포맷 자동 처리)
-    let value = if source_format == Format::Msgpack {
-        if args.input == "-" {
+    let value = if args.input == "-" {
+        if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
             io::stdin()
                 .read_to_end(&mut buf)
                 .context("Failed to read from stdin")?;
             MsgpackReader.read_from_bytes(&buf)?
         } else {
-            let bytes = super::read_file_bytes(Path::new(args.input))?;
-            MsgpackReader.read_from_bytes(&bytes)?
-        }
-    } else {
-        let content = if args.input == "-" {
             let mut buf = String::new();
             io::stdin()
                 .read_to_string(&mut buf)
                 .context("Failed to read from stdin")?;
-            buf
+            let (source_format, sniffed_delimiter) = match args.from {
+                Some(f) => (Format::from_str(f)?, None),
+                None => detect_format_from_content(&buf)?,
+            };
+            let auto_delimiter =
+                sniffed_delimiter.or_else(|| args.from.and_then(default_delimiter_for_format));
+            let read_options = FormatOptions {
+                delimiter: auto_delimiter,
+                ..Default::default()
+            };
+            read_value(&buf, source_format, &read_options)?
+        }
+    } else {
+        let source_format = match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(&PathBuf::from(args.input))?,
+        };
+        if source_format == Format::Msgpack {
+            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            MsgpackReader.read_from_bytes(&bytes)?
         } else {
-            super::read_file(&PathBuf::from(args.input))?
-        };
-        let auto_delimiter = if args.input == "-" {
-            args.from.and_then(default_delimiter_for_format)
-        } else {
-            default_delimiter(Path::new(args.input))
-        };
-        let read_options = FormatOptions {
-            delimiter: auto_delimiter,
-            ..Default::default()
-        };
-        read_value(&content, source_format, &read_options)?
+            let content = super::read_file(&PathBuf::from(args.input))?;
+            let auto_delimiter = default_delimiter(Path::new(args.input));
+            let read_options = FormatOptions {
+                delimiter: auto_delimiter,
+                ..Default::default()
+            };
+            read_value(&content, source_format, &read_options)?
+        }
     };
 
     // 쿼리 파싱 및 실행

@@ -68,6 +68,103 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
     }
 }
 
+/// 콘텐츠 스니핑으로 포맷을 자동 감지
+///
+/// 감지 우선순위:
+/// 1. `<?xml` → XML
+/// 2. 첫 줄이 JSON 객체 + 둘째 줄도 JSON 객체 → JSONL
+/// 3. `{` 또는 `[` 시작 → JSON
+/// 4. 탭 구분자가 포함된 구조적 데이터 → CSV (TSV)
+/// 5. TOML 패턴 (키 = 값, [섹션])
+/// 6. YAML 패턴 (키: 값, ---)
+pub fn detect_format_from_content(content: &str) -> Result<(Format, Option<char>), DkitError> {
+    let trimmed = content.trim_start();
+
+    if trimmed.is_empty() {
+        return Err(DkitError::FormatDetectionFailed(
+            "input is empty".to_string(),
+        ));
+    }
+
+    // XML: <?xml 또는 루트 태그로 시작
+    if trimmed.starts_with("<?xml") || trimmed.starts_with("<!DOCTYPE") {
+        return Ok((Format::Xml, None));
+    }
+
+    // JSONL: 첫째 줄과 둘째 줄 모두 JSON 객체
+    let mut lines = trimmed.lines().filter(|l| !l.trim().is_empty());
+    if let Some(first_line) = lines.next() {
+        if let Some(second_line) = lines.next() {
+            let first_trimmed = first_line.trim();
+            let second_trimmed = second_line.trim();
+            if first_trimmed.starts_with('{')
+                && first_trimmed.ends_with('}')
+                && second_trimmed.starts_with('{')
+                && second_trimmed.ends_with('}')
+            {
+                return Ok((Format::Jsonl, None));
+            }
+        }
+    }
+
+    // JSON: { 로 시작 (단일 객체)
+    if trimmed.starts_with('{') {
+        return Ok((Format::Json, None));
+    }
+
+    // [ 로 시작: JSON 배열 vs TOML 섹션 헤더 구분
+    // TOML 섹션: [word] 형태 (내부가 알파벳/밑줄/점/하이픈)
+    // JSON 배열: [값, ...] 또는 여러 줄에 걸친 배열
+    if trimmed.starts_with('[') {
+        let first_line = trimmed.lines().next().unwrap_or("").trim();
+        // TOML 섹션 헤더: [section] 또는 [[array]]
+        let is_toml_section = first_line.starts_with("[[")
+            || (first_line.starts_with('[')
+                && first_line.ends_with(']')
+                && !first_line.contains(',')
+                && first_line[1..first_line.len() - 1].chars().all(|c| {
+                    c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == ' ' || c == '"'
+                }));
+        if is_toml_section {
+            return Ok((Format::Toml, None));
+        }
+        return Ok((Format::Json, None));
+    }
+
+    // XML: < 로 시작하는 태그 (<?xml 없이 바로 태그로 시작하는 경우)
+    if trimmed.starts_with('<') {
+        return Ok((Format::Xml, None));
+    }
+
+    // TSV: 첫째 줄에 탭이 포함되어 있으면 TSV로 간주
+    if let Some(first_line) = trimmed.lines().next() {
+        if first_line.contains('\t') {
+            return Ok((Format::Csv, Some('\t')));
+        }
+    }
+
+    // TOML: key = value 패턴 (섹션 헤더는 위에서 처리됨)
+    let first_line = trimmed.lines().next().unwrap_or("");
+    let ft = first_line.trim();
+    if ft.contains(" = ") {
+        return Ok((Format::Toml, None));
+    }
+
+    // YAML: --- 또는 key: value 패턴
+    if ft.starts_with("---") || ft.contains(": ") || ft.ends_with(':') {
+        return Ok((Format::Yaml, None));
+    }
+
+    // CSV: 콤마가 포함된 구조적 데이터
+    if ft.contains(',') {
+        return Ok((Format::Csv, None));
+    }
+
+    Err(DkitError::FormatDetectionFailed(
+        "could not determine format from content".to_string(),
+    ))
+}
+
 /// 파일 확장자에 따른 기본 delimiter 반환
 /// `.tsv` 파일은 탭 구분자를 사용한다.
 pub fn default_delimiter(path: &Path) -> Option<char> {
@@ -309,5 +406,95 @@ mod tests {
         assert!(!opts.compact);
         assert!(!opts.flow_style);
         assert_eq!(opts.root_element, None);
+    }
+
+    // --- detect_format_from_content ---
+
+    #[test]
+    fn test_sniff_xml_declaration() {
+        let (fmt, delim) = detect_format_from_content("<?xml version=\"1.0\"?>\n<root/>").unwrap();
+        assert_eq!(fmt, Format::Xml);
+        assert_eq!(delim, None);
+    }
+
+    #[test]
+    fn test_sniff_xml_tag() {
+        let (fmt, _) = detect_format_from_content("<root><item>hello</item></root>").unwrap();
+        assert_eq!(fmt, Format::Xml);
+    }
+
+    #[test]
+    fn test_sniff_json_object() {
+        let (fmt, _) = detect_format_from_content("{\"name\": \"Alice\"}").unwrap();
+        assert_eq!(fmt, Format::Json);
+    }
+
+    #[test]
+    fn test_sniff_json_array() {
+        let (fmt, _) = detect_format_from_content("[1, 2, 3]").unwrap();
+        assert_eq!(fmt, Format::Json);
+    }
+
+    #[test]
+    fn test_sniff_jsonl() {
+        let content = "{\"name\": \"Alice\"}\n{\"name\": \"Bob\"}\n";
+        let (fmt, _) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Jsonl);
+    }
+
+    #[test]
+    fn test_sniff_tsv() {
+        let content = "name\tage\tcity\nAlice\t30\tSeoul\n";
+        let (fmt, delim) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Csv);
+        assert_eq!(delim, Some('\t'));
+    }
+
+    #[test]
+    fn test_sniff_toml_section() {
+        let content = "[database]\nhost = \"localhost\"\nport = 5432\n";
+        let (fmt, _) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Toml);
+    }
+
+    #[test]
+    fn test_sniff_toml_key_value() {
+        let content = "title = \"My App\"\nversion = \"1.0\"\n";
+        let (fmt, _) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Toml);
+    }
+
+    #[test]
+    fn test_sniff_yaml_document() {
+        let content = "---\nname: Alice\nage: 30\n";
+        let (fmt, _) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Yaml);
+    }
+
+    #[test]
+    fn test_sniff_yaml_key_value() {
+        let content = "name: Alice\nage: 30\n";
+        let (fmt, _) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Yaml);
+    }
+
+    #[test]
+    fn test_sniff_csv() {
+        let content = "name,age,city\nAlice,30,Seoul\n";
+        let (fmt, delim) = detect_format_from_content(content).unwrap();
+        assert_eq!(fmt, Format::Csv);
+        assert_eq!(delim, None);
+    }
+
+    #[test]
+    fn test_sniff_empty_content() {
+        let err = detect_format_from_content("").unwrap_err();
+        assert!(matches!(err, DkitError::FormatDetectionFailed(_)));
+    }
+
+    #[test]
+    fn test_sniff_whitespace_only() {
+        let err = detect_format_from_content("   \n  \n").unwrap_err();
+        assert!(matches!(err, DkitError::FormatDetectionFailed(_)));
     }
 }

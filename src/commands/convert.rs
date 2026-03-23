@@ -13,8 +13,8 @@ use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
 use crate::format::yaml::{YamlReader, YamlWriter};
 use crate::format::{
-    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
-    FormatReader, FormatWriter,
+    default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
+    Format, FormatOptions, FormatReader, FormatWriter,
 };
 use crate::value::Value;
 
@@ -54,12 +54,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
 
     // stdin mode: no input files
     if args.input.is_empty() {
-        let source_format = match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
-        };
-
-        let value = if source_format == Format::Msgpack {
+        let value = if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
             io::stdin()
                 .read_to_end(&mut buf)
@@ -70,8 +65,13 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
             io::stdin()
                 .read_to_string(&mut buf)
                 .context("Failed to read from stdin")?;
+            let (source_format, sniffed_delimiter) = match args.from {
+                Some(f) => (Format::from_str(f)?, None),
+                None => detect_format_from_content(&buf)?,
+            };
             let read_delimiter = args
                 .delimiter
+                .or(sniffed_delimiter)
                 .or_else(|| args.from.and_then(default_delimiter_for_format));
             let read_options = FormatOptions {
                 delimiter: read_delimiter,
