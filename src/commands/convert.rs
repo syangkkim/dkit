@@ -6,9 +6,9 @@ use anyhow::{bail, Context, Result};
 
 use super::{read_file, read_file_bytes};
 use crate::format::csv::{CsvReader, CsvWriter};
+use crate::format::html::HtmlWriter;
 use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::jsonl::{JsonlReader, JsonlWriter};
-use crate::format::html::HtmlWriter;
 use crate::format::markdown::MarkdownWriter;
 use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};

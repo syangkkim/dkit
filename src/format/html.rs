@@ -63,7 +63,8 @@ fn wrap_full_html(table: &str, styled: bool) -> String {
     )
 }
 
-const TABLE_STYLE: &str = " style=\"border-collapse: collapse; width: 100%; font-family: sans-serif;\"";
+const TABLE_STYLE: &str =
+    " style=\"border-collapse: collapse; width: 100%; font-family: sans-serif;\"";
 const TH_STYLE: &str = " style=\"border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #4a4a4a; color: white;\"";
 const TD_STYLE: &str = " style=\"border: 1px solid #ddd; padding: 8px; text-align: left;\"";
 
@@ -293,10 +294,7 @@ mod tests {
     #[test]
     fn test_ampersand_escape() {
         let mut m = IndexMap::new();
-        m.insert(
-            "text".to_string(),
-            Value::String("A & B".to_string()),
-        );
+        m.insert("text".to_string(), Value::String("A & B".to_string()));
         let data = Value::Array(vec![Value::Object(m)]);
         let output = HtmlWriter::new(false, false).write(&data).unwrap();
         assert!(output.contains("A &amp; B"));

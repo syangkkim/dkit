@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::format::csv::CsvReader;
+use crate::format::html::HtmlWriter;
 use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::jsonl::{JsonlReader, JsonlWriter};
-use crate::format::html::HtmlWriter;
 use crate::format::markdown::MarkdownWriter;
 use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
