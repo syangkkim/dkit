@@ -96,12 +96,34 @@ pub enum DkitError {
 }
 ```
 
+### Format Options
+
+```rust
+pub struct FormatOptions {
+    pub delimiter: Option<char>,      // CSV delimiter (default: ',')
+    pub no_header: bool,              // CSV without header
+    pub pretty: bool,                 // Pretty-print output
+    pub compact: bool,                // Compact output (JSON)
+    pub flow_style: bool,             // YAML inline style
+    pub root_element: Option<String>, // XML root element name
+}
+```
+
 ## Format-specific Notes
 
 ### JSON ↔ Value
 
 - `serde_json::Value` → `Value` 직접 매핑
 - `Number`가 정수이면 `Integer`, 아니면 `Float`
+
+### JSONL (JSON Lines) ↔ Value
+
+- 각 줄을 독립적인 JSON 객체로 파싱
+- 빈 줄은 건너뜀
+- 읽기: 항상 `Value::Array(Vec<Value>)` 반환
+- 쓰기: `Array`이면 요소당 한 줄, 비배열이면 단일 줄 출력
+- 에러 메시지에 줄 번호 포함
+- 포맷 확장자: `.jsonl`, `.ndjson`
 
 ### CSV ↔ Value
 
@@ -122,6 +144,23 @@ pub enum DkitError {
 - TOML은 top-level이 반드시 table(object)
 - 배열 데이터를 TOML로 변환 시 `data` 키로 감싸기
 - TOML의 `Datetime`은 `String`으로 변환
+
+### XML ↔ Value
+
+- `quick-xml` 이벤트 기반 파서 사용
+- XML 속성: `@attr_name` 키로 매핑
+- 텍스트 콘텐츠: `#text` 키로 매핑
+- 자식 요소: 중첩 Object 또는 Array
+- 네임스페이스 접두사 제거 지원
+- 텍스트 값 타입 추론: null, true/false, 정수, 실수, 문자열
+- `--root-element` 옵션으로 루트 요소 이름 지정 가능
+- **주의**: XML → JSON 변환 시 루트 요소가 최상위 키로 포함됨
+
+### MessagePack ↔ Value
+
+- `rmp-serde` 크레이트 사용
+- 바이너리 포맷이므로 `read_from_reader`/`write_to_writer` 사용
+- JSON과 유사한 타입 매핑
 
 ## Query Engine
 
