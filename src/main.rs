@@ -12,6 +12,7 @@ use clap::Parser;
 use colored::Colorize;
 
 use cli::{Cli, Commands};
+use commands::EncodingOptions;
 
 fn main() {
     let cli = Cli::parse();
@@ -84,6 +85,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             root_element,
             styled,
             full_html,
+            encoding,
+            detect_encoding,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -99,6 +102,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 root_element,
                 styled,
                 full_html,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
         }
         Commands::Query {
@@ -107,6 +114,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             from,
             format,
             output,
+            encoding,
+            detect_encoding,
         } => {
             commands::query::run(&commands::query::QueryArgs {
                 input: &input,
@@ -114,6 +123,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 from: from.as_deref(),
                 to: format.as_deref(),
                 output: output.as_deref(),
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
         }
         Commands::View {
@@ -130,6 +143,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             row_numbers,
             border,
             color,
+            encoding,
+            detect_encoding,
         } => {
             commands::view::run(&commands::view::ViewArgs {
                 input: &input,
@@ -145,6 +160,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 row_numbers,
                 border: &border,
                 color,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
         }
         Commands::Stats {
@@ -155,6 +174,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             column,
             delimiter,
             no_header,
+            encoding,
+            detect_encoding,
         } => {
             commands::stats::run(&commands::stats::StatsArgs {
                 input: &input,
@@ -164,6 +185,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 column: column.as_deref(),
                 delimiter,
                 no_header,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
         }
         Commands::Merge {
@@ -175,6 +200,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             compact,
             no_header,
             flow,
+            encoding,
+            detect_encoding,
         } => {
             commands::merge::run(&commands::merge::MergeArgs {
                 input: &input,
@@ -185,12 +212,25 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 pretty,
                 compact,
                 flow,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
         }
-        Commands::Schema { input, from } => {
+        Commands::Schema {
+            input,
+            from,
+            encoding,
+            detect_encoding,
+        } => {
             commands::schema::run(&commands::schema::SchemaArgs {
                 input: &input,
                 from: from.as_deref(),
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
         }
         Commands::Diff {
@@ -198,12 +238,18 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             file2,
             path,
             quiet,
+            encoding,
+            detect_encoding,
         } => {
             let has_diff = commands::diff::run(&commands::diff::DiffArgs {
                 file1: &file1,
                 file2: &file2,
                 path: path.as_deref(),
                 quiet,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
             })?;
             if has_diff {
                 process::exit(1);

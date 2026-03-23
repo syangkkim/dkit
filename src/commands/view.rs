@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context as _, Result};
 
+use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
 use crate::format::csv::CsvReader;
 use crate::format::csv::CsvWriter;
 use crate::format::html::HtmlWriter;
@@ -34,6 +35,7 @@ pub struct ViewArgs<'a> {
     pub row_numbers: bool,
     pub border: &'a str,
     pub color: bool,
+    pub encoding_opts: EncodingOptions,
 }
 
 /// view 서브커맨드 실행
@@ -46,10 +48,7 @@ pub fn run(args: &ViewArgs) -> Result<()> {
                 .context("Failed to read from stdin")?;
             MsgpackReader.read_from_bytes(&buf)?
         } else {
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("Failed to read from stdin")?;
+            let buf = read_stdin_with_encoding(&args.encoding_opts)?;
             let (source_format, sniffed_delimiter) = match args.from {
                 Some(f) => (Format::from_str(f)?, None),
                 None => detect_format_from_content(&buf)?,
@@ -122,6 +121,23 @@ pub fn run(args: &ViewArgs) -> Result<()> {
     Ok(())
 }
 
+/// stdin에서 인코딩을 고려하여 문자열을 읽는다.
+fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
+    if opts.encoding.is_some() || opts.detect_encoding {
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .context("Failed to read from stdin")?;
+        super::decode_bytes(&buf, opts)
+    } else {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read from stdin")?;
+        Ok(buf)
+    }
+}
+
 /// 입력 포맷을 결정한다
 fn determine_format(args: &ViewArgs) -> Result<Format> {
     if args.input == "-" {
@@ -147,18 +163,14 @@ fn read_input_value(args: &ViewArgs, format: Format, options: &FormatOptions) ->
                 .context("Failed to read from stdin")?;
             MsgpackReader.read_from_bytes(&buf)
         } else {
-            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            let bytes = read_file_bytes(Path::new(args.input))?;
             MsgpackReader.read_from_bytes(&bytes)
         }
     } else {
         let content = if args.input == "-" {
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("Failed to read from stdin")?;
-            buf
+            read_stdin_with_encoding(&args.encoding_opts)?
         } else {
-            super::read_file(Path::new(args.input))?
+            read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?
         };
         read_value(&content, format, options)
     }

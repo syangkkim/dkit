@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use colored::Colorize;
 
-use super::{read_file, read_file_bytes};
+use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
 use crate::format::jsonl::JsonlReader;
@@ -19,12 +19,13 @@ pub struct DiffArgs<'a> {
     pub file2: &'a Path,
     pub path: Option<&'a str>,
     pub quiet: bool,
+    pub encoding_opts: EncodingOptions,
 }
 
 /// diff 서브커맨드 실행. 차이가 있으면 true, 없으면 false 반환.
 pub fn run(args: &DiffArgs) -> Result<bool> {
-    let value1 = read_value_from_path(args.file1)?;
-    let value2 = read_value_from_path(args.file2)?;
+    let value1 = read_value_from_path(args.file1, &args.encoding_opts)?;
+    let value2 = read_value_from_path(args.file2, &args.encoding_opts)?;
 
     // --path 옵션으로 중첩 데이터 접근
     let (v1, v2) = match args.path {
@@ -56,7 +57,7 @@ pub fn run(args: &DiffArgs) -> Result<bool> {
 }
 
 /// 파일 경로에서 Value를 읽는다
-fn read_value_from_path(path: &Path) -> Result<Value> {
+fn read_value_from_path(path: &Path, encoding_opts: &EncodingOptions) -> Result<Value> {
     let format = detect_format(path)?;
     let delimiter = default_delimiter(path);
     let options = FormatOptions {
@@ -68,7 +69,7 @@ fn read_value_from_path(path: &Path) -> Result<Value> {
         let bytes = read_file_bytes(path)?;
         MsgpackReader.read_from_bytes(&bytes)
     } else {
-        let content = read_file(path)?;
+        let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, &options)
     }
 }

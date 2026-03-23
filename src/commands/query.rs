@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
+use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
 use crate::format::csv::CsvReader;
 use crate::format::html::HtmlWriter;
 use crate::format::json::{JsonReader, JsonWriter};
@@ -28,6 +29,7 @@ pub struct QueryArgs<'a> {
     pub from: Option<&'a str>,
     pub to: Option<&'a str>,
     pub output: Option<&'a Path>,
+    pub encoding_opts: EncodingOptions,
 }
 
 /// query 서브커맨드 실행
@@ -41,10 +43,7 @@ pub fn run(args: &QueryArgs) -> Result<()> {
                 .context("Failed to read from stdin")?;
             MsgpackReader.read_from_bytes(&buf)?
         } else {
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("Failed to read from stdin")?;
+            let buf = read_stdin_with_encoding(&args.encoding_opts)?;
             let (source_format, sniffed_delimiter) = match args.from {
                 Some(f) => (Format::from_str(f)?, None),
                 None => detect_format_from_content(&buf)?,
@@ -63,10 +62,10 @@ pub fn run(args: &QueryArgs) -> Result<()> {
             None => detect_format(&PathBuf::from(args.input))?,
         };
         if source_format == Format::Msgpack {
-            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            let bytes = read_file_bytes(Path::new(args.input))?;
             MsgpackReader.read_from_bytes(&bytes)?
         } else {
-            let content = super::read_file(&PathBuf::from(args.input))?;
+            let content = read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?;
             let auto_delimiter = default_delimiter(Path::new(args.input));
             let read_options = FormatOptions {
                 delimiter: auto_delimiter,
@@ -133,6 +132,23 @@ pub fn run(args: &QueryArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// stdin에서 인코딩을 고려하여 문자열을 읽는다.
+fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
+    if opts.encoding.is_some() || opts.detect_encoding {
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .context("Failed to read from stdin")?;
+        super::decode_bytes(&buf, opts)
+    } else {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read from stdin")?;
+        Ok(buf)
+    }
 }
 
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {

@@ -1,6 +1,7 @@
 use std::io::{self, Read};
 use std::path::Path;
 
+use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
 use crate::format::jsonl::JsonlReader;
@@ -24,6 +25,7 @@ pub struct StatsArgs<'a> {
     pub column: Option<&'a str>,
     pub delimiter: Option<char>,
     pub no_header: bool,
+    pub encoding_opts: EncodingOptions,
 }
 
 pub fn run(args: &StatsArgs) -> Result<()> {
@@ -250,8 +252,25 @@ fn read_input(args: &StatsArgs) -> Result<(String, Format)> {
         Some(f) => Format::from_str(f)?,
         None => detect_format(path)?,
     };
-    let content = super::read_file(path)?;
+    let content = read_file_with_encoding(path, &args.encoding_opts)?;
     Ok((content, format))
+}
+
+/// stdin에서 인코딩을 고려하여 문자열을 읽는다.
+fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
+    if opts.encoding.is_some() || opts.detect_encoding {
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .context("Failed to read from stdin")?;
+        super::decode_bytes(&buf, opts)
+    } else {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read from stdin")?;
+        Ok(buf)
+    }
 }
 
 /// MessagePack 바이너리 입력을 처리하여 Value를 반환
@@ -265,10 +284,7 @@ fn read_input_as_value(args: &StatsArgs) -> Result<(Value, Format)> {
             let value = MsgpackReader.read_from_bytes(&buf)?;
             Ok((value, Format::Msgpack))
         } else {
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("Failed to read from stdin")?;
+            let buf = read_stdin_with_encoding(&args.encoding_opts)?;
             let (format, sniffed_delimiter) = match args.from {
                 Some(f) => (Format::from_str(f)?, None),
                 None => detect_format_from_content(&buf)?,
@@ -289,7 +305,7 @@ fn read_input_as_value(args: &StatsArgs) -> Result<(Value, Format)> {
             None => detect_format(Path::new(args.input))?,
         };
         if format == Format::Msgpack {
-            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            let bytes = read_file_bytes(Path::new(args.input))?;
             let value = MsgpackReader.read_from_bytes(&bytes)?;
             Ok((value, format))
         } else {
