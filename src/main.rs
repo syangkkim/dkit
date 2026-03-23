@@ -16,9 +16,34 @@ use cli::{Cli, Commands};
 fn main() {
     let cli = Cli::parse();
 
+    if cli.list_formats {
+        print_formats();
+        return;
+    }
+
+    match cli.command {
+        Some(_) => {}
+        None => {
+            // No subcommand and no --list-formats: show help
+            use clap::CommandFactory;
+            Cli::command().print_help().ok();
+            println!();
+            process::exit(2);
+        }
+    }
+
     if let Err(err) = run_command(cli) {
         print_error(&err);
         process::exit(1);
+    }
+}
+
+/// 지원 포맷 목록 출력
+fn print_formats() {
+    println!("Supported output formats:");
+    println!();
+    for (name, desc) in format::Format::list_output_formats() {
+        println!("  {:<10} {}", name, desc);
     }
 }
 
@@ -44,10 +69,10 @@ fn print_error(err: &anyhow::Error) {
 }
 
 fn run_command(cli: Cli) -> anyhow::Result<()> {
-    match cli.command {
+    match cli.command.unwrap() {
         Commands::Convert {
             input,
-            to,
+            format,
             from,
             output,
             outdir,
@@ -62,7 +87,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
-                to: &to,
+                to: &format,
                 from: from.as_deref(),
                 output: output.as_deref(),
                 outdir: outdir.as_deref(),
@@ -80,20 +105,21 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             input,
             query,
             from,
-            to,
+            format,
             output,
         } => {
             commands::query::run(&commands::query::QueryArgs {
                 input: &input,
                 query: &query,
                 from: from.as_deref(),
-                to: to.as_deref(),
+                to: format.as_deref(),
                 output: output.as_deref(),
             })?;
         }
         Commands::View {
             input,
             from,
+            format,
             path,
             limit,
             columns,
@@ -108,6 +134,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             commands::view::run(&commands::view::ViewArgs {
                 input: &input,
                 from: from.as_deref(),
+                format: format.as_deref(),
                 path: path.as_deref(),
                 limit,
                 columns,
@@ -123,6 +150,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         Commands::Stats {
             input,
             from,
+            format,
             path,
             column,
             delimiter,
@@ -131,6 +159,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             commands::stats::run(&commands::stats::StatsArgs {
                 input: &input,
                 from: from.as_deref(),
+                format: format.as_deref(),
                 path: path.as_deref(),
                 column: column.as_deref(),
                 delimiter,
@@ -139,7 +168,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         }
         Commands::Merge {
             input,
-            to,
+            format,
             output,
             delimiter,
             pretty,
@@ -149,7 +178,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         } => {
             commands::merge::run(&commands::merge::MergeArgs {
                 input: &input,
-                to: to.as_deref(),
+                to: format.as_deref(),
                 output: output.as_deref(),
                 delimiter,
                 no_header,

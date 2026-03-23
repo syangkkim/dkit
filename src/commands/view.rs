@@ -4,15 +4,18 @@ use std::path::Path;
 use anyhow::{bail, Context as _, Result};
 
 use crate::format::csv::CsvReader;
-use crate::format::json::JsonReader;
-use crate::format::jsonl::JsonlReader;
-use crate::format::msgpack::MsgpackReader;
-use crate::format::toml::TomlReader;
-use crate::format::xml::XmlReader;
-use crate::format::yaml::YamlReader;
+use crate::format::csv::CsvWriter;
+use crate::format::html::HtmlWriter;
+use crate::format::json::{JsonReader, JsonWriter};
+use crate::format::jsonl::{JsonlReader, JsonlWriter};
+use crate::format::markdown::MarkdownWriter;
+use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
+use crate::format::toml::{TomlReader, TomlWriter};
+use crate::format::xml::{XmlReader, XmlWriter};
+use crate::format::yaml::{YamlReader, YamlWriter};
 use crate::format::{
     default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
-    Format, FormatOptions, FormatReader,
+    Format, FormatOptions, FormatReader, FormatWriter,
 };
 use crate::output::table::{render_table, TableOptions};
 use crate::value::Value;
@@ -20,6 +23,7 @@ use crate::value::Value;
 pub struct ViewArgs<'a> {
     pub input: &'a str,
     pub from: Option<&'a str>,
+    pub format: Option<&'a str>,
     pub path: Option<&'a str>,
     pub limit: Option<usize>,
     pub columns: Option<Vec<String>>,
@@ -78,18 +82,43 @@ pub fn run(args: &ViewArgs) -> Result<()> {
         None => value,
     };
 
-    let table_opts = TableOptions {
-        limit: args.limit,
-        columns: args.columns.as_deref(),
-        max_width: args.max_width,
-        hide_header: args.hide_header,
-        row_numbers: args.row_numbers,
-        border: args.border,
-        color: args.color,
+    // 출력 포맷 결정: --format 옵션 또는 기본 table
+    let output_format = match args.format {
+        Some(f) => Format::from_str(f)?,
+        None => Format::Table,
     };
-    let output = render_table(&target, &table_opts);
 
-    println!("{output}");
+    if output_format == Format::Table {
+        let table_opts = TableOptions {
+            limit: args.limit,
+            columns: args.columns.as_deref(),
+            max_width: args.max_width,
+            hide_header: args.hide_header,
+            row_numbers: args.row_numbers,
+            border: args.border,
+            color: args.color,
+        };
+        let output = render_table(&target, &table_opts);
+        println!("{output}");
+    } else if output_format == Format::Msgpack {
+        let bytes = MsgpackWriter.write_bytes(&target)?;
+        use std::io::Write as _;
+        std::io::stdout()
+            .write_all(&bytes)
+            .context("Failed to write to stdout")?;
+    } else {
+        let write_options = FormatOptions {
+            pretty: true,
+            ..Default::default()
+        };
+        let output = write_value(&target, output_format, &write_options)?;
+        if output.ends_with('\n') {
+            print!("{output}");
+        } else {
+            println!("{output}");
+        }
+    }
+
     Ok(())
 }
 
@@ -146,6 +175,22 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Msgpack => MsgpackReader.read(content),
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
+        Format::Table => bail!("Table is an output-only format and cannot be used as input"),
+    }
+}
+
+fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result<String> {
+    match format {
+        Format::Json => JsonWriter::new(options.clone()).write(value),
+        Format::Jsonl => JsonlWriter.write(value),
+        Format::Csv => CsvWriter::new(options.clone()).write(value),
+        Format::Yaml => YamlWriter::new(options.clone()).write(value),
+        Format::Toml => TomlWriter::new(options.clone()).write(value),
+        Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
+        Format::Msgpack => MsgpackWriter.write(value),
+        Format::Markdown => MarkdownWriter.write(value),
+        Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
+        Format::Table => bail!("Table format is handled separately"),
     }
 }
 
