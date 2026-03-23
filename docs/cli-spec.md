@@ -29,8 +29,8 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
-| `--to <FORMAT>` | | 출력 포맷 (json, csv, yaml, toml) | 필수 |
-| `--from <FORMAT>` | | 입력 포맷 (stdin 사용 시 필수) | 확장자 자동 감지 |
+| `--to <FORMAT>` | | 출력 포맷 (json, jsonl, csv, yaml, toml, xml, msgpack) | 필수 |
+| `--from <FORMAT>` | | 입력 포맷 (stdin 사용 시 필수, 콘텐츠 스니핑 지원) | 확장자 자동 감지 |
 | `--output <FILE>` | `-o` | 출력 파일 경로 | stdout |
 | `--outdir <DIR>` | | 여러 파일 변환 시 출력 디렉토리 | |
 | `--delimiter <CHAR>` | | CSV 구분자 | `,` |
@@ -38,6 +38,7 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 | `--compact` | | 한 줄 출력 (JSON) | |
 | `--no-header` | | CSV 헤더 없음 | |
 | `--flow` | | YAML 인라인 스타일 | |
+| `--root-element <NAME>` | | XML 루트 요소 이름 | `root` |
 
 ### Examples
 
@@ -47,6 +48,17 @@ dkit convert data.json --to yaml
 dkit convert users.csv --to json
 dkit convert config.yaml --to toml
 
+# XML 변환
+dkit convert config.xml --to json
+dkit convert data.json --to xml
+dkit convert config.xml --to yaml
+dkit convert data.json --to xml --root-element users
+
+# JSONL (JSON Lines) 변환
+dkit convert users.json --to jsonl        # JSON 배열 → 줄 단위 객체
+dkit convert logs.jsonl --to json         # JSONL → JSON 배열
+dkit convert logs.jsonl --to csv          # JSONL → CSV
+
 # 출력 파일 지정
 dkit convert data.json --to csv -o output.csv
 
@@ -55,7 +67,7 @@ dkit convert *.csv --to json --outdir ./converted/
 
 # stdin/stdout 파이프
 cat data.json | dkit convert --from json --to csv
-curl https://api.example.com/data | dkit convert --from json --to yaml
+cat logs.jsonl | dkit convert --from jsonl --to json
 
 # 옵션
 dkit convert data.tsv --to json --delimiter '\t'
@@ -232,3 +244,30 @@ dkit merge <INPUT...> [OPTIONS]
 |--------|-------------|
 | `--to <FORMAT>` | 출력 포맷 |
 | `-o <FILE>` | 출력 파일 |
+
+## diff
+
+두 데이터 파일 비교.
+
+### Usage
+
+```bash
+dkit diff <FILE1> <FILE2> [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--path <QUERY>` | 특정 경로만 비교 |
+| `--quiet` | 결과 텍스트 없이 종료 코드만 반환 (0=동일, 1=다름) |
+
+### Examples
+
+```bash
+dkit diff old.json new.json
+dkit diff config_dev.yaml config_prod.yaml
+dkit diff data.json data.xml              # 크로스 포맷 비교
+dkit diff a.json b.json --path '.database'
+dkit diff a.json b.json --quiet && echo 'same' || echo 'different'
+```

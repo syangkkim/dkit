@@ -38,15 +38,16 @@ cargo install --path .
 
 ## Supported Formats
 
-| Format      | Extensions       | Read | Write |
-|-------------|-----------------|------|-------|
-| JSON        | `.json`         | O    | O     |
-| CSV         | `.csv`          | O    | O     |
-| TSV         | `.tsv`          | O    | O     |
-| YAML        | `.yaml`, `.yml` | O    | O     |
-| TOML        | `.toml`         | O    | O     |
-| XML         | `.xml`          | O    | O     |
-| MessagePack | `.msgpack`      | O    | O     |
+| Format      | Extensions           | Read | Write |
+|-------------|---------------------|------|-------|
+| JSON        | `.json`             | O    | O     |
+| JSONL       | `.jsonl`, `.ndjson` | O    | O     |
+| CSV         | `.csv`              | O    | O     |
+| TSV         | `.tsv`              | O    | O     |
+| YAML        | `.yaml`, `.yml`     | O    | O     |
+| TOML        | `.toml`             | O    | O     |
+| XML         | `.xml`              | O    | O     |
+| MessagePack | `.msgpack`          | O    | O     |
 
 All conversion paths between supported formats are available.
 
@@ -61,6 +62,16 @@ dkit convert users.csv --to json
 dkit convert config.yaml --to toml
 dkit convert config.toml --to json
 
+# XML conversion
+dkit convert config.xml --to json
+dkit convert data.json --to xml
+dkit convert config.xml --to yaml
+
+# JSONL (JSON Lines) conversion
+dkit convert users.json --to jsonl              # JSON array → one object per line
+dkit convert users.jsonl --to json              # JSONL → JSON array
+dkit convert logs.jsonl --to csv                # JSONL → CSV
+
 # Output to file
 dkit convert data.json --to csv -o output.csv
 
@@ -69,11 +80,13 @@ dkit convert *.csv --to json --outdir ./converted/
 
 # Pipe from stdin
 cat data.json | dkit convert --from json --to csv
+cat logs.jsonl | dkit convert --from jsonl --to json
 
 # Options
 dkit convert data.json --to json --compact     # Minified JSON
 dkit convert data.tsv --to json --delimiter '\t'  # TSV input
 dkit convert data.csv --to json --no-header    # CSV without header
+dkit convert data.json --to xml --root-element users  # Custom XML root element
 ```
 
 ### `query` — Data querying

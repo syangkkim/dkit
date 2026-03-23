@@ -37,11 +37,14 @@ src/
 ├── error.rs                # 에러 타입 정의
 │
 ├── format/                 # 포맷별 Reader/Writer
-│   ├── mod.rs              # FormatReader/Writer 트레이트
+│   ├── mod.rs              # FormatReader/Writer 트레이트, 포맷 감지
 │   ├── json.rs
+│   ├── jsonl.rs            # JSON Lines (JSONL/NDJSON)
 │   ├── csv.rs
 │   ├── yaml.rs
-│   └── toml.rs
+│   ├── toml.rs
+│   ├── xml.rs              # XML (quick-xml 기반)
+│   └── msgpack.rs          # MessagePack
 │
 ├── query/                  # 쿼리 엔진
 │   ├── mod.rs
@@ -55,7 +58,9 @@ src/
 │   ├── query.rs
 │   ├── view.rs
 │   ├── stats.rs
-│   └── schema.rs
+│   ├── schema.rs
+│   ├── merge.rs
+│   └── diff.rs
 │
 └── output/                 # 출력 포맷터
     ├── mod.rs
@@ -79,17 +84,10 @@ pub trait FormatWriter {
 
 ## Format Detection
 
-```rust
-pub fn detect_format(path: &Path) -> Result<Format> {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("json") => Ok(Format::Json),
-        Some("csv" | "tsv") => Ok(Format::Csv),
-        Some("yaml" | "yml") => Ok(Format::Yaml),
-        Some("toml") => Ok(Format::Toml),
-        _ => Err(Error::UnknownFormat),
-    }
-}
-```
+포맷 감지는 두 가지 전략을 사용한다:
+
+1. **파일 확장자**: `.json`, `.jsonl`/`.ndjson`, `.csv`/`.tsv`, `.yaml`/`.yml`, `.toml`, `.xml`, `.msgpack`
+2. **콘텐츠 스니핑**: stdin 입력 시 내용 기반으로 포맷을 추론 (XML → JSONL → JSON → TOML → YAML → CSV 순)
 
 ## Dependencies
 
@@ -100,16 +98,23 @@ pub fn detect_format(path: &Path) -> Result<Format> {
 | YAML | serde_yaml | 0.9.x | serde 통합 |
 | CSV | csv | 1.x | BurntSushi 제작, 최고 성능 |
 | TOML | toml | 0.8.x | serde 통합 |
+| XML | quick-xml | 0.37.x | 고성능 XML 파서/시리얼라이저 |
+| MessagePack | rmp-serde | 1.x | MessagePack serde 통합 |
 | 순서 보존 Map | indexmap | 2.x | JSON/YAML 키 순서 유지 |
 | 테이블 출력 | comfy-table | 7.x | 예쁜 터미널 테이블 |
 | 색상 출력 | colored | 2.x | 터미널 하이라이팅 |
 | 에러 처리 | thiserror + anyhow | 1.x / 1.x | 라이브러리 + 애플리케이션 에러 |
 
-## Conversion Matrix (v0.1)
+## Conversion Matrix (v0.4)
 
-| FROM \ TO | JSON | CSV | YAML | TOML |
-|-----------|------|-----|------|------|
-| JSON | - | O | O | O |
-| CSV | O | - | O | O |
-| YAML | O | O | - | O |
-| TOML | O | O | O | - |
+| FROM \ TO | JSON | JSONL | CSV | YAML | TOML | XML | MsgPack |
+|-----------|------|-------|-----|------|------|-----|---------|
+| JSON      | -    | O     | O   | O    | O    | O   | O       |
+| JSONL     | O    | -     | O   | O    | O    | O   | O       |
+| CSV       | O    | O     | -   | O    | O    | O   | O       |
+| YAML      | O    | O     | O   | -    | O    | O   | O       |
+| TOML      | O    | O     | O   | O    | -    | O   | O       |
+| XML       | O    | O     | O*  | O    | O    | -   | O       |
+| MsgPack   | O    | O     | O   | O    | O    | O   | -       |
+
+*XML → CSV는 데이터가 Array of Objects 구조인 경우에만 가능
