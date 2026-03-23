@@ -99,6 +99,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             columns,
             delimiter,
             no_header,
+            max_width,
+            hide_header,
+            row_numbers,
+            border,
+            color,
         } => {
             commands::view::run(&commands::view::ViewArgs {
                 input: &input,
@@ -108,6 +113,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 columns,
                 delimiter,
                 no_header,
+                max_width,
+                hide_header,
+                row_numbers,
+                border: &border,
+                color,
             })?;
         }
         Commands::Stats {

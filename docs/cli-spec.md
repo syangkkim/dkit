@@ -156,6 +156,11 @@ dkit view <INPUT> [OPTIONS]
 | `--path <QUERY>` | 중첩 데이터 경로 | root |
 | `--limit <N>` | 표시할 행 수 | 전체 |
 | `--columns <COLS>` | 표시할 컬럼 (쉼표 구분) | 전체 |
+| `--max-width <N>` | 컬럼 최대 너비 (긴 값 잘라내기) | 제한 없음 |
+| `--hide-header` | 헤더 행 숨기기 | false |
+| `--row-numbers` | 행 번호 표시 | false |
+| `--border <STYLE>` | 테이블 테두리 스타일 (none, simple, rounded, heavy) | simple |
+| `--color` | 데이터 타입별 색상 출력 (숫자=청색, null=회색, 불리언=노란색) | false |
 
 ### Examples
 
@@ -164,6 +169,9 @@ dkit view users.csv
 dkit view data.json --path '.users'
 dkit view large_data.csv --limit 20
 dkit view users.csv --columns name,email
+dkit view data.csv --border rounded --color
+dkit view data.json --row-numbers --max-width 30
+dkit view data.json --hide-header --border none
 ```
 
 ## stats

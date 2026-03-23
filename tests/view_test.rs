@@ -147,3 +147,103 @@ fn view_stdin_with_from() {
         .stdout(predicate::str::contains("name"))
         .stdout(predicate::str::contains("Test"));
 }
+
+// --- --hide-header 옵션 ---
+
+#[test]
+fn view_hide_header() {
+    dkit()
+        .args(&["view", "tests/fixtures/users.json", "--hide-header"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"))
+        .stdout(predicate::str::contains("name").not());
+}
+
+// --- --row-numbers 옵션 ---
+
+#[test]
+fn view_row_numbers() {
+    dkit()
+        .args(&["view", "tests/fixtures/users.json", "--row-numbers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#"))
+        .stdout(predicate::str::contains(" 1 "));
+}
+
+// --- --border 옵션 ---
+
+#[test]
+fn view_border_none() {
+    dkit()
+        .args(&["view", "tests/fixtures/users.json", "--border", "none"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"))
+        .stdout(predicate::str::contains("+").not())
+        .stdout(predicate::str::contains("|").not());
+}
+
+#[test]
+fn view_border_rounded() {
+    dkit()
+        .args(&["view", "tests/fixtures/users.json", "--border", "rounded"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"));
+}
+
+#[test]
+fn view_border_heavy() {
+    dkit()
+        .args(&["view", "tests/fixtures/users.json", "--border", "heavy"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"));
+}
+
+// --- --max-width 옵션 ---
+
+#[test]
+fn view_max_width() {
+    dkit()
+        .args(&["view", "-", "--from", "json", "--max-width", "5"])
+        .write_stdin("[{\"name\": \"VeryLongNameThatShouldBeTruncated\"}]")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("VeryLongNameThatShouldBeTruncated").not());
+}
+
+// --- --color 옵션 ---
+
+#[test]
+fn view_color() {
+    dkit()
+        .args(&["view", "tests/fixtures/users.json", "--color"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"));
+}
+
+// --- 옵션 조합 ---
+
+#[test]
+fn view_combined_options() {
+    dkit()
+        .args(&[
+            "view",
+            "tests/fixtures/users.json",
+            "--row-numbers",
+            "--border",
+            "rounded",
+            "-n",
+            "1",
+            "--columns",
+            "name",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#"))
+        .stdout(predicate::str::contains("Alice"));
+}
