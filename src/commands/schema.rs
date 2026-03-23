@@ -13,7 +13,7 @@ use crate::format::{
     Format, FormatOptions, FormatReader,
 };
 use crate::value::Value;
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 pub struct SchemaArgs<'a> {
     pub input: &'a str,
@@ -202,6 +202,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
+        Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
     }
 }
 

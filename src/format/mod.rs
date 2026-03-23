@@ -1,6 +1,7 @@
 pub mod csv;
 pub mod json;
 pub mod jsonl;
+pub mod markdown;
 pub mod msgpack;
 pub mod toml;
 pub mod xml;
@@ -22,6 +23,7 @@ pub enum Format {
     Toml,
     Xml,
     Msgpack,
+    Markdown,
 }
 
 impl Format {
@@ -34,6 +36,7 @@ impl Format {
             "toml" => Ok(Format::Toml),
             "xml" => Ok(Format::Xml),
             "msgpack" | "messagepack" => Ok(Format::Msgpack),
+            "md" | "markdown" => Ok(Format::Markdown),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -49,6 +52,7 @@ impl std::fmt::Display for Format {
             Format::Toml => write!(f, "TOML"),
             Format::Xml => write!(f, "XML"),
             Format::Msgpack => write!(f, "MessagePack"),
+            Format::Markdown => write!(f, "Markdown"),
         }
     }
 }
@@ -63,6 +67,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("toml") => Ok(Format::Toml),
         Some("xml") => Ok(Format::Xml),
         Some("msgpack") => Ok(Format::Msgpack),
+        Some("md") => Ok(Format::Markdown),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
@@ -265,6 +270,13 @@ mod tests {
     }
 
     #[test]
+    fn test_format_from_str_markdown() {
+        assert_eq!(Format::from_str("md").unwrap(), Format::Markdown);
+        assert_eq!(Format::from_str("markdown").unwrap(), Format::Markdown);
+        assert_eq!(Format::from_str("MD").unwrap(), Format::Markdown);
+    }
+
+    #[test]
     fn test_format_from_str_unknown() {
         let err = Format::from_str("bin").unwrap_err();
         assert!(matches!(err, DkitError::UnknownFormat(s) if s == "bin"));
@@ -281,6 +293,7 @@ mod tests {
         assert_eq!(Format::Jsonl.to_string(), "JSONL");
         assert_eq!(Format::Xml.to_string(), "XML");
         assert_eq!(Format::Msgpack.to_string(), "MessagePack");
+        assert_eq!(Format::Markdown.to_string(), "Markdown");
     }
 
     // --- detect_format ---
@@ -350,6 +363,14 @@ mod tests {
         assert_eq!(
             detect_format(&PathBuf::from("data.msgpack")).unwrap(),
             Format::Msgpack
+        );
+    }
+
+    #[test]
+    fn test_detect_format_markdown() {
+        assert_eq!(
+            detect_format(&PathBuf::from("output.md")).unwrap(),
+            Format::Markdown
         );
     }
 
