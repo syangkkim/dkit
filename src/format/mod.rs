@@ -26,6 +26,7 @@ pub enum Format {
     Msgpack,
     Markdown,
     Html,
+    Table,
 }
 
 impl Format {
@@ -40,8 +41,26 @@ impl Format {
             "msgpack" | "messagepack" => Ok(Format::Msgpack),
             "md" | "markdown" => Ok(Format::Markdown),
             "html" => Ok(Format::Html),
+            "table" => Ok(Format::Table),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
+    }
+
+    /// 사용 가능한 출력 포맷 목록을 반환한다
+    pub fn list_output_formats() -> &'static [(&'static str, &'static str)] {
+        &[
+            ("json", "JSON format"),
+            ("csv", "Comma-separated values"),
+            ("tsv", "Tab-separated values (CSV variant)"),
+            ("yaml", "YAML format"),
+            ("toml", "TOML format"),
+            ("xml", "XML format"),
+            ("jsonl", "JSON Lines (one JSON object per line)"),
+            ("msgpack", "MessagePack binary format"),
+            ("md", "Markdown table"),
+            ("html", "HTML table"),
+            ("table", "Terminal table (default for view)"),
+        ]
     }
 }
 
@@ -57,6 +76,7 @@ impl std::fmt::Display for Format {
             Format::Msgpack => write!(f, "MessagePack"),
             Format::Markdown => write!(f, "Markdown"),
             Format::Html => write!(f, "HTML"),
+            Format::Table => write!(f, "Table"),
         }
     }
 }
@@ -305,6 +325,21 @@ mod tests {
         assert_eq!(Format::Xml.to_string(), "XML");
         assert_eq!(Format::Msgpack.to_string(), "MessagePack");
         assert_eq!(Format::Markdown.to_string(), "Markdown");
+        assert_eq!(Format::Table.to_string(), "Table");
+    }
+
+    #[test]
+    fn test_format_from_str_table() {
+        assert_eq!(Format::from_str("table").unwrap(), Format::Table);
+        assert_eq!(Format::from_str("TABLE").unwrap(), Format::Table);
+    }
+
+    #[test]
+    fn test_list_output_formats() {
+        let formats = Format::list_output_formats();
+        assert!(formats.len() >= 10);
+        assert!(formats.iter().any(|(name, _)| *name == "table"));
+        assert!(formats.iter().any(|(name, _)| *name == "json"));
     }
 
     // --- detect_format ---

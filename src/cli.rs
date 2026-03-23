@@ -7,28 +7,32 @@ use clap::{Parser, Subcommand};
     name = "dkit",
     version,
     about = "Swiss army knife for data format conversion and querying",
-    long_about = "dkit (Data Kit) — Convert and query data across JSON, CSV, YAML, TOML, and XML.\n\nExamples:\n  dkit convert data.json --to csv\n  dkit convert data.csv --to yaml -o output.yaml\n  dkit query data.json '.users[0].name'\n  dkit view data.csv --limit 10\n  cat data.json | dkit convert --from json --to toml",
-    after_help = "Supported formats: json, jsonl, csv, yaml (yml), toml, xml\nUse 'dkit <command> --help' for more information about a command."
+    long_about = "dkit (Data Kit) — Convert and query data across JSON, CSV, YAML, TOML, and XML.\n\nExamples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml -o output.yaml\n  dkit query data.json '.users[0].name'\n  dkit view data.csv --limit 10\n  cat data.json | dkit convert --from json --format toml",
+    after_help = "Supported formats: json, jsonl, csv, yaml (yml), toml, xml, md, html, table\nUse 'dkit <command> --help' for more information about a command.\nUse 'dkit --list-formats' to see all supported output formats."
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
+
+    /// List all supported output formats
+    #[arg(long)]
+    pub list_formats: bool,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Convert between data formats (JSON, CSV, YAML, TOML)
     #[command(
-        after_help = "Examples:\n  dkit convert data.json --to csv\n  dkit convert data.csv --to yaml --pretty\n  dkit convert a.json b.json --to csv --outdir ./output\n  cat data.json | dkit convert --from json --to toml"
+        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  cat data.json | dkit convert --from json --format toml"
     )]
     Convert {
         /// Input file path(s). Use stdin if not provided (requires --from)
         #[arg(value_name = "INPUT")]
         input: Vec<PathBuf>,
 
-        /// Output format (json, jsonl, csv, yaml, toml, xml, md)
-        #[arg(long, value_name = "FORMAT")]
-        to: String,
+        /// Output format (json, jsonl, csv, yaml, toml, xml, md, html, table)
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: String,
 
         /// Input format override (auto-detected from file extension)
         #[arg(long, value_name = "FORMAT")]
@@ -92,9 +96,9 @@ pub enum Commands {
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
 
-        /// Output format (default: json)
-        #[arg(long, value_name = "FORMAT")]
-        to: Option<String>,
+        /// Output format (default: json). Supports: json, jsonl, csv, yaml, toml, xml, md, html, table
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: Option<String>,
 
         /// Output file path (default: stdout)
         #[arg(short, long, value_name = "FILE")]
@@ -103,7 +107,7 @@ pub enum Commands {
 
     /// View data in a formatted table
     #[command(
-        after_help = "Examples:\n  dkit view data.csv\n  dkit view data.json --path .users --limit 5\n  dkit view data.json --columns name,email\n  dkit view data.csv --border rounded --color\n  dkit view data.json --row-numbers --max-width 30"
+        after_help = "Examples:\n  dkit view data.csv\n  dkit view data.json --path .users --limit 5\n  dkit view data.json --columns name,email\n  dkit view data.csv --border rounded --color\n  dkit view data.json --format json\n  dkit view data.json --row-numbers --max-width 30"
     )]
     View {
         /// Input file path (use '-' for stdin)
@@ -113,6 +117,10 @@ pub enum Commands {
         /// Input format (required for stdin)
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
+
+        /// Output format (default: table). Supports: json, jsonl, csv, yaml, toml, xml, md, html, table
+        #[arg(short = 'f', long, value_name = "FORMAT")]
+        format: Option<String>,
 
         /// Path to nested data (e.g. '.users' or '.config.db')
         #[arg(long, value_name = "PATH")]
@@ -168,6 +176,10 @@ pub enum Commands {
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
 
+        /// Output format (default: table). Supports: json, jsonl, csv, yaml, toml, xml, md, html, table
+        #[arg(short = 'f', long, value_name = "FORMAT")]
+        format: Option<String>,
+
         /// Navigate to nested data path (e.g. '.users')
         #[arg(long, value_name = "QUERY")]
         path: Option<String>,
@@ -187,16 +199,16 @@ pub enum Commands {
 
     /// Merge multiple data files into one
     #[command(
-        after_help = "Examples:\n  dkit merge a.json b.json --to json\n  dkit merge users1.csv users2.csv --to json -o merged.json\n  dkit merge config1.yaml config2.yaml --to yaml"
+        after_help = "Examples:\n  dkit merge a.json b.json --format json\n  dkit merge users1.csv users2.csv --format json -o merged.json\n  dkit merge config1.yaml config2.yaml --format yaml"
     )]
     Merge {
         /// Input file paths (at least 2 required)
         #[arg(value_name = "INPUT", required = true)]
         input: Vec<PathBuf>,
 
-        /// Output format (json, jsonl, csv, yaml, toml, xml). Defaults to first input's format
-        #[arg(long, value_name = "FORMAT")]
-        to: Option<String>,
+        /// Output format (json, jsonl, csv, yaml, toml, xml, md, html). Defaults to first input's format
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: Option<String>,
 
         /// Output file path (default: stdout)
         #[arg(short, long, value_name = "FILE")]

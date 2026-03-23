@@ -180,6 +180,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Msgpack => MsgpackReader.read(content),
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
+        Format::Table => bail!("Table is an output-only format and cannot be used as input"),
     }
 }
 
@@ -194,6 +195,10 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
+        Format::Table => {
+            use crate::output::table::{render_table, TableOptions};
+            Ok(render_table(value, &TableOptions::default()) + "\n")
+        }
     }
 }
 
