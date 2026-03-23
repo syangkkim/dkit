@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
     version,
     about = "Swiss army knife for data format conversion and querying",
     long_about = "dkit (Data Kit) — Convert and query data across JSON, CSV, YAML, TOML, and XML.\n\nExamples:\n  dkit convert data.json --to csv\n  dkit convert data.csv --to yaml -o output.yaml\n  dkit query data.json '.users[0].name'\n  dkit view data.csv --limit 10\n  cat data.json | dkit convert --from json --to toml",
-    after_help = "Supported formats: json, csv, yaml (yml), toml, xml\nUse 'dkit <command> --help' for more information about a command."
+    after_help = "Supported formats: json, jsonl, csv, yaml (yml), toml, xml\nUse 'dkit <command> --help' for more information about a command."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -26,7 +26,7 @@ pub enum Commands {
         #[arg(value_name = "INPUT")]
         input: Vec<PathBuf>,
 
-        /// Output format (json, csv, yaml, toml, xml)
+        /// Output format (json, jsonl, csv, yaml, toml, xml)
         #[arg(long, value_name = "FORMAT")]
         to: String,
 
@@ -166,7 +166,7 @@ pub enum Commands {
         #[arg(value_name = "INPUT", required = true)]
         input: Vec<PathBuf>,
 
-        /// Output format (json, csv, yaml, toml, xml). Defaults to first input's format
+        /// Output format (json, jsonl, csv, yaml, toml, xml). Defaults to first input's format
         #[arg(long, value_name = "FORMAT")]
         to: Option<String>,
 

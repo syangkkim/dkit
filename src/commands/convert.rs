@@ -7,6 +7,7 @@ use anyhow::{bail, Context, Result};
 use super::{read_file, read_file_bytes};
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::json::{JsonReader, JsonWriter};
+use crate::format::jsonl::{JsonlReader, JsonlWriter};
 use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
@@ -176,6 +177,7 @@ fn read_value_from_path(path: &Path, format: Format, options: &FormatOptions) ->
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {
     match format {
         Format::Json => JsonReader.read(content),
+        Format::Jsonl => JsonlReader.read(content),
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
@@ -216,6 +218,7 @@ fn write_output(
 fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result<String> {
     match format {
         Format::Json => JsonWriter::new(options.clone()).write(value),
+        Format::Jsonl => JsonlWriter.write(value),
         Format::Csv => CsvWriter::new(options.clone()).write(value),
         Format::Yaml => YamlWriter::new(options.clone()).write(value),
         Format::Toml => TomlWriter::new(options.clone()).write(value),

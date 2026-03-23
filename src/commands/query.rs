@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::format::csv::CsvReader;
 use crate::format::json::{JsonReader, JsonWriter};
+use crate::format::jsonl::{JsonlReader, JsonlWriter};
 use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
@@ -138,6 +139,7 @@ pub fn run(args: &QueryArgs) -> Result<()> {
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {
     match format {
         Format::Json => JsonReader.read(content),
+        Format::Jsonl => JsonlReader.read(content),
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
@@ -149,6 +151,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
 fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result<String> {
     match format {
         Format::Json => JsonWriter::new(options.clone()).write(value),
+        Format::Jsonl => JsonlWriter.write(value),
         Format::Csv => {
             // CSV 출력 시 배열 형태가 아닌 단일 값은 JSON으로 출력
             match value {

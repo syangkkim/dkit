@@ -6,6 +6,7 @@ use colored::Colorize;
 use super::{read_file, read_file_bytes};
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
+use crate::format::jsonl::JsonlReader;
 use crate::format::msgpack::MsgpackReader;
 use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
@@ -75,6 +76,7 @@ fn read_value_from_path(path: &Path) -> Result<Value> {
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {
     match format {
         Format::Json => JsonReader.read(content),
+        Format::Jsonl => JsonlReader.read(content),
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),

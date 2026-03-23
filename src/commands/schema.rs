@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
+use crate::format::jsonl::JsonlReader;
 use crate::format::msgpack::MsgpackReader;
 use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
@@ -197,6 +198,7 @@ fn format_array_children(arr: &[Value], prefix: &str, output: &mut String) {
 fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<Value> {
     match format {
         Format::Json => JsonReader.read(content),
+        Format::Jsonl => JsonlReader.read(content),
         Format::Csv => CsvReader::new(options.clone()).read(content),
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
