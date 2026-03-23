@@ -29,7 +29,7 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
-| `--to <FORMAT>` | | 출력 포맷 (json, jsonl, csv, yaml, toml, xml, msgpack) | 필수 |
+| `--to <FORMAT>` | | 출력 포맷 (json, jsonl, csv, yaml, toml, xml, msgpack, md, html) | 필수 |
 | `--from <FORMAT>` | | 입력 포맷 (stdin 사용 시 필수, 콘텐츠 스니핑 지원) | 확장자 자동 감지 |
 | `--output <FILE>` | `-o` | 출력 파일 경로 | stdout |
 | `--outdir <DIR>` | | 여러 파일 변환 시 출력 디렉토리 | |
@@ -39,6 +39,10 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 | `--no-header` | | CSV 헤더 없음 | |
 | `--flow` | | YAML 인라인 스타일 | |
 | `--root-element <NAME>` | | XML 루트 요소 이름 | `root` |
+| `--styled` | | HTML 출력 시 인라인 CSS 스타일 포함 | false |
+| `--full-html` | | HTML 출력 시 완전한 HTML 문서로 출력 | false |
+| `--encoding <ENCODING>` | | 입력 파일 인코딩 (euc-kr, shift_jis, latin1 등) | UTF-8 |
+| `--detect-encoding` | | 입력 파일 인코딩 자동 감지 | false |
 
 ### Examples
 
@@ -73,6 +77,19 @@ cat logs.jsonl | dkit convert --from jsonl --to json
 dkit convert data.tsv --to json --delimiter '\t'
 dkit convert data.csv --to json --compact
 dkit convert data.csv --to json --pretty
+
+# Markdown/HTML 출력
+dkit convert data.json --to md                           # GFM Markdown 테이블
+dkit convert data.csv --to html                          # HTML 테이블
+dkit convert data.json --to html --styled                # 인라인 CSS 스타일
+dkit convert data.json --to html --full-html             # 완전한 HTML 문서
+dkit convert data.json --to html --styled --full-html    # 스타일 포함 HTML 문서
+
+# 인코딩 변환
+dkit convert data.csv --to json --encoding euc-kr        # EUC-KR 입력
+dkit convert data.csv --to json --encoding shift_jis     # Shift-JIS 입력
+dkit convert data.csv --to json --encoding latin1        # Latin1 입력
+dkit convert data.csv --to json --detect-encoding        # 인코딩 자동 감지
 ```
 
 ## query
@@ -161,6 +178,9 @@ dkit view <INPUT> [OPTIONS]
 | `--row-numbers` | 행 번호 표시 | false |
 | `--border <STYLE>` | 테이블 테두리 스타일 (none, simple, rounded, heavy) | simple |
 | `--color` | 데이터 타입별 색상 출력 (숫자=청색, null=회색, 불리언=노란색) | false |
+| `--format <FORMAT>` | 출력 포맷 (table, json, csv, yaml, md, html 등) | table |
+| `--encoding <ENCODING>` | 입력 파일 인코딩 (euc-kr, shift_jis, latin1 등) | UTF-8 |
+| `--detect-encoding` | 입력 파일 인코딩 자동 감지 | false |
 
 ### Examples
 
@@ -172,6 +192,15 @@ dkit view users.csv --columns name,email
 dkit view data.csv --border rounded --color
 dkit view data.json --row-numbers --max-width 30
 dkit view data.json --hide-header --border none
+
+# 출력 포맷 변경
+dkit view data.json --format json
+dkit view data.json --format md
+dkit view data.json --format html
+
+# 인코딩
+dkit view korean.csv --encoding euc-kr
+dkit view data.csv --detect-encoding
 ```
 
 ## stats

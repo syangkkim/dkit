@@ -44,7 +44,9 @@ src/
 │   ├── yaml.rs
 │   ├── toml.rs
 │   ├── xml.rs              # XML (quick-xml 기반)
-│   └── msgpack.rs          # MessagePack
+│   ├── msgpack.rs          # MessagePack
+│   ├── markdown.rs         # Markdown 테이블 (GFM, 출력 전용)
+│   └── html.rs             # HTML 테이블 (출력 전용)
 │
 ├── query/                  # 쿼리 엔진
 │   ├── mod.rs
@@ -86,8 +88,9 @@ pub trait FormatWriter {
 
 포맷 감지는 두 가지 전략을 사용한다:
 
-1. **파일 확장자**: `.json`, `.jsonl`/`.ndjson`, `.csv`/`.tsv`, `.yaml`/`.yml`, `.toml`, `.xml`, `.msgpack`
+1. **파일 확장자**: `.json`, `.jsonl`/`.ndjson`, `.csv`/`.tsv`, `.yaml`/`.yml`, `.toml`, `.xml`, `.msgpack`, `.md` (출력 전용)
 2. **콘텐츠 스니핑**: stdin 입력 시 내용 기반으로 포맷을 추론 (XML → JSONL → JSON → TOML → YAML → CSV 순)
+3. **인코딩 감지**: BOM 우선 → `--encoding` 명시 → `--detect-encoding` 자동 감지 → UTF-8 기본
 
 ## Dependencies
 
@@ -104,17 +107,20 @@ pub trait FormatWriter {
 | 테이블 출력 | comfy-table | 7.x | 예쁜 터미널 테이블 |
 | 색상 출력 | colored | 2.x | 터미널 하이라이팅 |
 | 에러 처리 | thiserror + anyhow | 1.x / 1.x | 라이브러리 + 애플리케이션 에러 |
+| 인코딩 | encoding_rs | 0.8.x | 다중 인코딩 지원 (EUC-KR, Shift-JIS, Latin1 등) |
+| 인코딩 자동 감지 | chardetng | 0.1.x | BOM 없는 파일의 인코딩 휴리스틱 감지 |
 
-## Conversion Matrix (v0.4)
+## Conversion Matrix (v0.5)
 
-| FROM \ TO | JSON | JSONL | CSV | YAML | TOML | XML | MsgPack |
-|-----------|------|-------|-----|------|------|-----|---------|
-| JSON      | -    | O     | O   | O    | O    | O   | O       |
-| JSONL     | O    | -     | O   | O    | O    | O   | O       |
-| CSV       | O    | O     | -   | O    | O    | O   | O       |
-| YAML      | O    | O     | O   | -    | O    | O   | O       |
-| TOML      | O    | O     | O   | O    | -    | O   | O       |
-| XML       | O    | O     | O*  | O    | O    | -   | O       |
-| MsgPack   | O    | O     | O   | O    | O    | O   | -       |
+| FROM \ TO | JSON | JSONL | CSV | YAML | TOML | XML | MsgPack | MD | HTML |
+|-----------|------|-------|-----|------|------|-----|---------|----|------|
+| JSON      | -    | O     | O   | O    | O    | O   | O       | O  | O    |
+| JSONL     | O    | -     | O   | O    | O    | O   | O       | O  | O    |
+| CSV       | O    | O     | -   | O    | O    | O   | O       | O  | O    |
+| YAML      | O    | O     | O   | -    | O    | O   | O       | O  | O    |
+| TOML      | O    | O     | O   | O    | -    | O   | O       | O  | O    |
+| XML       | O    | O     | O*  | O    | O    | -   | O       | O  | O    |
+| MsgPack   | O    | O     | O   | O    | O    | O   | -       | O  | O    |
 
 *XML → CSV는 데이터가 Array of Objects 구조인 경우에만 가능
+**MD, HTML은 출력 전용 포맷 (Write-only)
