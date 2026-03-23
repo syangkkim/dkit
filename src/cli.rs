@@ -26,7 +26,7 @@ pub enum Commands {
         #[arg(value_name = "INPUT")]
         input: Vec<PathBuf>,
 
-        /// Output format (json, jsonl, csv, yaml, toml, xml)
+        /// Output format (json, jsonl, csv, yaml, toml, xml, md)
         #[arg(long, value_name = "FORMAT")]
         to: String,
 

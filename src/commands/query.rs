@@ -2,11 +2,12 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::format::csv::CsvReader;
 use crate::format::json::{JsonReader, JsonWriter};
 use crate::format::jsonl::{JsonlReader, JsonlWriter};
+use crate::format::markdown::MarkdownWriter;
 use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
 use crate::format::toml::{TomlReader, TomlWriter};
 use crate::format::xml::{XmlReader, XmlWriter};
@@ -142,6 +143,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
+        Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
     }
 }
 
@@ -163,5 +165,6 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Toml => TomlWriter::new(options.clone()).write(value),
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
+        Format::Markdown => MarkdownWriter.write(value),
     }
 }
