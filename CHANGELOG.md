@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-23
+
+### Added
+
+- **Markdown table output**: GFM-compatible Markdown table format with automatic numeric column right-alignment and pipe character escaping. (`dkit convert data.json -f md`) (#78)
+- **HTML table output**: HTML `<table>` output with optional inline CSS styling (`--styled`) and full HTML document mode (`--full-html`). (#79)
+- **Table view customization**: New options for `view` subcommand — `--max-width`, `--no-header`, `--columns`, `--row-numbers`, `--border` (none/simple/rounded/heavy), and `--color` for type-based coloring. (#80)
+- **Encoding support**: Handle non-UTF-8 input files with `--encoding` option (e.g., euc-kr, shift-jis, latin1), BOM auto-detection, and optional encoding auto-detection (`--detect-encoding`) via `encoding_rs` and `chardetng` crates. (#82)
+
+### Changed
+
+- **Unified `--format` / `-f` option**: Standardized output format selection across all subcommands. Supports json, csv, tsv, yaml, toml, xml, jsonl, md, html, and table formats. Added `dkit --list-formats` to show available formats. (#81)
+
+### Testing & Docs
+
+- **Comprehensive v0.5.0 integration tests**: End-to-end tests for Markdown/HTML output, table customization options, encoding conversion, and format selection. (#83)
+
 ## [0.4.0] - 2026-03-23
 
 ### Added
@@ -59,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[0.5.0]: https://github.com/syangkkim/dkit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/syangkkim/dkit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/syangkkim/dkit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/syangkkim/dkit/releases/tag/v0.2.0
