@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use super::{read_file, read_file_bytes};
+use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::html::HtmlWriter;
 use crate::format::json::{JsonReader, JsonWriter};
@@ -34,6 +34,7 @@ pub struct ConvertArgs<'a> {
     pub root_element: Option<String>,
     pub styled: bool,
     pub full_html: bool,
+    pub encoding_opts: EncodingOptions,
 }
 
 /// convert 서브커맨드 실행
@@ -67,10 +68,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
                 .context("Failed to read from stdin")?;
             MsgpackReader.read_from_bytes(&buf)?
         } else {
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("Failed to read from stdin")?;
+            let buf = read_stdin_with_encoding(&args.encoding_opts)?;
             let (source_format, sniffed_delimiter) = match args.from {
                 Some(f) => (Format::from_str(f)?, None),
                 None => detect_format_from_content(&buf)?,
@@ -113,7 +111,8 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
                 ..Default::default()
             };
 
-            let value = read_value_from_path(path, source_format, &read_options)?;
+            let value =
+                read_value_from_path(path, source_format, &read_options, &args.encoding_opts)?;
 
             let out_name = path
                 .file_stem()
@@ -142,7 +141,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         ..Default::default()
     };
 
-    let value = read_value_from_path(path, source_format, &read_options)?;
+    let value = read_value_from_path(path, source_format, &read_options, &args.encoding_opts)?;
 
     let outdir_path = args.outdir.map(|d| {
         let name = path
@@ -169,13 +168,35 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     Ok(())
 }
 
+/// stdin에서 인코딩을 고려하여 문자열을 읽는다.
+fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
+    if opts.encoding.is_some() || opts.detect_encoding {
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .context("Failed to read from stdin")?;
+        super::decode_bytes(&buf, opts)
+    } else {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read from stdin")?;
+        Ok(buf)
+    }
+}
+
 /// 파일 경로에서 Value를 읽는다 (바이너리 포맷 자동 처리)
-fn read_value_from_path(path: &Path, format: Format, options: &FormatOptions) -> Result<Value> {
+fn read_value_from_path(
+    path: &Path,
+    format: Format,
+    options: &FormatOptions,
+    encoding_opts: &EncodingOptions,
+) -> Result<Value> {
     if format == Format::Msgpack {
         let bytes = read_file_bytes(path)?;
         MsgpackReader.read_from_bytes(&bytes)
     } else {
-        let content = read_file(path)?;
+        let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, options)
     }
 }

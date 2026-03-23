@@ -77,6 +77,14 @@ pub enum Commands {
         /// Output a complete HTML document (HTML output)
         #[arg(long)]
         full_html: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 
     /// Query data using path expressions
@@ -103,6 +111,14 @@ pub enum Commands {
         /// Output file path (default: stdout)
         #[arg(short, long, value_name = "FILE")]
         output: Option<PathBuf>,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 
     /// View data in a formatted table
@@ -161,6 +177,14 @@ pub enum Commands {
         /// Colorize output by data type (numbers=blue, null=gray)
         #[arg(long)]
         color: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 
     /// Show statistics about data
@@ -195,6 +219,14 @@ pub enum Commands {
         /// Treat CSV as having no header row
         #[arg(long)]
         no_header: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 
     /// Merge multiple data files into one
@@ -233,6 +265,14 @@ pub enum Commands {
         /// Use YAML inline/flow style
         #[arg(long)]
         flow: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 
     /// Show schema/structure of data
@@ -247,6 +287,14 @@ pub enum Commands {
         /// Input format (required for stdin)
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 
     /// Compare two data files and show differences
@@ -269,5 +317,13 @@ pub enum Commands {
         /// Only report whether files differ (exit code: 0=same, 1=different)
         #[arg(long)]
         quiet: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
     },
 }

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use super::{read_file, read_file_bytes};
+use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::html::HtmlWriter;
 use crate::format::json::{JsonReader, JsonWriter};
@@ -28,6 +28,7 @@ pub struct MergeArgs<'a> {
     pub pretty: bool,
     pub compact: bool,
     pub flow: bool,
+    pub encoding_opts: EncodingOptions,
 }
 
 /// merge 서브커맨드 실행
@@ -50,7 +51,7 @@ pub fn run(args: &MergeArgs) -> Result<()> {
             let bytes = read_file_bytes(path)?;
             MsgpackReader.read_from_bytes(&bytes)?
         } else {
-            let content = read_file(path)?;
+            let content = read_file_with_encoding(path, &args.encoding_opts)?;
             read_value(&content, format, &read_options)?
         };
         values.push(value);
