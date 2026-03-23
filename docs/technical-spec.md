@@ -162,6 +162,49 @@ pub struct FormatOptions {
 - 바이너리 포맷이므로 `read_from_reader`/`write_to_writer` 사용
 - JSON과 유사한 타입 매핑
 
+### Markdown → Value (출력 전용)
+
+- GFM (GitHub Flavored Markdown) 테이블 형식
+- Array<Object> → 컬럼 헤더 + 데이터 행 (숫자 컬럼 우측 정렬 `---:`)
+- Single Object → key | value 2-컬럼 테이블
+- Array<Primitive> → 단일 "value" 컬럼 테이블
+- 파이프 문자 이스케이프 (`|` → `\|`)
+- 중첩 값은 JSON 인라인 표시
+
+### HTML → Value (출력 전용)
+
+- HTML 테이블 생성 (Array<Object>, Single Object, Array<Primitive>)
+- `--styled`: 인라인 CSS 스타일 (border-collapse, 헤더 다크 배경, 줄무늬 행, 호버 효과)
+- `--full-html`: 완전한 HTML 문서 (DOCTYPE, charset, 선택적 style 블록)
+- HTML 엔티티 이스케이프 (`&`, `<`, `>`, `"`, `'`)
+
+## Encoding Support
+
+### 인코딩 감지 우선순위
+
+1. **BOM 감지** (최우선): UTF-8 BOM (`EF BB BF`), UTF-16LE BOM (`FF FE`), UTF-16BE BOM (`FE FF`)
+2. **`--encoding <label>`**: 사용자 명시 인코딩 (encoding_rs 지원 레이블)
+3. **`--detect-encoding`**: chardetng 휴리스틱 자동 감지
+4. **UTF-8 기본값**: 위 3가지 모두 해당 없으면 UTF-8로 디코딩
+
+### 지원 인코딩
+
+- UTF-8 (기본), UTF-16LE, UTF-16BE
+- EUC-KR, Shift-JIS
+- Latin1 (ISO-8859-1), Windows-1252
+- encoding_rs가 지원하는 모든 인코딩
+
+### EncodingOptions
+
+```rust
+pub struct EncodingOptions {
+    pub encoding: Option<String>,    // 명시 인코딩 레이블
+    pub detect_encoding: bool,       // 자동 감지 플래그
+}
+```
+
+모든 서브커맨드(convert, view, query, stats, schema, merge, diff)에서 인코딩 옵션 지원.
+
 ## Query Engine
 
 ### Query Grammar (EBNF)

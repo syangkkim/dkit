@@ -48,8 +48,10 @@ cargo install --path .
 | TOML        | `.toml`             | O    | O     |
 | XML         | `.xml`              | O    | O     |
 | MessagePack | `.msgpack`          | O    | O     |
+| Markdown    | `.md`               | -    | O     |
+| HTML        |                     | -    | O     |
 
-All conversion paths between supported formats are available.
+All conversion paths between supported read/write formats are available. Markdown and HTML are output-only formats for table rendering.
 
 ## Commands
 
@@ -87,6 +89,18 @@ dkit convert data.json --to json --compact     # Minified JSON
 dkit convert data.tsv --to json --delimiter '\t'  # TSV input
 dkit convert data.csv --to json --no-header    # CSV without header
 dkit convert data.json --to xml --root-element users  # Custom XML root element
+
+# Markdown/HTML table output
+dkit convert data.json --to md                 # GFM Markdown table
+dkit convert data.csv --to html                # HTML table
+dkit convert data.json --to html --styled      # HTML with inline CSS
+dkit convert data.json --to html --full-html   # Complete HTML document
+dkit convert data.json --to html --styled --full-html  # Styled full document
+
+# Encoding support
+dkit convert data.csv --to json --encoding euc-kr       # EUC-KR input
+dkit convert data.csv --to json --encoding shift_jis     # Shift-JIS input
+dkit convert data.csv --to json --detect-encoding        # Auto-detect encoding
 ```
 
 ### `query` — Data querying
@@ -146,6 +160,17 @@ dkit view data.json --path '.users'
 
 # Select columns
 dkit view users.csv --columns name,email
+
+# Table customization
+dkit view data.csv --border rounded --color        # Rounded borders with type coloring
+dkit view data.json --row-numbers --max-width 30   # Row numbers, truncate long values
+dkit view data.json --hide-header --border none     # Minimal output
+dkit view data.json --border heavy -n 10            # Heavy borders, limit 10 rows
+
+# Output in different formats
+dkit view data.json --format json                  # JSON output instead of table
+dkit view data.json --format md                    # Markdown table
+dkit view data.json --format html                  # HTML table
 ```
 
 ### `stats` — Data statistics
@@ -212,6 +237,7 @@ dkit merge config1.yaml config2.yaml --to yaml
 | TOML | O | X | X | X |
 | XML | O | X | X | O |
 | MessagePack | O | X | X | X |
+| Markdown/HTML output | O | X | X | X |
 | Cross-format convert | O | X | Partial | Partial |
 | Table output | O | X | O | X |
 | Query (where/select/sort) | O | O | O | O |
@@ -220,6 +246,7 @@ dkit merge config1.yaml config2.yaml --to yaml
 | Schema inspection | O | X | X | X |
 | File merging | O | X | O | X |
 | File diff | O | X | X | X |
+| Multi-encoding support | O | X | X | X |
 | Single binary | O | O | O | O |
 
 dkit focuses on **seamless conversion between all supported formats** with a unified query syntax, eliminating the need for separate tools per format.
