@@ -1,5 +1,6 @@
 pub mod csv;
 pub mod json;
+pub mod jsonl;
 pub mod msgpack;
 pub mod toml;
 pub mod xml;
@@ -15,6 +16,7 @@ use crate::value::Value;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Format {
     Json,
+    Jsonl,
     Csv,
     Yaml,
     Toml,
@@ -26,6 +28,7 @@ impl Format {
     pub fn from_str(s: &str) -> Result<Self, DkitError> {
         match s.to_lowercase().as_str() {
             "json" => Ok(Format::Json),
+            "jsonl" | "jsonlines" | "ndjson" => Ok(Format::Jsonl),
             "csv" | "tsv" => Ok(Format::Csv),
             "yaml" | "yml" => Ok(Format::Yaml),
             "toml" => Ok(Format::Toml),
@@ -40,6 +43,7 @@ impl std::fmt::Display for Format {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Format::Json => write!(f, "JSON"),
+            Format::Jsonl => write!(f, "JSONL"),
             Format::Csv => write!(f, "CSV"),
             Format::Yaml => write!(f, "YAML"),
             Format::Toml => write!(f, "TOML"),
@@ -53,6 +57,7 @@ impl std::fmt::Display for Format {
 pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("json") => Ok(Format::Json),
+        Some("jsonl" | "ndjson") => Ok(Format::Jsonl),
         Some("csv" | "tsv") => Ok(Format::Csv),
         Some("yaml" | "yml") => Ok(Format::Yaml),
         Some("toml") => Ok(Format::Toml),
@@ -144,6 +149,14 @@ mod tests {
     }
 
     #[test]
+    fn test_format_from_str_jsonl() {
+        assert_eq!(Format::from_str("jsonl").unwrap(), Format::Jsonl);
+        assert_eq!(Format::from_str("jsonlines").unwrap(), Format::Jsonl);
+        assert_eq!(Format::from_str("ndjson").unwrap(), Format::Jsonl);
+        assert_eq!(Format::from_str("JSONL").unwrap(), Format::Jsonl);
+    }
+
+    #[test]
     fn test_format_from_str_xml() {
         assert_eq!(Format::from_str("xml").unwrap(), Format::Xml);
     }
@@ -168,6 +181,7 @@ mod tests {
         assert_eq!(Format::Csv.to_string(), "CSV");
         assert_eq!(Format::Yaml.to_string(), "YAML");
         assert_eq!(Format::Toml.to_string(), "TOML");
+        assert_eq!(Format::Jsonl.to_string(), "JSONL");
         assert_eq!(Format::Xml.to_string(), "XML");
         assert_eq!(Format::Msgpack.to_string(), "MessagePack");
     }
@@ -211,6 +225,18 @@ mod tests {
         assert_eq!(
             detect_format(&PathBuf::from("config.toml")).unwrap(),
             Format::Toml
+        );
+    }
+
+    #[test]
+    fn test_detect_format_jsonl() {
+        assert_eq!(
+            detect_format(&PathBuf::from("data.jsonl")).unwrap(),
+            Format::Jsonl
+        );
+        assert_eq!(
+            detect_format(&PathBuf::from("data.ndjson")).unwrap(),
+            Format::Jsonl
         );
     }
 
