@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use predicates;
 use tempfile::TempDir;
 
 fn dkit() -> Command {
@@ -115,11 +116,13 @@ fn query_stdin() {
 
 #[test]
 fn query_stdin_without_from() {
+    // 콘텐츠 스니핑으로 JSON 포맷 자동 감지
     dkit()
         .args(["query", "-", ".name"])
         .write_stdin("{\"name\": \"test\"}")
         .assert()
-        .failure();
+        .success()
+        .stdout(predicates::str::contains("test"));
 }
 
 // --- 에러 케이스 ---

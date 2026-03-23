@@ -26,6 +26,9 @@ pub enum DkitError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[error("Failed to detect format: {0}\n  Hint: specify the input format explicitly, e.g. --from json\n  Supported formats: {}", SUPPORTED_FORMATS.join(", "))]
+    FormatDetectionFailed(String),
+
     #[allow(dead_code)]
     #[error("Invalid query: {0}\n  Hint: use 'dkit query --help' for query syntax")]
     QueryError(String),

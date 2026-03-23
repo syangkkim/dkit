@@ -128,12 +128,13 @@ fn view_invalid_path() {
 
 #[test]
 fn view_stdin_without_from() {
+    // 콘텐츠 스니핑으로 JSON 포맷 자동 감지
     dkit()
         .args(&["view", "-"])
         .write_stdin("[{\"a\": 1}]")
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("--from"));
+        .success()
+        .stdout(predicate::str::contains("a"));
 }
 
 #[test]

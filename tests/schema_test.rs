@@ -92,13 +92,14 @@ fn schema_stdin_with_from() {
 }
 
 #[test]
-fn schema_stdin_without_from_fails() {
+fn schema_stdin_without_from_auto_detects() {
+    // 콘텐츠 스니핑으로 JSON 포맷 자동 감지
     dkit()
         .args(&["schema", "-"])
         .write_stdin(r#"{"a": 1}"#)
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("--from is required"));
+        .success()
+        .stdout(predicate::str::contains("a: integer"));
 }
 
 // --- Tree structure verification ---

@@ -284,11 +284,13 @@ fn convert_nonexistent_file() {
 
 #[test]
 fn convert_stdin_without_from() {
+    // 콘텐츠 스니핑으로 JSON 포맷 자동 감지
     dkit()
-        .args(&["convert", "--to", "csv"])
-        .write_stdin("{}")
+        .args(&["convert", "--to", "yaml"])
+        .write_stdin("{\"name\": \"test\"}")
         .assert()
-        .failure();
+        .success()
+        .stdout(predicate::str::contains("name: test"));
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context as _, Result};
 
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
@@ -11,8 +11,8 @@ use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
 use crate::format::{
-    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
-    FormatReader,
+    default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
+    Format, FormatOptions, FormatReader,
 };
 use crate::output::table::render_table;
 use crate::value::Value;
@@ -29,20 +29,43 @@ pub struct ViewArgs<'a> {
 
 /// view 서브커맨드 실행
 pub fn run(args: &ViewArgs) -> Result<()> {
-    let source_format = determine_format(args)?;
-
-    let auto_delimiter = if args.input == "-" {
-        args.from.and_then(default_delimiter_for_format)
+    let value = if args.input == "-" {
+        if args.from == Some("msgpack") || args.from == Some("messagepack") {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .context("Failed to read from stdin")?;
+            MsgpackReader.read_from_bytes(&buf)?
+        } else {
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .context("Failed to read from stdin")?;
+            let (source_format, sniffed_delimiter) = match args.from {
+                Some(f) => (Format::from_str(f)?, None),
+                None => detect_format_from_content(&buf)?,
+            };
+            let auto_delimiter = args
+                .delimiter
+                .or(sniffed_delimiter)
+                .or_else(|| args.from.and_then(default_delimiter_for_format));
+            let read_options = FormatOptions {
+                delimiter: auto_delimiter,
+                no_header: args.no_header,
+                ..Default::default()
+            };
+            read_value(&buf, source_format, &read_options)?
+        }
     } else {
-        default_delimiter(Path::new(args.input))
+        let source_format = determine_format(args)?;
+        let auto_delimiter = default_delimiter(Path::new(args.input));
+        let read_options = FormatOptions {
+            delimiter: args.delimiter.or(auto_delimiter),
+            no_header: args.no_header,
+            ..Default::default()
+        };
+        read_input_value(args, source_format, &read_options)?
     };
-    let read_options = FormatOptions {
-        delimiter: args.delimiter.or(auto_delimiter),
-        no_header: args.no_header,
-        ..Default::default()
-    };
-
-    let value = read_input_value(args, source_format, &read_options)?;
 
     // --path 옵션으로 중첩 데이터 접근
     let target = match args.path {

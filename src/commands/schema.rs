@@ -9,11 +9,11 @@ use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
 use crate::format::{
-    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
-    FormatReader,
+    default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
+    Format, FormatOptions, FormatReader,
 };
 use crate::value::Value;
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 pub struct SchemaArgs<'a> {
     pub input: &'a str,
@@ -21,49 +21,47 @@ pub struct SchemaArgs<'a> {
 }
 
 pub fn run(args: &SchemaArgs) -> Result<()> {
-    let source_format = if args.input == "-" {
-        match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => bail!("--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"),
-        }
-    } else {
-        match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => detect_format(Path::new(args.input))?,
-        }
-    };
-
-    let value = if source_format == Format::Msgpack {
-        let bytes = if args.input == "-" {
+    let value = if args.input == "-" {
+        if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
             io::stdin()
                 .read_to_end(&mut buf)
                 .map_err(|e| anyhow::anyhow!("Failed to read from stdin: {e}"))?;
-            buf
+            MsgpackReader.read_from_bytes(&buf)?
         } else {
-            super::read_file_bytes(Path::new(args.input))?
-        };
-        MsgpackReader.read_from_bytes(&bytes)?
-    } else {
-        let content = if args.input == "-" {
             let mut buf = String::new();
             io::stdin()
                 .read_to_string(&mut buf)
                 .map_err(|e| anyhow::anyhow!("Failed to read from stdin: {e}"))?;
-            buf
+            let (source_format, sniffed_delimiter) = match args.from {
+                Some(f) => (Format::from_str(f)?, None),
+                None => detect_format_from_content(&buf)?,
+            };
+            let auto_delimiter =
+                sniffed_delimiter.or_else(|| args.from.and_then(default_delimiter_for_format));
+            let options = FormatOptions {
+                delimiter: auto_delimiter,
+                ..Default::default()
+            };
+            read_value(&buf, source_format, &options)?
+        }
+    } else {
+        let source_format = match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(Path::new(args.input))?,
+        };
+        if source_format == Format::Msgpack {
+            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            MsgpackReader.read_from_bytes(&bytes)?
         } else {
-            super::read_file(Path::new(args.input))?
-        };
-        let auto_delimiter = if args.input == "-" {
-            args.from.and_then(default_delimiter_for_format)
-        } else {
-            default_delimiter(Path::new(args.input))
-        };
-        let options = FormatOptions {
-            delimiter: auto_delimiter,
-            ..Default::default()
-        };
-        read_value(&content, source_format, &options)?
+            let content = super::read_file(Path::new(args.input))?;
+            let auto_delimiter = default_delimiter(Path::new(args.input));
+            let options = FormatOptions {
+                delimiter: auto_delimiter,
+                ..Default::default()
+            };
+            read_value(&content, source_format, &options)?
+        }
     };
 
     let mut output = String::new();

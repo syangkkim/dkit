@@ -9,8 +9,8 @@ use crate::format::toml::TomlReader;
 use crate::format::xml::XmlReader;
 use crate::format::yaml::YamlReader;
 use crate::format::{
-    default_delimiter, default_delimiter_for_format, detect_format, Format, FormatOptions,
-    FormatReader,
+    default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
+    Format, FormatOptions, FormatReader,
 };
 use crate::value::Value;
 use anyhow::{bail, Context, Result};
@@ -243,71 +243,64 @@ fn format_decimal(n: f64) -> String {
 }
 
 fn read_input(args: &StatsArgs) -> Result<(String, Format)> {
-    if args.input == "-" {
-        let format = match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => bail!(
-                "--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"
-            ),
-        };
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .context("Failed to read from stdin")?;
-        Ok((buf, format))
-    } else {
-        let path = Path::new(args.input);
-        let format = match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => detect_format(path)?,
-        };
-        let content = super::read_file(path)?;
-        Ok((content, format))
-    }
+    let path = Path::new(args.input);
+    let format = match args.from {
+        Some(f) => Format::from_str(f)?,
+        None => detect_format(path)?,
+    };
+    let content = super::read_file(path)?;
+    Ok((content, format))
 }
 
 /// MessagePack 바이너리 입력을 처리하여 Value를 반환
 fn read_input_as_value(args: &StatsArgs) -> Result<(Value, Format)> {
-    let format = if args.input == "-" {
-        match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => bail!(
-                "--from is required when reading from stdin\n  Hint: specify the input format, e.g. --from json"
-            ),
-        }
-    } else {
-        match args.from {
-            Some(f) => Format::from_str(f)?,
-            None => detect_format(Path::new(args.input))?,
-        }
-    };
-
-    if format == Format::Msgpack {
-        let bytes = if args.input == "-" {
+    if args.input == "-" {
+        if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
             io::stdin()
                 .read_to_end(&mut buf)
                 .context("Failed to read from stdin")?;
-            buf
+            let value = MsgpackReader.read_from_bytes(&buf)?;
+            Ok((value, Format::Msgpack))
         } else {
-            super::read_file_bytes(Path::new(args.input))?
-        };
-        let value = MsgpackReader.read_from_bytes(&bytes)?;
-        Ok((value, format))
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .context("Failed to read from stdin")?;
+            let (format, sniffed_delimiter) = match args.from {
+                Some(f) => (Format::from_str(f)?, None),
+                None => detect_format_from_content(&buf)?,
+            };
+            let auto_delimiter =
+                sniffed_delimiter.or_else(|| args.from.and_then(default_delimiter_for_format));
+            let read_options = FormatOptions {
+                delimiter: args.delimiter.or(auto_delimiter),
+                no_header: args.no_header,
+                ..Default::default()
+            };
+            let value = read_value(&buf, format, &read_options)?;
+            Ok((value, format))
+        }
     } else {
-        let (content, format) = read_input(args)?;
-        let auto_delimiter = if args.input == "-" {
-            args.from.and_then(default_delimiter_for_format)
+        let format = match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(Path::new(args.input))?,
+        };
+        if format == Format::Msgpack {
+            let bytes = super::read_file_bytes(Path::new(args.input))?;
+            let value = MsgpackReader.read_from_bytes(&bytes)?;
+            Ok((value, format))
         } else {
-            default_delimiter(Path::new(args.input))
-        };
-        let read_options = FormatOptions {
-            delimiter: args.delimiter.or(auto_delimiter),
-            no_header: args.no_header,
-            ..Default::default()
-        };
-        let value = read_value(&content, format, &read_options)?;
-        Ok((value, format))
+            let (content, format) = read_input(args)?;
+            let auto_delimiter = default_delimiter(Path::new(args.input));
+            let read_options = FormatOptions {
+                delimiter: args.delimiter.or(auto_delimiter),
+                no_header: args.no_header,
+                ..Default::default()
+            };
+            let value = read_value(&content, format, &read_options)?;
+            Ok((value, format))
+        }
     }
 }
 
