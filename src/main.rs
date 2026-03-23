@@ -56,6 +56,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             compact,
             no_header,
             flow,
+            root_element,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -68,6 +69,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 compact,
                 no_header,
                 flow,
+                root_element,
             })?;
         }
         Commands::Query {

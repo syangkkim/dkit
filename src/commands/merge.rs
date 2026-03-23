@@ -78,6 +78,7 @@ pub fn run(args: &MergeArgs) -> Result<()> {
         },
         compact: args.compact,
         flow_style: args.flow,
+        root_element: None,
     };
 
     if target_format == Format::Msgpack {
@@ -180,7 +181,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Csv => CsvWriter::new(options.clone()).write(value),
         Format::Yaml => YamlWriter::new(options.clone()).write(value),
         Format::Toml => TomlWriter::new(options.clone()).write(value),
-        Format::Xml => XmlWriter::new(options.pretty).write(value),
+        Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
     }
 }
