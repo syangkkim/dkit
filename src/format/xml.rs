@@ -426,17 +426,24 @@ impl FormatReader for XmlReader {
 /// XML 포맷 Writer
 pub struct XmlWriter {
     pretty: bool,
+    root_element: String,
 }
 
 impl XmlWriter {
-    pub fn new(pretty: bool) -> Self {
-        Self { pretty }
+    pub fn new(pretty: bool, root_element: Option<String>) -> Self {
+        Self {
+            pretty,
+            root_element: root_element.unwrap_or_else(|| "root".to_string()),
+        }
     }
 }
 
 impl Default for XmlWriter {
     fn default() -> Self {
-        Self { pretty: true }
+        Self {
+            pretty: true,
+            root_element: "root".to_string(),
+        }
     }
 }
 
@@ -462,6 +469,7 @@ impl FormatWriter for XmlWriter {
             None,
         )))?;
 
+        let root_tag = &self.root_element;
         match value {
             Value::Object(map) => {
                 if map.len() == 1 {
@@ -469,8 +477,8 @@ impl FormatWriter for XmlWriter {
                     let (tag, val) = map.iter().next().unwrap();
                     write_element(&mut xml_writer, tag, val)?;
                 } else {
-                    // 여러 키 → <root>로 감싸기
-                    write_element(&mut xml_writer, "root", value)?;
+                    // 여러 키 → 루트 엘리먼트로 감싸기
+                    write_element(&mut xml_writer, root_tag, value)?;
                 }
             }
             Value::Array(_) => {
@@ -478,11 +486,11 @@ impl FormatWriter for XmlWriter {
                 let mut wrapper = IndexMap::new();
                 wrapper.insert("item".to_string(), value.clone());
                 let wrapped = Value::Object(wrapper);
-                write_element(&mut xml_writer, "root", &wrapped)?;
+                write_element(&mut xml_writer, root_tag, &wrapped)?;
             }
             _ => {
                 // 단순 값 → <root>value</root>
-                write_element(&mut xml_writer, "root", value)?;
+                write_element(&mut xml_writer, root_tag, value)?;
             }
         }
 
@@ -637,7 +645,7 @@ mod tests {
         inner.insert("version".to_string(), Value::Integer(1));
         map.insert("root".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         assert!(output.contains("<root>"));
         assert!(output.contains("<name>dkit</name>"));
@@ -653,7 +661,7 @@ mod tests {
         inner.insert("name".to_string(), Value::String("Alice".to_string()));
         map.insert("user".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         assert!(output.contains(r#"<user id="42">"#));
         assert!(output.contains("<name>Alice</name>"));
@@ -670,7 +678,7 @@ mod tests {
         inner.insert("item".to_string(), arr);
         map.insert("root".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         assert!(output.contains("<item>a</item>"));
         assert!(output.contains("<item>b</item>"));
@@ -683,7 +691,7 @@ mod tests {
         inner.insert("empty".to_string(), Value::Null);
         map.insert("root".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         assert!(output.contains("<empty/>"));
     }
@@ -695,14 +703,14 @@ mod tests {
         inner.insert("x".to_string(), Value::Integer(1));
         map.insert("root".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(true);
+        let writer = XmlWriter::new(true, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         assert!(output.contains('\n'));
     }
 
     #[test]
     fn test_write_primitive_root() {
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Integer(42)).unwrap();
         assert!(output.contains("<root>42</root>"));
     }
@@ -714,7 +722,7 @@ mod tests {
         inner.insert("flag".to_string(), Value::Bool(true));
         map.insert("root".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         assert!(output.contains("<flag>true</flag>"));
     }
@@ -725,7 +733,7 @@ mod tests {
     fn test_roundtrip_simple() {
         let xml = "<config><host>localhost</host><port>8080</port></config>";
         let value = XmlReader::default().read(xml).unwrap();
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&value).unwrap();
         let value2 = XmlReader::default().read(&output).unwrap();
         assert_eq!(value, value2);
@@ -735,7 +743,7 @@ mod tests {
     fn test_roundtrip_with_attributes() {
         let xml = r#"<server host="localhost" port="8080"><name>main</name></server>"#;
         let value = XmlReader::default().read(xml).unwrap();
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&value).unwrap();
         let value2 = XmlReader::default().read(&output).unwrap();
         assert_eq!(value, value2);
@@ -745,7 +753,7 @@ mod tests {
     fn test_roundtrip_nested() {
         let xml = "<root><a><b><c>deep</c></b></a></root>";
         let value = XmlReader::default().read(xml).unwrap();
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&value).unwrap();
         let value2 = XmlReader::default().read(&output).unwrap();
         assert_eq!(value, value2);
@@ -756,7 +764,7 @@ mod tests {
         let mut map = IndexMap::new();
         map.insert("root".to_string(), Value::String("hello".to_string()));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let mut buf = Vec::new();
         writer
             .write_to_writer(&Value::Object(map), &mut buf)
@@ -786,7 +794,7 @@ mod tests {
         );
         map.insert("root".to_string(), Value::Object(inner));
 
-        let writer = XmlWriter::new(false);
+        let writer = XmlWriter::new(false, None);
         let output = writer.write(&Value::Object(map)).unwrap();
         // quick-xml은 자동으로 이스케이프 처리
         assert!(output.contains("&lt;hello&gt;"));
@@ -908,5 +916,54 @@ mod tests {
             data,
             &Value::String("<script>alert('hi')</script>".to_string())
         );
+    }
+
+    // --- root_element 옵션 테스트 ---
+
+    #[test]
+    fn test_write_custom_root_element_multi_key() {
+        let mut map = IndexMap::new();
+        map.insert("name".to_string(), Value::String("dkit".to_string()));
+        map.insert("version".to_string(), Value::Integer(1));
+
+        let writer = XmlWriter::new(false, Some("config".to_string()));
+        let output = writer.write(&Value::Object(map)).unwrap();
+        assert!(output.contains("<config>"));
+        assert!(output.contains("</config>"));
+        assert!(!output.contains("<root>"));
+    }
+
+    #[test]
+    fn test_write_custom_root_element_array() {
+        let arr = Value::Array(vec![
+            Value::String("a".to_string()),
+            Value::String("b".to_string()),
+        ]);
+
+        let writer = XmlWriter::new(false, Some("items".to_string()));
+        let output = writer.write(&arr).unwrap();
+        assert!(output.contains("<items>"));
+        assert!(output.contains("</items>"));
+        assert!(!output.contains("<root>"));
+    }
+
+    #[test]
+    fn test_write_custom_root_element_primitive() {
+        let writer = XmlWriter::new(false, Some("value".to_string()));
+        let output = writer.write(&Value::Integer(42)).unwrap();
+        assert!(output.contains("<value>42</value>"));
+        assert!(!output.contains("<root>"));
+    }
+
+    #[test]
+    fn test_write_default_root_element() {
+        // 단일 키 Object는 root_element 설정과 무관하게 해당 키를 사용
+        let mut map = IndexMap::new();
+        map.insert("data".to_string(), Value::Integer(1));
+
+        let writer = XmlWriter::new(false, Some("custom".to_string()));
+        let output = writer.write(&Value::Object(map)).unwrap();
+        // 단일 키이므로 "data"를 루트로 사용
+        assert!(output.contains("<data>1</data>"));
     }
 }

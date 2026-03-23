@@ -161,7 +161,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         }
         Format::Yaml => YamlWriter::new(options.clone()).write(value),
         Format::Toml => TomlWriter::new(options.clone()).write(value),
-        Format::Xml => XmlWriter::new(options.pretty).write(value),
+        Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
     }
 }

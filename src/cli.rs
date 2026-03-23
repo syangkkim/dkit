@@ -61,6 +61,10 @@ pub enum Commands {
         /// Use YAML inline/flow style
         #[arg(long)]
         flow: bool,
+
+        /// XML root element name (default: "root")
+        #[arg(long, value_name = "NAME")]
+        root_element: Option<String>,
     },
 
     /// Query data using path expressions

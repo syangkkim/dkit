@@ -93,6 +93,8 @@ pub struct FormatOptions {
     pub compact: bool,
     /// YAML inline/flow 스타일
     pub flow_style: bool,
+    /// XML 루트 엘리먼트 이름 (기본: "root")
+    pub root_element: Option<String>,
 }
 
 impl Default for FormatOptions {
@@ -103,6 +105,7 @@ impl Default for FormatOptions {
             pretty: true,
             compact: false,
             flow_style: false,
+            root_element: None,
         }
     }
 }
@@ -279,5 +282,6 @@ mod tests {
         assert!(opts.pretty);
         assert!(!opts.compact);
         assert!(!opts.flow_style);
+        assert_eq!(opts.root_element, None);
     }
 }
