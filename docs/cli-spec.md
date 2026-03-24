@@ -368,7 +368,7 @@ dkit merge <INPUT...> [OPTIONS]
 
 ## diff
 
-두 데이터 파일 비교.
+두 데이터 파일의 구조적/값 차이를 비교.
 
 ### Usage
 
@@ -378,10 +378,17 @@ dkit diff <FILE1> <FILE2> [OPTIONS]
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
-| `--path <QUERY>` | 특정 경로만 비교 |
-| `--quiet` | 결과 텍스트 없이 종료 코드만 반환 (0=동일, 1=다름) |
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--path <QUERY>` | 특정 경로만 비교 | root |
+| `--quiet` | 결과 텍스트 없이 종료 코드만 반환 (0=동일, 1=다름) | false |
+| `--mode <MODE>` | 비교 모드: `structural` (추가/삭제/변경), `value` (값 변경만), `key` (키 존재만) | structural |
+| `--diff-format <FORMAT>` | 출력 포맷: `unified`, `side-by-side`, `json`, `summary` | unified |
+| `--array-diff <STRATEGY>` | 배열 비교 전략: `index` (위치), `value` (값), `key=<field>` (키 필드) | index |
+| `--ignore-order` | 배열 요소 순서 무시 | false |
+| `--ignore-case` | 문자열 대소문자 무시 | false |
+| `--encoding <ENCODING>` | 입력 파일 인코딩 | UTF-8 |
+| `--detect-encoding` | 인코딩 자동 감지 | false |
 
 ### Examples
 
@@ -391,4 +398,179 @@ dkit diff config_dev.yaml config_prod.yaml
 dkit diff data.json data.xml              # 크로스 포맷 비교
 dkit diff a.json b.json --path '.database'
 dkit diff a.json b.json --quiet && echo 'same' || echo 'different'
+
+# 비교 모드
+dkit diff a.json b.json --mode value          # 값 변경만 표시
+dkit diff a.json b.json --mode key            # 키 존재 여부만 표시
+
+# 출력 포맷
+dkit diff a.json b.json --diff-format json           # JSON 출력
+dkit diff a.json b.json --diff-format side-by-side    # 나란히 비교
+dkit diff a.json b.json --diff-format summary         # 요약만 표시
+
+# 배열 비교 전략
+dkit diff a.json b.json --array-diff value            # 값 기반 비교
+dkit diff a.json b.json --array-diff key=id           # id 필드 기준 매칭
+
+# 비교 옵션
+dkit diff a.json b.json --ignore-order                # 배열 순서 무시
+dkit diff a.json b.json --ignore-case                 # 대소문자 무시
+dkit diff a.json b.json --ignore-order --ignore-case  # 둘 다 무시
+```
+
+## validate
+
+JSON Schema를 사용한 데이터 검증.
+
+### Usage
+
+```bash
+dkit validate <INPUT> --schema <FILE> [OPTIONS]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--schema <FILE>` | JSON Schema 파일 경로 | 필수 |
+| `--from <FORMAT>` | 입력 포맷 (stdin 사용 시) | 확장자 자동 감지 |
+| `--quiet` | 상세 에러 숨기기 (valid/invalid만 출력) | false |
+| `--encoding <ENCODING>` | 입력 파일 인코딩 | UTF-8 |
+| `--detect-encoding` | 인코딩 자동 감지 | false |
+
+### Output
+
+검증 성공 시:
+```
+✓ Data is valid
+```
+
+검증 실패 시:
+```
+✗ Validation failed: 2 error(s)
+  error: at /age: "thirty" is not of type "integer"
+  error: at root: "email" is a required property
+```
+
+### Examples
+
+```bash
+dkit validate data.json --schema schema.json
+dkit validate data.yaml --schema schema.json
+dkit validate data.toml --schema schema.json
+dkit validate - --schema schema.json --from json < data.json
+dkit validate data.json --schema schema.json --quiet
+```
+
+## sample
+
+데이터에서 레코드를 샘플링.
+
+### Usage
+
+```bash
+dkit sample <INPUT> (-n <N> | --ratio <RATIO>) [OPTIONS]
+```
+
+### Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--count <N>` | `-n` | 샘플링할 레코드 수 | |
+| `--ratio <RATIO>` | | 샘플링 비율 (0.0~1.0) | |
+| `--seed <SEED>` | | 재현 가능한 랜덤 시드 | |
+| `--method <METHOD>` | | 샘플링 방법: `random`, `systematic`, `stratified` | random |
+| `--stratify-by <FIELD>` | | 층화 샘플링 기준 필드 (stratified 필수) | |
+| `--from <FORMAT>` | | 입력 포맷 | 확장자 자동 감지 |
+| `--format <FORMAT>` | `-f` | 출력 포맷 | 입력과 동일 |
+| `--output <FILE>` | `-o` | 출력 파일 | stdout |
+| `--pretty` | | 포맷팅된 출력 | false |
+
+### Examples
+
+```bash
+dkit sample data.csv -n 100                              # 100개 랜덤 샘플
+dkit sample data.json --ratio 0.1                        # 10% 샘플
+dkit sample data.csv -n 50 --seed 42                     # 재현 가능한 샘플
+dkit sample data.csv -n 100 --method systematic          # 체계적 샘플링
+dkit sample data.csv -n 50 --method stratified --stratify-by category  # 층화 샘플링
+dkit sample data.csv -n 100 -f json -o sample.json       # CSV → JSON 출력
+cat data.json | dkit sample - --from json -n 50          # stdin 입력
+```
+
+## flatten
+
+중첩 구조를 평탄화 (dot-notation 키로 변환).
+
+### Usage
+
+```bash
+dkit flatten <INPUT> [OPTIONS]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--separator <SEP>` | 키 구분자 | `.` |
+| `--array-format <FORMAT>` | 배열 인덱스 표기: `index` (items.0.name) 또는 `bracket` (items[0].name) | index |
+| `--max-depth <N>` | 최대 평탄화 깊이 | 무제한 |
+| `--from <FORMAT>` | 입력 포맷 | 확장자 자동 감지 |
+| `--format <FORMAT>` | 출력 포맷 | 입력과 동일 |
+| `--output <FILE>` | 출력 파일 | stdout |
+
+### Examples
+
+```bash
+dkit flatten data.json                                   # 기본 평탄화
+dkit flatten data.json --separator '/'                   # 구분자 변경
+dkit flatten data.json --array-format bracket            # 배열 브래킷 표기
+dkit flatten data.json --max-depth 2                     # 2단계까지만 평탄화
+dkit flatten data.json -f yaml -o flat.yaml              # YAML 출력
+cat data.json | dkit flatten - --from json               # stdin 입력
+```
+
+### Output
+
+입력:
+```json
+{"server": {"host": "localhost", "port": 8080}, "users": [{"name": "Alice"}]}
+```
+
+출력 (index format):
+```json
+{"server.host": "localhost", "server.port": 8080, "users.0.name": "Alice"}
+```
+
+출력 (bracket format):
+```json
+{"server.host": "localhost", "server.port": 8080, "users[0].name": "Alice"}
+```
+
+## unflatten
+
+평탄화된 키를 다시 중첩 구조로 복원.
+
+### Usage
+
+```bash
+dkit unflatten <INPUT> [OPTIONS]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--separator <SEP>` | 키 구분자 | `.` |
+| `--from <FORMAT>` | 입력 포맷 | 확장자 자동 감지 |
+| `--format <FORMAT>` | 출력 포맷 | 입력과 동일 |
+| `--output <FILE>` | 출력 파일 | stdout |
+
+### Examples
+
+```bash
+dkit unflatten flat.json                                 # 기본 복원
+dkit unflatten flat.json --separator '/'                 # 구분자 지정
+dkit unflatten flat.json -f yaml -o nested.yaml          # YAML 출력
+cat flat.json | dkit unflatten - --from json              # stdin 입력
 ```
