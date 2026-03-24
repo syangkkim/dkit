@@ -2,8 +2,8 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use super::{
-    read_file_bytes, read_file_with_encoding, read_sqlite_from_path, read_xlsx_from_bytes,
-    EncodingOptions, ExcelOptions, SqliteOptions,
+    read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
+    read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
@@ -62,6 +62,9 @@ pub fn run(args: &SchemaArgs) -> Result<()> {
             read_xlsx_from_bytes(&bytes, &args.excel_opts)?
         } else if source_format == Format::Sqlite {
             read_sqlite_from_path(Path::new(args.input), &args.sqlite_opts)?
+        } else if source_format == Format::Parquet {
+            let bytes = read_file_bytes(Path::new(args.input))?;
+            read_parquet_from_bytes(&bytes)?
         } else {
             let content = read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?;
             let auto_delimiter = default_delimiter(Path::new(args.input));
@@ -233,6 +236,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         }
         Format::Sqlite => {
             bail!("SQLite files must be read from a file path, not from text input")
+        }
+        Format::Parquet => {
+            bail!("Parquet files must be read from a file path, not from text input")
         }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),

@@ -120,6 +120,12 @@ pub fn list_sqlite_tables(path: &std::path::Path) -> anyhow::Result<Vec<String>>
     crate::format::sqlite::SqliteReader::list_tables(path)
 }
 
+/// Parquet 파일을 바이트에서 Value로 읽는다.
+pub fn read_parquet_from_bytes(bytes: &[u8]) -> anyhow::Result<crate::value::Value> {
+    use crate::format::parquet::{ParquetOptions, ParquetReader};
+    ParquetReader::new(ParquetOptions::default()).read_from_bytes(bytes)
+}
+
 /// 인코딩을 고려하여 파일을 읽는다.
 ///
 /// 동작 우선순위:

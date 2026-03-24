@@ -4,8 +4,8 @@ use anyhow::{bail, Result};
 use colored::Colorize;
 
 use super::{
-    read_file_bytes, read_file_with_encoding, read_sqlite_from_path, read_xlsx_from_bytes,
-    EncodingOptions, ExcelOptions, SqliteOptions,
+    read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
+    read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
@@ -93,6 +93,9 @@ fn read_value_from_path(
         read_xlsx_from_bytes(&bytes, excel_opts)
     } else if format == Format::Sqlite {
         read_sqlite_from_path(path, sqlite_opts)
+    } else if format == Format::Parquet {
+        let bytes = read_file_bytes(path)?;
+        read_parquet_from_bytes(&bytes)
     } else {
         let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, &options)
@@ -113,6 +116,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         }
         Format::Sqlite => {
             bail!("SQLite files must be read from a file path, not from text input")
+        }
+        Format::Parquet => {
+            bail!("Parquet files must be read from a file path, not from text input")
         }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
