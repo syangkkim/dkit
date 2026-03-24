@@ -49,6 +49,31 @@ pub enum Operation {
     Max { field: String },
     /// `distinct field` 고유값 목록
     Distinct { field: String },
+    /// `group_by field1, field2` 그룹별 집계
+    /// 집계 연산: `group_by category | select category, count, sum_price`
+    GroupBy {
+        fields: Vec<String>,
+        having: Option<Condition>,
+        aggregates: Vec<GroupAggregate>,
+    },
+}
+
+/// GROUP BY 집계 연산 정의
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupAggregate {
+    pub func: AggregateFunc,
+    pub field: Option<String>,
+    pub alias: String,
+}
+
+/// 집계 함수 종류
+#[derive(Debug, Clone, PartialEq)]
+pub enum AggregateFunc {
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max,
 }
 
 /// 조건식 (where 절)
@@ -302,12 +327,118 @@ impl Parser {
                 let field = self.parse_identifier()?;
                 Ok(Operation::Distinct { field })
             }
+            "group_by" => {
+                self.skip_whitespace();
+                let fields = self.parse_identifier_list()?;
+                self.skip_whitespace();
+
+                // Parse optional aggregate functions
+                let aggregates = self.parse_group_aggregates()?;
+
+                // Parse optional HAVING clause
+                let having = if self.try_consume_keyword("having") {
+                    self.skip_whitespace();
+                    Some(self.parse_condition()?)
+                } else {
+                    None
+                };
+
+                Ok(Operation::GroupBy {
+                    fields,
+                    having,
+                    aggregates,
+                })
+            }
             _ => Err(DkitError::QueryError(format!(
                 "unknown operation '{}' at position {}",
                 keyword,
                 self.pos - keyword.len()
             ))),
         }
+    }
+
+    /// GROUP BY 집계 함수 목록 파싱: `count(), sum(field), avg(field), ...`
+    fn parse_group_aggregates(&mut self) -> Result<Vec<GroupAggregate>, DkitError> {
+        let mut aggregates = Vec::new();
+
+        loop {
+            let saved_pos = self.pos;
+            if let Some(agg) = self.try_parse_single_aggregate()? {
+                aggregates.push(agg);
+                self.skip_whitespace();
+                if !self.consume_char(',') {
+                    // No comma, check if next is "having" or end
+                    break;
+                }
+                self.skip_whitespace();
+            } else {
+                self.pos = saved_pos;
+                break;
+            }
+        }
+
+        Ok(aggregates)
+    }
+
+    /// 단일 집계 함수 파싱: `count()`, `sum(field)`, `avg(field)` 등
+    fn try_parse_single_aggregate(&mut self) -> Result<Option<GroupAggregate>, DkitError> {
+        let saved_pos = self.pos;
+
+        // Try to read a keyword
+        let func_name = match self.parse_keyword() {
+            Ok(name) => name,
+            Err(_) => {
+                self.pos = saved_pos;
+                return Ok(None);
+            }
+        };
+
+        let func = match func_name.as_str() {
+            "count" => AggregateFunc::Count,
+            "sum" => AggregateFunc::Sum,
+            "avg" => AggregateFunc::Avg,
+            "min" => AggregateFunc::Min,
+            "max" => AggregateFunc::Max,
+            _ => {
+                // Not an aggregate function, restore position
+                self.pos = saved_pos;
+                return Ok(None);
+            }
+        };
+
+        self.skip_whitespace();
+
+        // Must have '('
+        if !self.consume_char('(') {
+            self.pos = saved_pos;
+            return Ok(None);
+        }
+
+        self.skip_whitespace();
+
+        // Parse optional field name
+        let field = if self.peek() == Some(')') {
+            None
+        } else {
+            Some(self.parse_identifier()?)
+        };
+
+        self.skip_whitespace();
+
+        if !self.consume_char(')') {
+            return Err(DkitError::QueryError(format!(
+                "expected ')' at position {}",
+                self.pos
+            )));
+        }
+
+        // Generate alias
+        let alias = match &field {
+            Some(f) => format!("{}_{}", func_name, f),
+            None => func_name.clone(),
+        };
+
+        Ok(Some(GroupAggregate { func, field, alias }))
     }
 
     /// 쉼표로 구분된 식별자 목록 파싱: `IDENTIFIER ( "," IDENTIFIER )*`
@@ -1387,5 +1518,99 @@ mod tests {
                 descending: false,
             }
         );
+    }
+
+    #[test]
+    fn test_group_by_single_field() {
+        let q = parse_query(".[] | group_by category").unwrap();
+        assert_eq!(q.operations.len(), 1);
+        match &q.operations[0] {
+            Operation::GroupBy {
+                fields,
+                having,
+                aggregates,
+            } => {
+                assert_eq!(fields, &vec!["category".to_string()]);
+                assert!(having.is_none());
+                assert!(aggregates.is_empty());
+            }
+            _ => panic!("expected GroupBy"),
+        }
+    }
+
+    #[test]
+    fn test_group_by_multiple_fields() {
+        let q = parse_query(".[] | group_by region, category").unwrap();
+        match &q.operations[0] {
+            Operation::GroupBy { fields, .. } => {
+                assert_eq!(fields, &vec!["region".to_string(), "category".to_string()]);
+            }
+            _ => panic!("expected GroupBy"),
+        }
+    }
+
+    #[test]
+    fn test_group_by_with_aggregates() {
+        let q = parse_query(".[] | group_by category count(), sum(price), avg(score)").unwrap();
+        match &q.operations[0] {
+            Operation::GroupBy { aggregates, .. } => {
+                assert_eq!(aggregates.len(), 3);
+                assert_eq!(aggregates[0].func, AggregateFunc::Count);
+                assert_eq!(aggregates[0].field, None);
+                assert_eq!(aggregates[0].alias, "count");
+                assert_eq!(aggregates[1].func, AggregateFunc::Sum);
+                assert_eq!(aggregates[1].field, Some("price".to_string()));
+                assert_eq!(aggregates[1].alias, "sum_price");
+                assert_eq!(aggregates[2].func, AggregateFunc::Avg);
+                assert_eq!(aggregates[2].field, Some("score".to_string()));
+                assert_eq!(aggregates[2].alias, "avg_score");
+            }
+            _ => panic!("expected GroupBy"),
+        }
+    }
+
+    #[test]
+    fn test_group_by_with_having() {
+        let q = parse_query(".[] | group_by category count() having count > 5").unwrap();
+        match &q.operations[0] {
+            Operation::GroupBy {
+                fields,
+                having,
+                aggregates,
+            } => {
+                assert_eq!(fields, &vec!["category".to_string()]);
+                assert!(having.is_some());
+                assert_eq!(aggregates.len(), 1);
+            }
+            _ => panic!("expected GroupBy"),
+        }
+    }
+
+    #[test]
+    fn test_group_by_with_min_max() {
+        let q = parse_query(".[] | group_by category min(price), max(price)").unwrap();
+        match &q.operations[0] {
+            Operation::GroupBy { aggregates, .. } => {
+                assert_eq!(aggregates.len(), 2);
+                assert_eq!(aggregates[0].func, AggregateFunc::Min);
+                assert_eq!(aggregates[1].func, AggregateFunc::Max);
+            }
+            _ => panic!("expected GroupBy"),
+        }
+    }
+
+    #[test]
+    fn test_group_by_pipeline() {
+        let q = parse_query(".[] | group_by category count() | sort count desc | limit 5").unwrap();
+        assert_eq!(q.operations.len(), 3);
+        assert!(matches!(&q.operations[0], Operation::GroupBy { .. }));
+        assert!(matches!(
+            &q.operations[1],
+            Operation::Sort {
+                descending: true,
+                ..
+            }
+        ));
+        assert_eq!(q.operations[2], Operation::Limit(5));
     }
 }

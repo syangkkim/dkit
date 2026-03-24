@@ -147,6 +147,67 @@ dkit query data.json '.users[] | where age > 30 | count'
 dkit query data.json '.users[] | where active == true | avg score'
 ```
 
+## group_by — Grouping and Aggregation
+
+배열 데이터를 지정된 필드 기준으로 그룹화하고, 각 그룹에 대해 집계를 수행한다.
+
+### 기본 사용법
+
+```bash
+# 단일 필드 그룹화 (기본: count 포함)
+dkit query data.csv '.[] | group_by category'
+
+# 다중 필드 그룹화
+dkit query data.csv '.[] | group_by region, category'
+```
+
+### 집계 함수 조합
+
+`group_by` 뒤에 집계 함수를 지정한다. 함수 형식: `func()` 또는 `func(field)`.
+
+```bash
+# 카테고리별 개수, 합계, 평균
+dkit query data.csv '.[] | group_by category count(), sum(price), avg(price)'
+
+# 지역별 최솟값, 최댓값
+dkit query data.csv '.[] | group_by region min(price), max(price)'
+```
+
+지원되는 집계 함수:
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `count()` | 그룹 내 요소 수 | `count()` |
+| `count(field)` | 비null 필드 수 | `count(email)` |
+| `sum(field)` | 숫자 필드 합계 | `sum(price)` |
+| `avg(field)` | 숫자 필드 평균 | `avg(score)` |
+| `min(field)` | 최솟값 | `min(price)` |
+| `max(field)` | 최댓값 | `max(price)` |
+
+### HAVING — 그룹 필터링
+
+집계 결과를 기준으로 그룹을 필터링한다.
+
+```bash
+# 2개 이상인 그룹만 표시
+dkit query data.csv '.[] | group_by category count() having count > 1'
+
+# 평균 가격이 100 이상인 그룹만
+dkit query data.csv '.[] | group_by category count(), avg(price) having avg_price >= 100'
+```
+
+### 후속 파이프라인 조합
+
+GROUP BY 결과에 sort, limit 등을 추가로 적용할 수 있다.
+
+```bash
+# 카테고리별 개수를 내림차순 정렬, 상위 5개
+dkit query data.csv '.[] | group_by category count() | sort count desc | limit 5'
+
+# 그룹 결과에서 특정 필드만 선택
+dkit query data.csv '.[] | group_by category count(), sum(price) | select category, count'
+```
+
 ## Combined Examples
 
 ```bash
@@ -175,6 +236,7 @@ iterate     = "[" "]"
 
 operation   = where_op | select_op | sort_op | limit_op
             | count_op | sum_op | avg_op | min_op | max_op | distinct_op
+            | group_by_op
 where_op    = "where" condition
 select_op   = "select" IDENTIFIER ( "," IDENTIFIER )*
 sort_op     = "sort" IDENTIFIER [ "desc" ]
@@ -185,6 +247,9 @@ avg_op      = "avg" IDENTIFIER
 min_op      = "min" IDENTIFIER
 max_op      = "max" IDENTIFIER
 distinct_op = "distinct" IDENTIFIER
+group_by_op = "group_by" IDENTIFIER ( "," IDENTIFIER )* aggregate* [ "having" condition ]
+aggregate   = agg_func "(" [ IDENTIFIER ] ")"
+agg_func    = "count" | "sum" | "avg" | "min" | "max"
 
 condition   = comparison ( logic_op comparison )*
 comparison  = IDENTIFIER compare_op value
