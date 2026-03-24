@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-24
+
+### Added
+
+- **diff subcommand enhancements**: Structural comparison modes (`--mode structural|value|key`), multiple output formats (`--diff-format unified|side-by-side|json|summary`), array diff strategies (`--array-diff index|value|key=<field>`), `--ignore-order`, `--ignore-case` options, and script-friendly exit codes. (#100)
+- **validate subcommand**: JSON Schema Draft 7 validation via `jsonschema` crate. Validates any supported format by converting to Value internally. Multi-error collection, `--quiet` mode, and exit code 0/1 for valid/invalid. (#101)
+- **stats subcommand extensions**: Per-field detailed statistics — numeric fields get std/percentiles, string fields get length stats/unique counts/top values, null ratio calculation, type consistency checks, `--histogram` for text-based histograms. (#102)
+- **sample subcommand**: Data sampling with `--method random|systematic|stratified`, count (`-n`) or ratio (`--ratio`), reproducible `--seed`, and stratified sampling via `--stratify-by`. (#103)
+- **flatten/unflatten subcommands**: Flatten nested JSON structures (`{"a":{"b":1}}` → `{"a.b":1}`) and restore. Configurable separator (`--separator`), array format (`--array-format index|bracket`), and max depth (`--max-depth`). (#104)
+
+### Testing & Docs
+
+- **Comprehensive v0.8.0 integration tests**: End-to-end tests for diff enhancements, validate, stats extensions, sample, and flatten/unflatten. README and docs updated. (#105)
+
 ## [0.7.0] - 2026-03-24
 
 ### Added
@@ -105,6 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[0.8.0]: https://github.com/syangkkim/dkit/releases/tag/v0.8.0
 [0.7.0]: https://github.com/syangkkim/dkit/releases/tag/v0.7.0
 [0.6.0]: https://github.com/syangkkim/dkit/releases/tag/v0.6.0
 [0.5.0]: https://github.com/syangkkim/dkit/releases/tag/v0.5.0
