@@ -1,6 +1,8 @@
 use crate::error::DkitError;
+use crate::query::functions::{evaluate_expr, expr_default_key};
 use crate::query::parser::{
     AggregateFunc, CompareOp, Comparison, Condition, GroupAggregate, LiteralValue, Operation,
+    SelectExpr,
 };
 use crate::value::Value;
 use indexmap::IndexMap;
@@ -51,17 +53,17 @@ fn apply_where(value: Value, condition: &Condition) -> Result<Value, DkitError> 
     }
 }
 
-/// select 절: 배열의 각 요소에서 지정된 필드만 추출
-fn apply_select(value: Value, fields: &[String]) -> Result<Value, DkitError> {
+/// select 절: 배열의 각 요소에 표현식을 적용하여 새 객체를 생성
+fn apply_select(value: Value, exprs: &[SelectExpr]) -> Result<Value, DkitError> {
     match value {
         Value::Array(arr) => {
-            let projected: Vec<Value> = arr
+            let projected: Result<Vec<Value>, DkitError> = arr
                 .into_iter()
-                .map(|item| select_fields(item, fields))
+                .map(|item| select_exprs(&item, exprs))
                 .collect();
-            Ok(Value::Array(projected))
+            Ok(Value::Array(projected?))
         }
-        Value::Object(_) => Ok(select_fields(value, fields)),
+        Value::Object(_) => select_exprs(&value, exprs),
         _ => Err(DkitError::QueryError(
             "select clause requires an array or object input".to_string(),
         )),
@@ -616,18 +618,29 @@ fn compute_group_aggregate(
 }
 
 /// 오브젝트에서 지정된 필드만 추출
-fn select_fields(value: Value, fields: &[String]) -> Value {
+/// 단일 레코드에 SelectExpr 목록을 적용하여 새 객체를 반환
+fn select_exprs(value: &Value, exprs: &[SelectExpr]) -> Result<Value, DkitError> {
+    use crate::query::parser::Expr;
     match value {
         Value::Object(map) => {
-            let mut new_map = indexmap::IndexMap::new();
-            for field in fields {
-                if let Some(v) = map.get(field) {
-                    new_map.insert(field.clone(), v.clone());
+            let mut new_map = IndexMap::new();
+            for se in exprs {
+                // 단순 필드 참조이고 필드가 없으면 기존 동작대로 스킵
+                if let Expr::Field(fname) = &se.expr {
+                    if se.alias.is_none() && !map.contains_key(fname) {
+                        continue;
+                    }
                 }
+                let val = evaluate_expr(value, &se.expr)?;
+                let key = se
+                    .alias
+                    .clone()
+                    .unwrap_or_else(|| expr_default_key(&se.expr));
+                new_map.insert(key, val);
             }
-            Value::Object(new_map)
+            Ok(Value::Object(new_map))
         }
-        _ => value,
+        _ => Ok(value.clone()),
     }
 }
 
@@ -1185,10 +1198,21 @@ mod tests {
 
     // --- select 절 ---
 
+    fn sel_fields(names: &[&str]) -> Vec<SelectExpr> {
+        use crate::query::parser::Expr;
+        names
+            .iter()
+            .map(|n| SelectExpr {
+                expr: Expr::Field(n.to_string()),
+                alias: None,
+            })
+            .collect()
+    }
+
     #[test]
     fn test_select_single_field() {
         let data = sample_users();
-        let result = apply_select(data, &["name".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["name"])).unwrap();
         let arr = result.as_array().unwrap();
         assert_eq!(arr.len(), 3);
         // 각 요소에 name만 있어야 함
@@ -1202,7 +1226,7 @@ mod tests {
     #[test]
     fn test_select_multiple_fields() {
         let data = sample_users();
-        let result = apply_select(data, &["name".to_string(), "age".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["name", "age"])).unwrap();
         let arr = result.as_array().unwrap();
         assert_eq!(arr.len(), 3);
         for item in arr {
@@ -1216,7 +1240,7 @@ mod tests {
     #[test]
     fn test_select_preserves_order() {
         let data = sample_users();
-        let result = apply_select(data, &["city".to_string(), "name".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["city", "name"])).unwrap();
         let arr = result.as_array().unwrap();
         let obj = arr[0].as_object().unwrap();
         let keys: Vec<&String> = obj.keys().collect();
@@ -1226,7 +1250,7 @@ mod tests {
     #[test]
     fn test_select_missing_field_skipped() {
         let data = sample_users();
-        let result = apply_select(data, &["name".to_string(), "nonexistent".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["name", "nonexistent"])).unwrap();
         let arr = result.as_array().unwrap();
         for item in arr {
             let obj = item.as_object().unwrap();
@@ -1243,7 +1267,7 @@ mod tests {
         m.insert("city".to_string(), Value::String("Seoul".to_string()));
         let data = Value::Object(m);
 
-        let result = apply_select(data, &["name".to_string(), "city".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["name", "city"])).unwrap();
         let obj = result.as_object().unwrap();
         assert_eq!(obj.len(), 2);
         assert!(obj.contains_key("name"));
@@ -1254,7 +1278,7 @@ mod tests {
     fn test_select_on_non_object_array() {
         // 배열 안에 비-오브젝트 요소는 그대로 반환
         let data = Value::Array(vec![Value::Integer(1), Value::Integer(2)]);
-        let result = apply_select(data, &["name".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["name"])).unwrap();
         let arr = result.as_array().unwrap();
         assert_eq!(arr[0], Value::Integer(1));
     }
@@ -1262,15 +1286,51 @@ mod tests {
     #[test]
     fn test_select_on_non_array_non_object_error() {
         let data = Value::Integer(42);
-        let result = apply_select(data, &["name".to_string()]);
+        let result = apply_select(data, &sel_fields(&["name"]));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_select_empty_array() {
         let data = Value::Array(vec![]);
-        let result = apply_select(data, &["name".to_string()]).unwrap();
+        let result = apply_select(data, &sel_fields(&["name"])).unwrap();
         assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_select_with_function() {
+        use crate::query::parser::Expr;
+        let data = sample_users();
+        let exprs = vec![SelectExpr {
+            expr: Expr::FuncCall {
+                name: "upper".to_string(),
+                args: vec![Expr::Field("name".to_string())],
+            },
+            alias: None,
+        }];
+        let result = apply_select(data, &exprs).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        let obj = arr[0].as_object().unwrap();
+        assert!(obj.contains_key("upper_name"));
+        assert_eq!(obj["upper_name"], Value::String("ALICE".to_string()));
+    }
+
+    #[test]
+    fn test_select_with_alias() {
+        use crate::query::parser::Expr;
+        let data = sample_users();
+        let exprs = vec![SelectExpr {
+            expr: Expr::FuncCall {
+                name: "upper".to_string(),
+                args: vec![Expr::Field("name".to_string())],
+            },
+            alias: Some("NAME".to_string()),
+        }];
+        let result = apply_select(data, &exprs).unwrap();
+        let arr = result.as_array().unwrap();
+        let obj = arr[0].as_object().unwrap();
+        assert!(obj.contains_key("NAME"));
     }
 
     // --- 통합: where + select ---

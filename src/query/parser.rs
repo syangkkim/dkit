@@ -31,8 +31,8 @@ pub enum Segment {
 pub enum Operation {
     /// `where` 필터링
     Where(Condition),
-    /// `select` 컬럼 선택: `select name, email`
-    Select(Vec<String>),
+    /// `select` 컬럼 선택: `select name, upper(name), round(price, 2)`
+    Select(Vec<SelectExpr>),
     /// `sort` 정렬: `sort age` (오름차순) / `sort age desc` (내림차순)
     Sort { field: String, descending: bool },
     /// `limit` 결과 제한: `limit 10`
@@ -117,6 +117,25 @@ pub enum LiteralValue {
     Float(f64),
     Bool(bool),
     Null,
+}
+
+/// 표현식 (select 절 등에서 사용)
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    /// 필드 참조: `name`
+    Field(String),
+    /// 리터럴 값: `42`, `"hello"`, `true`
+    Literal(LiteralValue),
+    /// 함수 호출: `upper(name)`, `round(price, 2)`, `upper(trim(name))`
+    FuncCall { name: String, args: Vec<Expr> },
+}
+
+/// SELECT 절의 컬럼 표현식
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectExpr {
+    pub expr: Expr,
+    /// 출력 키 별칭 (`upper(name) as name_upper` 에서 `name_upper`)
+    pub alias: Option<String>,
 }
 
 /// 쿼리 문자열을 파싱하는 파서
@@ -282,8 +301,8 @@ impl Parser {
             }
             "select" => {
                 self.skip_whitespace();
-                let fields = self.parse_identifier_list()?;
-                Ok(Operation::Select(fields))
+                let exprs = self.parse_select_expr_list()?;
+                Ok(Operation::Select(exprs))
             }
             "sort" => {
                 self.skip_whitespace();
@@ -439,6 +458,104 @@ impl Parser {
         };
 
         Ok(Some(GroupAggregate { func, field, alias }))
+    }
+
+    /// SELECT 절의 표현식 목록 파싱: `expr [as alias] ( "," expr [as alias] )*`
+    fn parse_select_expr_list(&mut self) -> Result<Vec<SelectExpr>, DkitError> {
+        let mut exprs = vec![self.parse_select_expr()?];
+        loop {
+            self.skip_whitespace();
+            if self.consume_char(',') {
+                self.skip_whitespace();
+                exprs.push(self.parse_select_expr()?);
+            } else {
+                break;
+            }
+        }
+        Ok(exprs)
+    }
+
+    /// 단일 SELECT 표현식 파싱: `expr [as alias]`
+    fn parse_select_expr(&mut self) -> Result<SelectExpr, DkitError> {
+        let expr = self.parse_expr()?;
+        self.skip_whitespace();
+        // Optional alias: `as alias_name`
+        let alias = {
+            let saved = self.pos;
+            if let Ok(keyword) = self.parse_keyword() {
+                if keyword == "as" {
+                    self.skip_whitespace();
+                    Some(self.parse_identifier()?)
+                } else {
+                    self.pos = saved;
+                    None
+                }
+            } else {
+                self.pos = saved;
+                None
+            }
+        };
+        Ok(SelectExpr { expr, alias })
+    }
+
+    /// 표현식 파싱: 필드 참조, 리터럴, 함수 호출
+    fn parse_expr(&mut self) -> Result<Expr, DkitError> {
+        match self.peek() {
+            Some('"') => {
+                let lit = self.parse_string_literal()?;
+                Ok(Expr::Literal(lit))
+            }
+            Some(c) if c.is_ascii_digit() => {
+                let lit = self.parse_number_literal()?;
+                Ok(Expr::Literal(lit))
+            }
+            Some(c) if c.is_alphabetic() || c == '_' => {
+                let name = self.parse_identifier()?;
+                // Check for bool/null literals
+                match name.as_str() {
+                    "true" => return Ok(Expr::Literal(LiteralValue::Bool(true))),
+                    "false" => return Ok(Expr::Literal(LiteralValue::Bool(false))),
+                    "null" => return Ok(Expr::Literal(LiteralValue::Null)),
+                    _ => {}
+                }
+                // Check for function call: name(...)
+                if self.peek() == Some('(') {
+                    self.advance(); // consume '('
+                    self.skip_whitespace();
+                    let mut args = Vec::new();
+                    if self.peek() != Some(')') {
+                        args.push(self.parse_expr()?);
+                        loop {
+                            self.skip_whitespace();
+                            if self.consume_char(',') {
+                                self.skip_whitespace();
+                                args.push(self.parse_expr()?);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    self.skip_whitespace();
+                    if !self.consume_char(')') {
+                        return Err(DkitError::QueryError(format!(
+                            "expected ')' at position {}",
+                            self.pos
+                        )));
+                    }
+                    Ok(Expr::FuncCall { name, args })
+                } else {
+                    Ok(Expr::Field(name))
+                }
+            }
+            Some(c) => Err(DkitError::QueryError(format!(
+                "expected expression at position {}, found '{}'",
+                self.pos, c
+            ))),
+            None => Err(DkitError::QueryError(format!(
+                "expected expression at position {}",
+                self.pos
+            ))),
+        }
     }
 
     /// 쉼표로 구분된 식별자 목록 파싱: `IDENTIFIER ( "," IDENTIFIER )*`
@@ -1309,60 +1426,52 @@ mod tests {
 
     // --- select 절 파싱 ---
 
+    fn field(name: &str) -> SelectExpr {
+        SelectExpr {
+            expr: Expr::Field(name.to_string()),
+            alias: None,
+        }
+    }
+
+    fn fields(names: &[&str]) -> Operation {
+        Operation::Select(names.iter().map(|n| field(n)).collect())
+    }
+
     #[test]
     fn test_select_single_field() {
         let q = parse_query(".users[] | select name").unwrap();
         assert_eq!(q.operations.len(), 1);
-        assert_eq!(q.operations[0], Operation::Select(vec!["name".to_string()]));
+        assert_eq!(q.operations[0], fields(&["name"]));
     }
 
     #[test]
     fn test_select_multiple_fields() {
         let q = parse_query(".users[] | select name, email").unwrap();
-        assert_eq!(
-            q.operations[0],
-            Operation::Select(vec!["name".to_string(), "email".to_string()])
-        );
+        assert_eq!(q.operations[0], fields(&["name", "email"]));
     }
 
     #[test]
     fn test_select_three_fields() {
         let q = parse_query(".users[] | select name, age, email").unwrap();
-        assert_eq!(
-            q.operations[0],
-            Operation::Select(vec![
-                "name".to_string(),
-                "age".to_string(),
-                "email".to_string(),
-            ])
-        );
+        assert_eq!(q.operations[0], fields(&["name", "age", "email"]));
     }
 
     #[test]
     fn test_select_with_extra_whitespace() {
         let q = parse_query(".[]  |  select  name ,  email  ").unwrap();
-        assert_eq!(
-            q.operations[0],
-            Operation::Select(vec!["name".to_string(), "email".to_string()])
-        );
+        assert_eq!(q.operations[0], fields(&["name", "email"]));
     }
 
     #[test]
     fn test_select_field_with_underscore() {
         let q = parse_query(".[] | select user_name, created_at").unwrap();
-        assert_eq!(
-            q.operations[0],
-            Operation::Select(vec!["user_name".to_string(), "created_at".to_string()])
-        );
+        assert_eq!(q.operations[0], fields(&["user_name", "created_at"]));
     }
 
     #[test]
     fn test_select_field_with_hyphen() {
         let q = parse_query(".[] | select content-type").unwrap();
-        assert_eq!(
-            q.operations[0],
-            Operation::Select(vec!["content-type".to_string()])
-        );
+        assert_eq!(q.operations[0], fields(&["content-type"]));
     }
 
     #[test]
@@ -1370,16 +1479,97 @@ mod tests {
         let q = parse_query(".users[] | where age > 30 | select name, email").unwrap();
         assert_eq!(q.operations.len(), 2);
         assert!(matches!(&q.operations[0], Operation::Where(_)));
-        assert_eq!(
-            q.operations[1],
-            Operation::Select(vec!["name".to_string(), "email".to_string()])
-        );
+        assert_eq!(q.operations[1], fields(&["name", "email"]));
     }
 
     #[test]
     fn test_error_select_missing_fields() {
         let err = parse_query(".[] | select").unwrap_err();
         assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_select_func_single() {
+        let q = parse_query(".[] | select upper(name)").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec![SelectExpr {
+                expr: Expr::FuncCall {
+                    name: "upper".to_string(),
+                    args: vec![Expr::Field("name".to_string())],
+                },
+                alias: None,
+            }])
+        );
+    }
+
+    #[test]
+    fn test_select_func_with_alias() {
+        let q = parse_query(".[] | select upper(name) as NAME").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec![SelectExpr {
+                expr: Expr::FuncCall {
+                    name: "upper".to_string(),
+                    args: vec![Expr::Field("name".to_string())],
+                },
+                alias: Some("NAME".to_string()),
+            }])
+        );
+    }
+
+    #[test]
+    fn test_select_func_nested() {
+        let q = parse_query(".[] | select upper(trim(name))").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec![SelectExpr {
+                expr: Expr::FuncCall {
+                    name: "upper".to_string(),
+                    args: vec![Expr::FuncCall {
+                        name: "trim".to_string(),
+                        args: vec![Expr::Field("name".to_string())],
+                    }],
+                },
+                alias: None,
+            }])
+        );
+    }
+
+    #[test]
+    fn test_select_func_with_literal_arg() {
+        let q = parse_query(".[] | select round(price, 2)").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec![SelectExpr {
+                expr: Expr::FuncCall {
+                    name: "round".to_string(),
+                    args: vec![
+                        Expr::Field("price".to_string()),
+                        Expr::Literal(LiteralValue::Integer(2)),
+                    ],
+                },
+                alias: None,
+            }])
+        );
+    }
+
+    #[test]
+    fn test_select_mixed_fields_and_funcs() {
+        let q = parse_query(".[] | select name, upper(city)").unwrap();
+        assert_eq!(
+            q.operations[0],
+            Operation::Select(vec![
+                field("name"),
+                SelectExpr {
+                    expr: Expr::FuncCall {
+                        name: "upper".to_string(),
+                        args: vec![Expr::Field("city".to_string())],
+                    },
+                    alias: None,
+                }
+            ])
+        );
     }
 
     // --- sort 절 파싱 ---
@@ -1507,10 +1697,7 @@ mod tests {
         let q = parse_query(".users[] | where age > 30 | select name, email | sort name").unwrap();
         assert_eq!(q.operations.len(), 3);
         assert!(matches!(&q.operations[0], Operation::Where(_)));
-        assert_eq!(
-            q.operations[1],
-            Operation::Select(vec!["name".to_string(), "email".to_string()])
-        );
+        assert_eq!(q.operations[1], fields(&["name", "email"]));
         assert_eq!(
             q.operations[2],
             Operation::Sort {

@@ -208,6 +208,95 @@ dkit query data.csv '.[] | group_by category count() | sort count desc | limit 5
 dkit query data.csv '.[] | group_by category count(), sum(price) | select category, count'
 ```
 
+## Built-in Functions
+
+`select` 절에서 내장 함수를 사용하여 데이터를 변환할 수 있다. 함수는 중첩 호출이 가능하다.
+
+```bash
+dkit query data.csv '.[] | select upper(name), round(price, 2)'
+dkit query data.json '.users[] | select upper(trim(name)), to_string(age)'
+```
+
+### 별칭 (as)
+
+`as` 키워드로 출력 필드명을 지정한다.
+
+```bash
+dkit query data.csv '.[] | select upper(name) as NAME, round(price, 2) as price_rounded'
+```
+
+### 문자열 함수
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `upper(s)` | 대문자 변환 | `upper(name)` |
+| `lower(s)` | 소문자 변환 | `lower(email)` |
+| `trim(s)` | 앞뒤 공백 제거 | `trim(name)` |
+| `ltrim(s)` | 앞쪽 공백 제거 | `ltrim(name)` |
+| `rtrim(s)` | 뒤쪽 공백 제거 | `rtrim(name)` |
+| `length(s)` | 문자열 길이 | `length(name)` |
+| `substr(s, start)` | 부분 문자열 (시작 위치~끝) | `substr(name, 2)` |
+| `substr(s, start, len)` | 부분 문자열 (시작 위치, 길이) | `substr(name, 0, 5)` |
+| `concat(a, b, ...)` | 문자열 합치기 | `concat(first, " ", last)` |
+| `replace(s, from, to)` | 문자열 치환 | `replace(name, "old", "new")` |
+| `split(s, sep)` | 문자열 분리 (배열 반환) | `split(tags, ",")` |
+
+### 수학 함수
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `round(n)` | 반올림 (정수 반환) | `round(price)` |
+| `round(n, d)` | d자리까지 반올림 | `round(price, 2)` |
+| `ceil(n)` | 올림 | `ceil(price)` |
+| `floor(n)` | 내림 | `floor(price)` |
+| `abs(n)` | 절댓값 | `abs(diff)` |
+| `sqrt(n)` | 제곱근 | `sqrt(area)` |
+| `pow(base, exp)` | 거듭제곱 | `pow(x, 2)` |
+
+### 날짜 함수
+
+날짜 문자열은 ISO 8601 형식(`yyyy-MM-dd` 또는 `yyyy-MM-ddTHH:mm:ssZ`)을 기대한다.
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `now()` | 현재 UTC 시각 (ISO 8601) | `now()` |
+| `date(s)` | 날짜 정규화 (yyyy-MM-dd) | `date(created_at)` |
+| `year(s)` | 연도 추출 | `year(created_at)` |
+| `month(s)` | 월 추출 (1-12) | `month(created_at)` |
+| `day(s)` | 일 추출 (1-31) | `day(created_at)` |
+
+### 타입 변환
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `to_int(v)` / `int(v)` | 정수 변환 | `to_int(score)` |
+| `to_float(v)` / `float(v)` | 부동소수점 변환 | `to_float(price)` |
+| `to_string(v)` / `str(v)` | 문자열 변환 | `to_string(id)` |
+| `to_bool(v)` / `bool(v)` | 불리언 변환 | `to_bool(active)` |
+
+### 유틸 함수
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `coalesce(a, b, ...)` | 첫 번째 non-null 값 반환 | `coalesce(name, "unknown")` |
+| `if_null(v, default)` | null이면 기본값 반환 | `if_null(email, "N/A")` |
+
+### 함수 조합 예시
+
+```bash
+# 이름 대문자 변환 + 공백 제거
+dkit query data.csv '.[] | select upper(trim(name))'
+
+# 가격 소수점 2자리 반올림, 별칭 사용
+dkit query data.csv '.[] | select name, round(price, 2) as price'
+
+# 날짜에서 연도 추출
+dkit query data.json '.[] | select upper(name), year(created_at) as year'
+
+# 타입 변환 + where 필터 후 함수 적용
+dkit query data.csv '.[] | where score > 80 | select name, to_string(score) as score_str'
+```
+
 ## Combined Examples
 
 ```bash
@@ -238,7 +327,10 @@ operation   = where_op | select_op | sort_op | limit_op
             | count_op | sum_op | avg_op | min_op | max_op | distinct_op
             | group_by_op
 where_op    = "where" condition
-select_op   = "select" IDENTIFIER ( "," IDENTIFIER )*
+select_op   = "select" select_expr ( "," select_expr )*
+select_expr = expr [ "as" IDENTIFIER ]
+expr        = IDENTIFIER | literal | func_call
+func_call   = IDENTIFIER "(" [ expr ( "," expr )* ] ")"
 sort_op     = "sort" IDENTIFIER [ "desc" ]
 limit_op    = "limit" INTEGER
 count_op    = "count" [ IDENTIFIER ]
