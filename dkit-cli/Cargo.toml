@@ -18,6 +18,15 @@ pkg-fmt = "tgz"
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
 
+[features]
+default = []
+xml = ["dkit-core/xml"]
+msgpack = ["dkit-core/msgpack"]
+excel = ["dkit-core/excel"]
+sqlite = ["dkit-core/sqlite"]
+parquet = ["dkit-core/parquet", "dep:arrow", "dep:parquet-impl", "dep:bytes"]
+all = ["xml", "msgpack", "excel", "sqlite", "parquet"]
+
 [dependencies]
 dkit-core = { path = "../dkit-core" }
 clap = { version = "4", features = ["derive"] }
@@ -33,9 +42,9 @@ thiserror = "1"
 anyhow = "1"
 encoding_rs = "0.8"
 chardetng = "0.1"
-arrow = { version = "53", default-features = false, features = ["prettyprint"] }
-parquet = { version = "53", default-features = false, features = ["arrow", "snap", "zstd"] }
-bytes = "1"
+arrow = { version = "53", default-features = false, features = ["prettyprint"], optional = true }
+parquet-impl = { package = "parquet", version = "53", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
+bytes = { version = "1", optional = true }
 glob = "0.3"
 jsonschema = { version = "0.17", default-features = false }
 dirs = "6.0.0"
@@ -55,4 +64,4 @@ predicates = "3"
 tempfile = "3"
 rusqlite = { version = "0.31", features = ["bundled"] }
 arrow = { version = "53", default-features = false }
-parquet = { version = "53", default-features = false, features = ["arrow"] }
+parquet-impl = { package = "parquet", version = "53", default-features = false, features = ["arrow"] }

@@ -13,12 +13,13 @@ fn dkit() -> Command {
 // Parquet 다양한 스키마 및 압축 테스트
 // ============================================================
 
+#[cfg(feature = "parquet")]
 /// 다양한 타입(int, float, string, bool, null 포함)의 Parquet 파일 생성
 fn create_typed_parquet(path: &std::path::Path) {
     use arrow::array::{ArrayRef, BooleanArray, Float64Array, Int64Array, StringArray};
     use arrow::datatypes::{DataType, Field, Schema};
     use arrow::record_batch::RecordBatch;
-    use parquet::arrow::ArrowWriter;
+    use parquet_impl::arrow::ArrowWriter;
     use std::sync::Arc;
 
     let schema = Arc::new(Schema::new(vec![
@@ -61,14 +62,15 @@ fn create_typed_parquet(path: &std::path::Path) {
     writer.close().unwrap();
 }
 
+#[cfg(feature = "parquet")]
 /// SNAPPY 압축으로 Parquet 파일 생성
 fn create_snappy_parquet(path: &std::path::Path) {
     use arrow::array::{ArrayRef, Int64Array, StringArray};
     use arrow::datatypes::{DataType, Field, Schema};
     use arrow::record_batch::RecordBatch;
-    use parquet::arrow::ArrowWriter;
-    use parquet::basic::Compression;
-    use parquet::file::properties::WriterProperties;
+    use parquet_impl::arrow::ArrowWriter;
+    use parquet_impl::basic::Compression;
+    use parquet_impl::file::properties::WriterProperties;
     use std::sync::Arc;
 
     let schema = Arc::new(Schema::new(vec![
@@ -91,14 +93,15 @@ fn create_snappy_parquet(path: &std::path::Path) {
     writer.close().unwrap();
 }
 
+#[cfg(feature = "parquet")]
 /// ZSTD 압축으로 Parquet 파일 생성
 fn create_zstd_parquet(path: &std::path::Path) {
     use arrow::array::{ArrayRef, Int64Array, StringArray};
     use arrow::datatypes::{DataType, Field, Schema};
     use arrow::record_batch::RecordBatch;
-    use parquet::arrow::ArrowWriter;
-    use parquet::basic::{Compression, ZstdLevel};
-    use parquet::file::properties::WriterProperties;
+    use parquet_impl::arrow::ArrowWriter;
+    use parquet_impl::basic::{Compression, ZstdLevel};
+    use parquet_impl::file::properties::WriterProperties;
     use std::sync::Arc;
 
     let schema = Arc::new(Schema::new(vec![
@@ -121,6 +124,7 @@ fn create_zstd_parquet(path: &std::path::Path) {
     writer.close().unwrap();
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_various_types_to_json() {
     let dir = TempDir::new().unwrap();
@@ -138,6 +142,7 @@ fn parquet_various_types_to_json() {
         .stdout(predicate::str::contains("false"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_various_types_to_csv() {
     let dir = TempDir::new().unwrap();
@@ -153,6 +158,7 @@ fn parquet_various_types_to_csv() {
         .stdout(predicate::str::contains("85"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_snappy_compression_roundtrip() {
     let dir = TempDir::new().unwrap();
@@ -169,6 +175,7 @@ fn parquet_snappy_compression_roundtrip() {
         .stdout(predicate::str::contains("z"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_zstd_compression_roundtrip() {
     let dir = TempDir::new().unwrap();
@@ -184,6 +191,7 @@ fn parquet_zstd_compression_roundtrip() {
         .stdout(predicate::str::contains("bar"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn json_to_parquet_with_snappy_compression() {
     let dir = TempDir::new().unwrap();
@@ -214,6 +222,7 @@ fn json_to_parquet_with_snappy_compression() {
     assert!(bytes.starts_with(b"PAR1"), "output should be Parquet");
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn json_to_parquet_with_zstd_compression() {
     let dir = TempDir::new().unwrap();
@@ -240,6 +249,7 @@ fn json_to_parquet_with_zstd_compression() {
     assert!(bytes.starts_with(b"PAR1"), "output should be Parquet");
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_null_values_preserved_in_csv() {
     let dir = TempDir::new().unwrap();
@@ -257,6 +267,7 @@ fn parquet_null_values_preserved_in_csv() {
     assert!(stdout.contains("Diana"), "Diana should be present");
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_schema_detection() {
     let dir = TempDir::new().unwrap();
@@ -274,6 +285,7 @@ fn parquet_schema_detection() {
         .stdout(predicate::str::contains("category"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_stats_output() {
     let dir = TempDir::new().unwrap();
@@ -666,6 +678,7 @@ fn streaming_large_csv_to_csv() {
     assert_eq!(data_lines.len(), 1000, "should have 1000 data rows");
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn streaming_parquet_to_csv_chunk_size() {
     let dir = TempDir::new().unwrap();
@@ -905,6 +918,7 @@ fn query_func_with_where_filter() {
 // Parquet + 쿼리 통합 테스트
 // ============================================================
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_query_with_aggregate() {
     let dir = TempDir::new().unwrap();
@@ -918,6 +932,7 @@ fn parquet_query_with_aggregate() {
         .stdout(predicate::str::contains("5"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_query_with_filter_and_aggregate() {
     let dir = TempDir::new().unwrap();
@@ -935,6 +950,7 @@ fn parquet_query_with_filter_and_aggregate() {
         .stdout(predicate::str::contains("3"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_query_func_upper() {
     let dir = TempDir::new().unwrap();
@@ -952,6 +968,7 @@ fn parquet_query_func_upper() {
         .stdout(predicate::str::contains("ALICE"));
 }
 
+#[cfg(feature = "parquet")]
 #[test]
 fn parquet_roundtrip_via_csv() {
     // parquet → csv → parquet → json 라운드트립
