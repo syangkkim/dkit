@@ -467,7 +467,7 @@ pub enum Commands {
 
     /// Compare two data files and show differences
     #[command(
-        after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'"
+        after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'\n  dkit diff a.json b.json --mode value --diff-format json\n  dkit diff a.json b.json --array-diff key=id --ignore-order"
     )]
     Diff {
         /// First input file
@@ -485,6 +485,26 @@ pub enum Commands {
         /// Only report whether files differ (exit code: 0=same, 1=different)
         #[arg(long)]
         quiet: bool,
+
+        /// Comparison mode: structural (added/removed/changed), value (value changes only), key (key existence only)
+        #[arg(long, value_name = "MODE", default_value = "structural")]
+        mode: String,
+
+        /// Diff output format: unified, side-by-side, json, summary
+        #[arg(long, value_name = "FORMAT", default_value = "unified")]
+        diff_format: String,
+
+        /// Array comparison strategy: index (by position), value (by value), key=<field> (by key field)
+        #[arg(long, value_name = "STRATEGY", default_value = "index")]
+        array_diff: String,
+
+        /// Ignore array element order when comparing
+        #[arg(long)]
+        ignore_order: bool,
+
+        /// Ignore string case when comparing
+        #[arg(long)]
+        ignore_case: bool,
 
         /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
         #[arg(long, value_name = "ENCODING")]
