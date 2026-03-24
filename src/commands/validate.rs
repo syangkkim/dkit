@@ -226,19 +226,32 @@ fn read_stdin_text(opts: &EncodingOptions) -> Result<String> {
 mod tests {
     use super::*;
     use std::io::Write;
-    use tempfile::NamedTempFile;
+    use tempfile::{NamedTempFile, TempPath};
 
-    fn write_temp(content: &str) -> NamedTempFile {
+    /// 임시 파일에 내용을 쓰고 파일 핸들을 닫는다.
+    ///
+    /// Windows에서는 파일 핸들이 열려 있는 동안 다른 프로세스가 파일을 여는데
+    /// 제한이 생길 수 있다. into_temp_path()로 핸들을 닫으면서도
+    /// 파일은 디스크에 유지한다.
+    fn write_temp(content: &str) -> TempPath {
         let mut f = NamedTempFile::new().unwrap();
         f.write_all(content.as_bytes()).unwrap();
-        f
+        f.flush().unwrap();
+        f.into_temp_path()
+    }
+
+    /// 주어진 확장자를 가진 임시 파일에 내용을 쓰고 파일 핸들을 닫는다.
+    fn write_temp_with_suffix(content: &[u8], suffix: &str) -> TempPath {
+        let mut f = tempfile::Builder::new().suffix(suffix).tempfile().unwrap();
+        f.write_all(content).unwrap();
+        f.flush().unwrap();
+        f.into_temp_path()
     }
 
     #[test]
     fn test_valid_json_against_schema() {
         let schema_file = write_temp(
             r#"{
-                "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
@@ -247,16 +260,12 @@ mod tests {
                 "required": ["name", "age"]
             }"#,
         );
-        let _data_file = write_temp(r#"{"name": "Alice", "age": 30}"#);
-        // rename so it gets .json extension
-        let mut json_file = NamedTempFile::with_suffix(".json").unwrap();
-        json_file
-            .write_all(r#"{"name": "Alice", "age": 30}"#.as_bytes())
-            .unwrap();
+        let json_file =
+            write_temp_with_suffix(r#"{"name": "Alice", "age": 30}"#.as_bytes(), ".json");
 
         let args = ValidateArgs {
-            input: json_file.path().to_str().unwrap(),
-            schema: schema_file.path(),
+            input: json_file.to_str().unwrap(),
+            schema: &schema_file,
             from: None,
             quiet: false,
             encoding_opts: EncodingOptions::default(),
@@ -271,7 +280,6 @@ mod tests {
     fn test_invalid_json_against_schema() {
         let schema_file = write_temp(
             r#"{
-                "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
@@ -280,15 +288,13 @@ mod tests {
                 "required": ["name", "age"]
             }"#,
         );
-        let mut json_file = NamedTempFile::with_suffix(".json").unwrap();
         // age is a string, not integer → validation error
-        json_file
-            .write_all(r#"{"name": "Alice", "age": "thirty"}"#.as_bytes())
-            .unwrap();
+        let json_file =
+            write_temp_with_suffix(r#"{"name": "Alice", "age": "thirty"}"#.as_bytes(), ".json");
 
         let args = ValidateArgs {
-            input: json_file.path().to_str().unwrap(),
-            schema: schema_file.path(),
+            input: json_file.to_str().unwrap(),
+            schema: &schema_file,
             from: None,
             quiet: true,
             encoding_opts: EncodingOptions::default(),
@@ -301,20 +307,12 @@ mod tests {
 
     #[test]
     fn test_missing_required_field() {
-        let schema_file = write_temp(
-            r#"{
-                "type": "object",
-                "required": ["name", "age"]
-            }"#,
-        );
-        let mut json_file = NamedTempFile::with_suffix(".json").unwrap();
-        json_file
-            .write_all(r#"{"name": "Alice"}"#.as_bytes())
-            .unwrap();
+        let schema_file = write_temp(r#"{"type": "object", "required": ["name", "age"]}"#);
+        let json_file = write_temp_with_suffix(r#"{"name": "Alice"}"#.as_bytes(), ".json");
 
         let args = ValidateArgs {
-            input: json_file.path().to_str().unwrap(),
-            schema: schema_file.path(),
+            input: json_file.to_str().unwrap(),
+            schema: &schema_file,
             from: None,
             quiet: true,
             encoding_opts: EncodingOptions::default(),
@@ -329,12 +327,11 @@ mod tests {
     fn test_yaml_input_valid() {
         let schema_file =
             write_temp(r#"{"type": "object", "properties": {"host": {"type": "string"}}}"#);
-        let mut yaml_file = NamedTempFile::with_suffix(".yaml").unwrap();
-        yaml_file.write_all(b"host: localhost\n").unwrap();
+        let yaml_file = write_temp_with_suffix(b"host: localhost\n", ".yaml");
 
         let args = ValidateArgs {
-            input: yaml_file.path().to_str().unwrap(),
-            schema: schema_file.path(),
+            input: yaml_file.to_str().unwrap(),
+            schema: &schema_file,
             from: None,
             quiet: true,
             encoding_opts: EncodingOptions::default(),
@@ -348,12 +345,11 @@ mod tests {
     #[test]
     fn test_invalid_schema_file() {
         let schema_file = write_temp("not valid json");
-        let mut json_file = NamedTempFile::with_suffix(".json").unwrap();
-        json_file.write_all(b"{}").unwrap();
+        let json_file = write_temp_with_suffix(b"{}", ".json");
 
         let args = ValidateArgs {
-            input: json_file.path().to_str().unwrap(),
-            schema: schema_file.path(),
+            input: json_file.to_str().unwrap(),
+            schema: &schema_file,
             from: None,
             quiet: true,
             encoding_opts: EncodingOptions::default(),
