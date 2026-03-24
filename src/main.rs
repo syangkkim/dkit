@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod config;
 mod error;
 mod format;
 mod output;
@@ -11,7 +12,7 @@ use std::process;
 use clap::Parser;
 use colored::Colorize;
 
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, ConfigAction};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
 
 fn main() {
@@ -468,6 +469,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
+        Commands::Config { action } => match action {
+            ConfigAction::Show => config::run_show()?,
+            ConfigAction::Init { project } => config::run_init(project)?,
+        },
         Commands::Diff {
             file1,
             file2,
