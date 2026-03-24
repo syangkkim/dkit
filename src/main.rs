@@ -91,6 +91,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             header_row,
             table,
             sql,
+            rename,
+            continue_on_error,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -112,6 +114,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
                 sqlite_opts: SqliteOptions { table, sql },
+                rename: rename.as_deref(),
+                continue_on_error,
             })?;
         }
         Commands::Query {
