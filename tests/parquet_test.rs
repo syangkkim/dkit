@@ -184,19 +184,33 @@ fn parquet_format_auto_detected() {
         .stdout(predicate::str::contains("Alice"));
 }
 
-// --- parquet as output should fail ---
+// --- parquet as output (write) ---
 
 #[test]
-fn convert_json_to_parquet_fails() {
+fn convert_json_to_parquet_succeeds() {
     let dir = tempfile::tempdir().unwrap();
     let json_path = dir.path().join("data.json");
-    std::fs::write(&json_path, r#"[{"id":1}]"#).unwrap();
+    let out_path = dir.path().join("output.parquet");
+    std::fs::write(&json_path, r#"[{"id":1,"name":"Alice"}]"#).unwrap();
 
     dkit()
-        .args(["convert", json_path.to_str().unwrap(), "-f", "parquet"])
+        .args([
+            "convert",
+            json_path.to_str().unwrap(),
+            "-f",
+            "parquet",
+            "-o",
+            out_path.to_str().unwrap(),
+        ])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("input-only"));
+        .success();
+
+    // The output file should be a valid Parquet file (starts with PAR1)
+    let bytes = std::fs::read(&out_path).unwrap();
+    assert!(
+        bytes.starts_with(b"PAR1"),
+        "Output should be a valid Parquet file"
+    );
 }
 
 // --- null handling ---

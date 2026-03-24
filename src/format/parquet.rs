@@ -1,13 +1,20 @@
+use std::sync::Arc;
+
 use anyhow::bail;
 use arrow::array::{
-    Array, AsArray, BinaryArray, BooleanArray, Float32Array, Float64Array, Int16Array, Int32Array,
-    Int64Array, Int8Array, LargeBinaryArray, LargeStringArray, StringArray, StructArray,
-    UInt16Array, UInt32Array, UInt64Array, UInt8Array,
+    Array, ArrayRef, AsArray, BinaryArray, BooleanArray, BooleanBuilder, Float32Array,
+    Float64Array, Float64Builder, Int16Array, Int32Array, Int64Array, Int64Builder, Int8Array,
+    LargeBinaryArray, LargeStringArray, StringArray, StringBuilder, StructArray, UInt16Array,
+    UInt32Array, UInt64Array, UInt8Array,
 };
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use bytes::Bytes;
 use indexmap::IndexMap;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::ArrowWriter;
+use parquet::basic::{Compression, GzipLevel, ZstdLevel};
+use parquet::file::properties::WriterProperties;
 
 use crate::error::DkitError;
 use crate::value::Value;
@@ -122,6 +129,264 @@ pub struct ParquetMetadata {
     pub num_row_groups: usize,
     pub columns: Vec<String>,
     pub column_types: Vec<String>,
+}
+
+/// Parquet 압축 방식
+#[derive(Debug, Clone, Default)]
+pub enum ParquetCompression {
+    #[default]
+    None,
+    Snappy,
+    Gzip,
+    Zstd,
+}
+
+impl std::str::FromStr for ParquetCompression {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "none" | "uncompressed" => Ok(ParquetCompression::None),
+            "snappy" => Ok(ParquetCompression::Snappy),
+            "gzip" => Ok(ParquetCompression::Gzip),
+            "zstd" => Ok(ParquetCompression::Zstd),
+            _ => anyhow::bail!(
+                "Unknown Parquet compression '{}'. Valid options: none, snappy, gzip, zstd",
+                s
+            ),
+        }
+    }
+}
+
+/// Parquet Writer 옵션
+#[derive(Debug, Clone, Default)]
+pub struct ParquetWriteOptions {
+    /// 압축 방식 (기본: none)
+    pub compression: ParquetCompression,
+    /// Row Group 최대 크기 (기본: parquet 라이브러리 기본값)
+    pub row_group_size: Option<usize>,
+}
+
+/// Parquet Writer - Value 배열을 Parquet 바이트로 직렬화한다.
+pub struct ParquetWriter {
+    options: ParquetWriteOptions,
+}
+
+impl ParquetWriter {
+    pub fn new(options: ParquetWriteOptions) -> Self {
+        Self { options }
+    }
+
+    /// Value를 Parquet 바이트로 변환한다.
+    ///
+    /// Value는 반드시 Object의 Array이어야 한다.
+    pub fn write_to_bytes(&self, value: &Value) -> anyhow::Result<Vec<u8>> {
+        let rows = match value {
+            Value::Array(rows) => rows,
+            _ => anyhow::bail!(
+                "Parquet output requires an array of records (got {})\n  Hint: input data must be a JSON array of objects",
+                value_type_name(value)
+            ),
+        };
+
+        if rows.is_empty() {
+            let schema = Arc::new(Schema::empty());
+            let batch = RecordBatch::new_empty(schema.clone());
+            return write_batch_to_bytes(&batch, schema, &self.options);
+        }
+
+        // Infer schema from all rows
+        let schema = infer_schema(rows);
+
+        // Build Arrow columns
+        let columns = build_columns(rows, &schema)?;
+
+        let batch = RecordBatch::try_new(schema.clone(), columns)
+            .map_err(|e| anyhow::anyhow!("Failed to create Parquet record batch: {e}"))?;
+
+        write_batch_to_bytes(&batch, schema, &self.options)
+    }
+}
+
+/// RecordBatch를 Parquet 바이트로 기록한다.
+fn write_batch_to_bytes(
+    batch: &RecordBatch,
+    schema: Arc<Schema>,
+    options: &ParquetWriteOptions,
+) -> anyhow::Result<Vec<u8>> {
+    let compression = match options.compression {
+        ParquetCompression::None => Compression::UNCOMPRESSED,
+        ParquetCompression::Snappy => Compression::SNAPPY,
+        ParquetCompression::Gzip => Compression::GZIP(GzipLevel::default()),
+        ParquetCompression::Zstd => Compression::ZSTD(ZstdLevel::default()),
+    };
+
+    let mut props_builder = WriterProperties::builder().set_compression(compression);
+
+    if let Some(rg_size) = options.row_group_size {
+        props_builder = props_builder.set_max_row_group_size(rg_size);
+    }
+
+    let props = props_builder.build();
+
+    let mut buf = Vec::new();
+    let mut writer = ArrowWriter::try_new(&mut buf, schema, Some(props))
+        .map_err(|e| anyhow::anyhow!("Failed to create Parquet writer: {e}"))?;
+
+    writer
+        .write(batch)
+        .map_err(|e| anyhow::anyhow!("Failed to write Parquet data: {e}"))?;
+
+    writer
+        .close()
+        .map_err(|e| anyhow::anyhow!("Failed to finalize Parquet file: {e}"))?;
+
+    Ok(buf)
+}
+
+/// Value 타입 이름을 반환한다 (에러 메시지용)
+fn value_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Integer(_) => "integer",
+        Value::Float(_) => "float",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+/// 행 배열에서 Arrow Schema를 추론한다.
+fn infer_schema(rows: &[Value]) -> Arc<Schema> {
+    // 모든 행에서 필드 이름을 순서대로 수집한다.
+    let mut field_names: IndexMap<String, ()> = IndexMap::new();
+    for row in rows {
+        if let Value::Object(obj) = row {
+            for key in obj.keys() {
+                field_names.entry(key.clone()).or_insert(());
+            }
+        }
+    }
+
+    let fields: Vec<Field> = field_names
+        .keys()
+        .map(|name| {
+            let (data_type, nullable) = infer_field_type(rows, name);
+            Field::new(name, data_type, nullable)
+        })
+        .collect();
+
+    Arc::new(Schema::new(fields))
+}
+
+/// 특정 필드의 Arrow DataType과 nullable 여부를 추론한다.
+fn infer_field_type(rows: &[Value], field: &str) -> (DataType, bool) {
+    let mut has_null = false;
+    let mut seen_bool = false;
+    let mut seen_int = false;
+    let mut seen_float = false;
+    let mut seen_string = false;
+
+    for row in rows {
+        match row {
+            Value::Object(obj) => match obj.get(field) {
+                None | Some(Value::Null) => has_null = true,
+                Some(Value::Bool(_)) => seen_bool = true,
+                Some(Value::Integer(_)) => seen_int = true,
+                Some(Value::Float(_)) => seen_float = true,
+                Some(Value::String(_)) => seen_string = true,
+                // 중첩 배열/객체는 문자열로 직렬화
+                Some(_) => seen_string = true,
+            },
+            _ => has_null = true,
+        }
+    }
+
+    let data_type = if seen_string {
+        DataType::Utf8
+    } else if seen_float {
+        // Integer 값도 Float64로 업캐스트한다.
+        DataType::Float64
+    } else if seen_int && seen_bool {
+        // 혼합 타입은 문자열로 직렬화
+        DataType::Utf8
+    } else if seen_int {
+        DataType::Int64
+    } else if seen_bool {
+        DataType::Boolean
+    } else {
+        // 모두 null이거나 미지정 → Utf8
+        DataType::Utf8
+    };
+
+    (data_type, has_null)
+}
+
+/// 행 배열에서 Arrow 컬럼 배열을 생성한다.
+fn build_columns(rows: &[Value], schema: &Schema) -> anyhow::Result<Vec<ArrayRef>> {
+    schema
+        .fields()
+        .iter()
+        .map(|field| Ok(build_column(rows, field.name(), field.data_type())))
+        .collect()
+}
+
+/// 특정 필드에 대한 Arrow 배열을 생성한다.
+fn build_column(rows: &[Value], field_name: &str, data_type: &DataType) -> ArrayRef {
+    match data_type {
+        DataType::Boolean => {
+            let mut builder = BooleanBuilder::new();
+            for row in rows {
+                match get_field_value(row, field_name) {
+                    Some(Value::Bool(b)) => builder.append_value(*b),
+                    _ => builder.append_null(),
+                }
+            }
+            Arc::new(builder.finish())
+        }
+        DataType::Int64 => {
+            let mut builder = Int64Builder::new();
+            for row in rows {
+                match get_field_value(row, field_name) {
+                    Some(Value::Integer(i)) => builder.append_value(*i),
+                    _ => builder.append_null(),
+                }
+            }
+            Arc::new(builder.finish())
+        }
+        DataType::Float64 => {
+            let mut builder = Float64Builder::new();
+            for row in rows {
+                match get_field_value(row, field_name) {
+                    Some(Value::Float(f)) => builder.append_value(*f),
+                    Some(Value::Integer(i)) => builder.append_value(*i as f64),
+                    _ => builder.append_null(),
+                }
+            }
+            Arc::new(builder.finish())
+        }
+        _ => {
+            let mut builder = StringBuilder::new();
+            for row in rows {
+                match get_field_value(row, field_name) {
+                    Some(Value::String(s)) => builder.append_value(s),
+                    Some(Value::Null) | None => builder.append_null(),
+                    Some(other) => builder.append_value(other.to_string()),
+                }
+            }
+            Arc::new(builder.finish())
+        }
+    }
+}
+
+/// 행에서 특정 필드 값을 가져온다.
+fn get_field_value<'a>(row: &'a Value, field_name: &str) -> Option<&'a Value> {
+    if let Value::Object(obj) = row {
+        obj.get(field_name)
+    } else {
+        None
+    }
 }
 
 /// Arrow 배열의 특정 행 값을 Value로 변환한다.

@@ -12,7 +12,7 @@ use clap::Parser;
 use colored::Colorize;
 
 use cli::{Cli, Commands};
-use commands::{EncodingOptions, ExcelOptions, SqliteOptions};
+use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
 
 fn main() {
     let cli = Cli::parse();
@@ -98,6 +98,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             head,
             tail,
             filter,
+            compression,
+            row_group_size,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -127,6 +129,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     head,
                     tail,
                     filter,
+                },
+                parquet_opts: ParquetWriteOptions {
+                    compression,
+                    row_group_size,
                 },
             })?;
         }
