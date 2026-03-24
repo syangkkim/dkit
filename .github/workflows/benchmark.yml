@@ -9,6 +9,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   benchmark:
     name: Run benchmarks
@@ -22,7 +25,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Run benchmarks
-        run: cargo bench --bench format_benchmarks --bench query_benchmarks --bench conversion_benchmarks -- --output-format bencher | tee benchmark_output.txt
+        run: cargo bench -p dkit-core --bench format_benchmarks --bench query_benchmarks --bench conversion_benchmarks -- --output-format bencher | tee benchmark_output.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
