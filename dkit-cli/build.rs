@@ -14,7 +14,9 @@ use std::path::PathBuf;
 fn main() {
     // Use a larger stack thread to avoid stack overflow on Windows (default 1MB).
     let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
-    let handler = builder.spawn(generate_man_pages).expect("failed to spawn thread");
+    let handler = builder
+        .spawn(generate_man_pages)
+        .expect("failed to spawn thread");
     handler.join().unwrap();
 }
 
