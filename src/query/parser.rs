@@ -610,6 +610,22 @@ pub fn parse_query(input: &str) -> Result<Query, DkitError> {
     Parser::new(input).parse()
 }
 
+/// where 절의 조건식만 파싱하는 편의 함수
+/// 예: "age > 30 and city == \"Seoul\""
+pub fn parse_condition_expr(input: &str) -> Result<Condition, DkitError> {
+    let mut parser = Parser::new(input);
+    parser.skip_whitespace();
+    let condition = parser.parse_condition()?;
+    parser.skip_whitespace();
+    if parser.pos != parser.input.len() {
+        return Err(DkitError::QueryError(format!(
+            "unexpected character '{}' at position {} in where expression",
+            parser.input[parser.pos], parser.pos
+        )));
+    }
+    Ok(condition)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -187,6 +187,78 @@ pub fn decode_bytes(bytes: &[u8], opts: &EncodingOptions) -> anyhow::Result<Stri
     })
 }
 
+/// 데이터 정렬 및 필터링 옵션 (convert/view 공통)
+#[derive(Debug, Clone, Default)]
+pub struct DataFilterOptions {
+    /// 정렬 기준 필드
+    pub sort_by: Option<String>,
+    /// 내림차순 정렬 여부
+    pub descending: bool,
+    /// 상위 N개 레코드
+    pub head: Option<usize>,
+    /// 하위 N개 레코드
+    pub tail: Option<usize>,
+    /// 필터 표현식 문자열
+    pub filter: Option<String>,
+}
+
+/// 데이터 필터/정렬 옵션을 Value에 적용한다.
+/// 적용 순서: where → sort → head/tail
+pub fn apply_data_filters(
+    value: crate::value::Value,
+    opts: &DataFilterOptions,
+) -> anyhow::Result<crate::value::Value> {
+    use crate::query::filter::apply_operations;
+    use crate::query::parser::{parse_condition_expr, Operation};
+
+    let mut operations = Vec::new();
+
+    // 1. where 필터
+    if let Some(ref expr) = opts.filter {
+        let condition = parse_condition_expr(expr).map_err(|e| {
+            anyhow::anyhow!(
+                "Invalid --filter expression: {e}\n  Hint: use format like 'age > 30' or 'name == \"Alice\"'"
+            )
+        })?;
+        operations.push(Operation::Where(condition));
+    }
+
+    // 2. sort
+    if let Some(ref field) = opts.sort_by {
+        operations.push(Operation::Sort {
+            field: field.clone(),
+            descending: opts.descending,
+        });
+    }
+
+    // 3. head (= limit)
+    if let Some(n) = opts.head {
+        operations.push(Operation::Limit(n));
+    }
+
+    // head와 tail이 동시에 지정된 경우 head를 먼저 적용하고 tail을 적용하므로
+    // 별도 처리가 필요
+    if operations.is_empty() && opts.tail.is_none() {
+        return Ok(value);
+    }
+
+    let mut result = if operations.is_empty() {
+        value
+    } else {
+        apply_operations(value, &operations)?
+    };
+
+    // 4. tail: 배열의 마지막 N개 요소 추출
+    if let Some(n) = opts.tail {
+        if let crate::value::Value::Array(ref arr) = result {
+            let start = arr.len().saturating_sub(n);
+            result = crate::value::Value::Array(arr[start..].to_vec());
+        }
+    }
+
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +368,175 @@ mod tests {
         let opts = EncodingOptions::default();
         let result = decode_bytes(bytes, &opts).unwrap();
         assert_eq!(result, "hi");
+    }
+
+    // --- apply_data_filters tests ---
+
+    use crate::value::Value;
+    use indexmap::IndexMap;
+
+    fn make_record(name: &str, age: i64) -> Value {
+        let mut m = IndexMap::new();
+        m.insert("name".to_string(), Value::String(name.to_string()));
+        m.insert("age".to_string(), Value::Integer(age));
+        Value::Object(m)
+    }
+
+    fn sample_data() -> Value {
+        Value::Array(vec![
+            make_record("Alice", 30),
+            make_record("Bob", 25),
+            make_record("Charlie", 35),
+            make_record("Diana", 28),
+            make_record("Eve", 22),
+        ])
+    }
+
+    #[test]
+    fn test_data_filter_no_ops() {
+        let data = sample_data();
+        let opts = DataFilterOptions::default();
+        let result = apply_data_filters(data.clone(), &opts).unwrap();
+        assert_eq!(result, data);
+    }
+
+    #[test]
+    fn test_data_filter_sort_asc() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            sort_by: Some("age".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0].as_object().unwrap()["name"].as_str().unwrap(), "Eve");
+        assert_eq!(
+            arr[4].as_object().unwrap()["name"].as_str().unwrap(),
+            "Charlie"
+        );
+    }
+
+    #[test]
+    fn test_data_filter_sort_desc() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            sort_by: Some("age".to_string()),
+            descending: true,
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap()["name"].as_str().unwrap(),
+            "Charlie"
+        );
+        assert_eq!(arr[4].as_object().unwrap()["name"].as_str().unwrap(), "Eve");
+    }
+
+    #[test]
+    fn test_data_filter_head() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            head: Some(2),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap()["name"].as_str().unwrap(),
+            "Alice"
+        );
+        assert_eq!(arr[1].as_object().unwrap()["name"].as_str().unwrap(), "Bob");
+    }
+
+    #[test]
+    fn test_data_filter_tail() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            tail: Some(2),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap()["name"].as_str().unwrap(),
+            "Diana"
+        );
+        assert_eq!(arr[1].as_object().unwrap()["name"].as_str().unwrap(), "Eve");
+    }
+
+    #[test]
+    fn test_data_filter_where() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            filter: Some("age > 27".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3); // Alice(30), Charlie(35), Diana(28)
+    }
+
+    #[test]
+    fn test_data_filter_where_and_sort() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            filter: Some("age > 27".to_string()),
+            sort_by: Some("age".to_string()),
+            descending: true,
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(
+            arr[0].as_object().unwrap()["name"].as_str().unwrap(),
+            "Charlie"
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap()["name"].as_str().unwrap(),
+            "Diana"
+        );
+    }
+
+    #[test]
+    fn test_data_filter_sort_and_head() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            sort_by: Some("age".to_string()),
+            head: Some(3),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        // youngest 3
+        assert_eq!(arr[0].as_object().unwrap()["name"].as_str().unwrap(), "Eve");
+        assert_eq!(arr[1].as_object().unwrap()["name"].as_str().unwrap(), "Bob");
+        assert_eq!(
+            arr[2].as_object().unwrap()["name"].as_str().unwrap(),
+            "Diana"
+        );
+    }
+
+    #[test]
+    fn test_data_filter_invalid_expr() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            filter: Some("invalid!!!".to_string()),
+            ..Default::default()
+        };
+        assert!(apply_data_filters(data, &opts).is_err());
+    }
+
+    #[test]
+    fn test_data_filter_non_array() {
+        // Non-array data should pass through for no-ops
+        let data = Value::Integer(42);
+        let opts = DataFilterOptions::default();
+        let result = apply_data_filters(data, &opts).unwrap();
+        assert_eq!(result, Value::Integer(42));
     }
 }

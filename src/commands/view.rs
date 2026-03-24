@@ -43,6 +43,7 @@ pub struct ViewArgs<'a> {
     pub list_sheets: bool,
     pub sqlite_opts: SqliteOptions,
     pub list_tables: bool,
+    pub data_filter: super::DataFilterOptions,
 }
 
 /// view 서브커맨드 실행
@@ -112,6 +113,9 @@ pub fn run(args: &ViewArgs) -> Result<()> {
         Some(path_expr) => resolve_path(&value, path_expr)?,
         None => value,
     };
+
+    // 데이터 필터/정렬 적용
+    let target = super::apply_data_filters(target, &args.data_filter)?;
 
     // 출력 포맷 결정: --format 옵션 또는 기본 table
     let output_format = match args.format {
