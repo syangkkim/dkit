@@ -44,6 +44,11 @@ ctrlc = { version = "3", features = ["termination"] }
 miette = { version = "7", features = ["fancy"] }
 rand = "0.8"
 
+[build-dependencies]
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+clap_mangen = "0.2"
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

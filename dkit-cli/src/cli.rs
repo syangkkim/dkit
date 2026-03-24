@@ -19,6 +19,10 @@ pub struct Cli {
     #[arg(long)]
     pub list_formats: bool,
 
+    /// Show frequently used examples
+    #[arg(long)]
+    pub examples: bool,
+
     /// Show verbose error output (error chain, debug info)
     #[arg(long, global = true)]
     pub verbose: bool,
