@@ -23,7 +23,7 @@ pub struct Cli {
 pub enum Commands {
     /// Convert between data formats (JSON, CSV, YAML, TOML)
     #[command(
-        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  cat data.json | dkit convert --from json --format toml\n  dkit convert - --from json --format csv < data.json\n  dkit convert data.json -f csv | dkit query - '.items[]' --from csv"
+        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  dkit convert '*.json' --format csv --outdir ./output\n  dkit convert data_dir/ --format yaml --outdir ./output\n  dkit convert '*.json' -f csv --outdir out --rename '{name}.converted.{ext}'\n  dkit convert dir/ -f csv --outdir out --continue-on-error\n  cat data.json | dkit convert --from json --format toml\n  dkit convert - --from json --format csv < data.json\n  dkit convert data.json -f csv | dkit query - '.items[]' --from csv"
     )]
     Convert {
         /// Input file path(s). Use '-' or omit for stdin (auto-detects format or use --from)
@@ -101,6 +101,14 @@ pub enum Commands {
         /// SQL query to execute on SQLite database
         #[arg(long, value_name = "SQL")]
         sql: Option<String>,
+
+        /// Output filename pattern for batch conversion (e.g. '{name}.converted.{ext}')
+        #[arg(long, value_name = "PATTERN")]
+        rename: Option<String>,
+
+        /// Continue processing remaining files when an error occurs
+        #[arg(long)]
+        continue_on_error: bool,
     },
 
     /// Query data using path expressions
