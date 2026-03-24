@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,6 +17,9 @@ pub struct DkitConfig {
     /// Table display settings
     #[serde(default)]
     pub table: Option<TableConfig>,
+    /// User-defined command aliases
+    #[serde(default)]
+    pub aliases: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -37,6 +41,10 @@ pub struct ConfigSource {
 impl DkitConfig {
     /// Merge another config on top of self (other takes priority for set values).
     pub fn merge(self, other: &DkitConfig) -> DkitConfig {
+        let mut aliases = self.aliases.clone();
+        for (k, v) in &other.aliases {
+            aliases.insert(k.clone(), v.clone());
+        }
         DkitConfig {
             default_format: other.default_format.clone().or(self.default_format),
             color: other.color.clone().or(self.color),
@@ -50,6 +58,7 @@ impl DkitConfig {
                     max_width: b.max_width.or(a.max_width),
                 }),
             },
+            aliases,
         }
     }
 }
@@ -185,6 +194,130 @@ pub fn run_show() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Returns the built-in aliases.
+pub fn builtin_aliases() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert(
+        "j2c".to_string(),
+        "convert --from json --to csv".to_string(),
+    );
+    m.insert(
+        "c2j".to_string(),
+        "convert --from csv --to json".to_string(),
+    );
+    m.insert(
+        "j2y".to_string(),
+        "convert --from json --to yaml".to_string(),
+    );
+    m.insert(
+        "y2j".to_string(),
+        "convert --from yaml --to json".to_string(),
+    );
+    m.insert(
+        "j2t".to_string(),
+        "convert --from json --to toml".to_string(),
+    );
+    m.insert(
+        "t2j".to_string(),
+        "convert --from toml --to json".to_string(),
+    );
+    m.insert(
+        "c2y".to_string(),
+        "convert --from csv --to yaml".to_string(),
+    );
+    m.insert(
+        "y2c".to_string(),
+        "convert --from yaml --to csv".to_string(),
+    );
+    m
+}
+
+/// Save config to a TOML file, creating parent directories if needed.
+fn save_config(path: &Path, config: &DkitConfig) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    let toml_str = toml::to_string_pretty(config)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize config: {e}"))?;
+    fs::write(path, toml_str)?;
+    Ok(())
+}
+
+/// Returns the write path for user aliases (existing config path or init path).
+fn user_config_write_path() -> Option<PathBuf> {
+    user_config_path().or_else(user_config_init_path)
+}
+
+/// Run `dkit alias set <name> <command>` — register or update a user alias.
+pub fn run_alias_set(name: &str, command: &str) -> anyhow::Result<()> {
+    let path = user_config_write_path()
+        .ok_or_else(|| anyhow::anyhow!("Cannot determine config directory"))?;
+
+    let mut config = if path.exists() {
+        load_from_file(&path)
+    } else {
+        DkitConfig::default()
+    };
+
+    config.aliases.insert(name.to_string(), command.to_string());
+    save_config(&path, &config)?;
+    println!("Alias '{}' = '{}'", name, command);
+    Ok(())
+}
+
+/// Run `dkit alias list` — list all aliases (builtin + user).
+pub fn run_alias_list(user_aliases: &HashMap<String, String>) -> anyhow::Result<()> {
+    let builtins = builtin_aliases();
+
+    // Merge: user aliases override builtins
+    let mut all: std::collections::BTreeMap<String, (String, &str)> =
+        std::collections::BTreeMap::new();
+    for (name, cmd) in &builtins {
+        all.insert(name.clone(), (cmd.clone(), "builtin"));
+    }
+    for (name, cmd) in user_aliases {
+        all.insert(name.clone(), (cmd.clone(), "user"));
+    }
+
+    if all.is_empty() {
+        println!("No aliases defined.");
+        return Ok(());
+    }
+
+    println!("{:<16} {:<44} SOURCE", "NAME", "COMMAND");
+    println!("{:-<16} {:-<44} {:-<8}", "", "", "");
+    for (name, (cmd, source)) in &all {
+        println!("{:<16} {:<44} {}", name, cmd, source);
+    }
+    Ok(())
+}
+
+/// Run `dkit alias remove <name>` — remove a user-defined alias.
+pub fn run_alias_remove(name: &str) -> anyhow::Result<()> {
+    let builtins = builtin_aliases();
+    if builtins.contains_key(name) {
+        anyhow::bail!("Cannot remove built-in alias '{name}'. Use 'alias set {name} <command>' to override it.");
+    }
+
+    let path = user_config_write_path()
+        .ok_or_else(|| anyhow::anyhow!("Cannot determine config directory"))?;
+
+    if !path.exists() {
+        anyhow::bail!("Alias '{name}' not found.");
+    }
+
+    let mut config = load_from_file(&path);
+    if config.aliases.remove(name).is_none() {
+        anyhow::bail!("Alias '{name}' not found.");
+    }
+
+    save_config(&path, &config)?;
+    println!("Alias '{name}' removed.");
+    Ok(())
+}
+
 /// Run `dkit config init` — create a default config file.
 pub fn run_init(project: bool) -> anyhow::Result<()> {
     let path = if project {
@@ -265,6 +398,7 @@ color = "never"
                 border_style: Some("simple".to_string()),
                 max_width: Some(40),
             }),
+            ..Default::default()
         };
         let override_cfg = DkitConfig {
             default_format: None,
@@ -274,6 +408,7 @@ color = "never"
                 border_style: None,
                 max_width: Some(80),
             }),
+            ..Default::default()
         };
 
         let merged = base.merge(&override_cfg);
@@ -304,6 +439,7 @@ color = "never"
             color: None,
             encoding: None,
             table: None,
+            ..Default::default()
         };
         let display = format!("{}", config);
         assert!(display.contains("default_format"));
