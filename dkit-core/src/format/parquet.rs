@@ -11,10 +11,10 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use bytes::Bytes;
 use indexmap::IndexMap;
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use parquet::arrow::ArrowWriter;
-use parquet::basic::{Compression, GzipLevel, ZstdLevel};
-use parquet::file::properties::WriterProperties;
+use parquet_impl::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet_impl::arrow::ArrowWriter;
+use parquet_impl::basic::{Compression, GzipLevel, ZstdLevel};
+use parquet_impl::file::properties::WriterProperties;
 
 use crate::error::DkitError;
 use crate::value::Value;
@@ -637,7 +637,7 @@ mod tests {
     use arrow::array::{ArrayRef, BooleanArray, Float64Array, Int64Array, StringArray};
     use arrow::datatypes::{DataType, Field, Schema};
     use arrow::record_batch::RecordBatch;
-    use parquet::arrow::ArrowWriter;
+    use parquet_impl::arrow::ArrowWriter;
     use std::sync::Arc;
 
     /// 테스트용 Parquet 바이트를 생성한다

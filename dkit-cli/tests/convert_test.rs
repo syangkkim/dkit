@@ -258,6 +258,7 @@ fn convert_unknown_format() {
 }
 
 #[test]
+#[cfg(feature = "xml")]
 fn convert_json_to_xml() {
     dkit()
         .args(&["convert", "tests/fixtures/users.json", "--to", "xml"])
@@ -267,6 +268,7 @@ fn convert_json_to_xml() {
 }
 
 #[test]
+#[cfg(feature = "xml")]
 fn convert_xml_to_json() {
     dkit()
         .args(&["convert", "tests/fixtures/users.xml", "--to", "json"])

@@ -1,3 +1,5 @@
+#![cfg(feature = "sqlite")]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::NamedTempFile;

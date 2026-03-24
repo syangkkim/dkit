@@ -173,6 +173,7 @@ mod markdown_output {
     }
 
     #[test]
+    #[cfg(feature = "xml")]
     fn convert_xml_to_md() {
         dkit()
             .args(&["convert", "tests/fixtures/users.xml", "--to", "md"])

@@ -1,3 +1,4 @@
+#![cfg(all(feature = "excel", feature = "sqlite", feature = "xml"))]
 //! v0.6.0 통합 테스트: Excel 읽기, SQLite 읽기, 파이프라인 체이닝, 일괄 변환
 
 use assert_cmd::Command;

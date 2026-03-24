@@ -1,3 +1,5 @@
+#![cfg(feature = "parquet")]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 
@@ -10,7 +12,7 @@ fn create_test_parquet(path: &std::path::Path) {
     use arrow::array::{ArrayRef, BooleanArray, Float64Array, Int64Array, StringArray};
     use arrow::datatypes::{DataType, Field, Schema};
     use arrow::record_batch::RecordBatch;
-    use parquet::arrow::ArrowWriter;
+    use parquet_impl::arrow::ArrowWriter;
     use std::sync::Arc;
 
     let schema = Arc::new(Schema::new(vec![

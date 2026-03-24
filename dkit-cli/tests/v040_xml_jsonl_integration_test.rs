@@ -1,3 +1,5 @@
+#![cfg(all(feature = "xml", feature = "msgpack"))]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;

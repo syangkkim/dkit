@@ -8,20 +8,246 @@ pub mod json;
 pub mod jsonl;
 /// Markdown table writer.
 pub mod markdown;
-/// MessagePack binary reader and writer.
-pub mod msgpack;
-/// Apache Parquet columnar format reader and writer.
-pub mod parquet;
-/// SQLite database reader.
-pub mod sqlite;
 /// TOML reader and writer.
 pub mod toml;
-/// Excel (XLSX) reader.
-pub mod xlsx;
-/// XML reader and writer.
-pub mod xml;
 /// YAML reader and writer.
 pub mod yaml;
+
+// --- Feature-gated format modules ---
+
+/// MessagePack binary reader and writer.
+#[cfg(feature = "msgpack")]
+pub mod msgpack;
+#[cfg(not(feature = "msgpack"))]
+pub mod msgpack {
+    //! Stub module — MessagePack feature not enabled.
+    use super::{FormatReader, FormatWriter};
+    use crate::value::Value;
+    use std::io::{Read, Write};
+
+    const MSG: &str = "MessagePack support requires the 'msgpack' feature.\n  Install with: cargo install dkit --features msgpack";
+
+    pub struct MsgpackReader;
+    impl MsgpackReader {
+        pub fn read_from_bytes(&self, _bytes: &[u8]) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+    }
+    impl FormatReader for MsgpackReader {
+        fn read(&self, _: &str) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        fn read_from_reader(&self, _: impl Read) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+    }
+    pub struct MsgpackWriter;
+    impl MsgpackWriter {
+        pub fn write_bytes(&self, _value: &Value) -> anyhow::Result<Vec<u8>> {
+            anyhow::bail!(MSG)
+        }
+    }
+    impl FormatWriter for MsgpackWriter {
+        fn write(&self, _: &Value) -> anyhow::Result<String> {
+            anyhow::bail!(MSG)
+        }
+        fn write_to_writer(&self, _: &Value, _: impl Write) -> anyhow::Result<()> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
+
+/// Apache Parquet columnar format reader and writer.
+#[cfg(feature = "parquet")]
+pub mod parquet;
+#[cfg(not(feature = "parquet"))]
+pub mod parquet {
+    //! Stub module — Parquet feature not enabled.
+    use crate::value::Value;
+
+    const MSG: &str = "Parquet support requires the 'parquet' feature.\n  Install with: cargo install dkit --features parquet";
+
+    #[derive(Debug, Clone, Default)]
+    pub struct ParquetOptions {
+        pub row_group: Option<usize>,
+    }
+    pub struct ParquetReader {
+        _options: ParquetOptions,
+    }
+    impl ParquetReader {
+        pub fn new(options: ParquetOptions) -> Self {
+            Self { _options: options }
+        }
+        pub fn read_from_bytes(&self, _bytes: &[u8]) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        #[allow(dead_code)]
+        pub fn read_metadata(_bytes: &[u8]) -> anyhow::Result<ParquetMetadata> {
+            anyhow::bail!(MSG)
+        }
+    }
+    #[allow(dead_code)]
+    pub struct ParquetMetadata {
+        pub num_rows: usize,
+        pub num_row_groups: usize,
+        pub columns: Vec<String>,
+        pub column_types: Vec<String>,
+    }
+    #[derive(Debug, Clone, Default)]
+    pub enum ParquetCompression {
+        #[default]
+        None,
+        Snappy,
+        Gzip,
+        Zstd,
+    }
+    impl std::str::FromStr for ParquetCompression {
+        type Err = anyhow::Error;
+        fn from_str(s: &str) -> anyhow::Result<Self> {
+            match s.to_lowercase().as_str() {
+                "none" | "uncompressed" => Ok(Self::None),
+                "snappy" => Ok(Self::Snappy),
+                "gzip" => Ok(Self::Gzip),
+                "zstd" => Ok(Self::Zstd),
+                _ => anyhow::bail!(
+                    "Unknown Parquet compression '{}'. Valid options: none, snappy, gzip, zstd",
+                    s
+                ),
+            }
+        }
+    }
+    #[derive(Debug, Clone, Default)]
+    pub struct ParquetWriteOptions {
+        pub compression: ParquetCompression,
+        pub row_group_size: Option<usize>,
+    }
+    pub struct ParquetWriter {
+        _options: ParquetWriteOptions,
+    }
+    impl ParquetWriter {
+        pub fn new(options: ParquetWriteOptions) -> Self {
+            Self { _options: options }
+        }
+        pub fn write_to_bytes(&self, _value: &Value) -> anyhow::Result<Vec<u8>> {
+            anyhow::bail!(MSG)
+        }
+    }
+    /// Stub for arrow_value_to_value when parquet feature is disabled.
+    pub fn arrow_value_to_value(_array: &dyn std::any::Any, _idx: usize) -> Value {
+        Value::Null
+    }
+}
+
+/// SQLite database reader.
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
+#[cfg(not(feature = "sqlite"))]
+pub mod sqlite {
+    //! Stub module — SQLite feature not enabled.
+    use crate::value::Value;
+    use std::path::Path;
+
+    const MSG: &str = "SQLite support requires the 'sqlite' feature.\n  Install with: cargo install dkit --features sqlite";
+
+    #[derive(Debug, Clone, Default)]
+    pub struct SqliteOptions {
+        pub table: Option<String>,
+        pub sql: Option<String>,
+    }
+    pub struct SqliteReader {
+        _options: SqliteOptions,
+    }
+    impl SqliteReader {
+        pub fn new(options: SqliteOptions) -> Self {
+            Self { _options: options }
+        }
+        pub fn read_from_path(&self, _path: &Path) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        pub fn list_tables(_path: &Path) -> anyhow::Result<Vec<String>> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
+
+/// Excel (XLSX) reader.
+#[cfg(feature = "excel")]
+pub mod xlsx;
+#[cfg(not(feature = "excel"))]
+pub mod xlsx {
+    //! Stub module — Excel feature not enabled.
+    use crate::value::Value;
+
+    const MSG: &str = "Excel support requires the 'excel' feature.\n  Install with: cargo install dkit --features excel";
+
+    #[derive(Debug, Clone, Default)]
+    pub struct XlsxOptions {
+        pub sheet: Option<String>,
+        pub header_row: usize,
+    }
+    pub struct XlsxReader {
+        _options: XlsxOptions,
+    }
+    impl XlsxReader {
+        pub fn new(options: XlsxOptions) -> Self {
+            Self { _options: options }
+        }
+        pub fn read_from_bytes(&self, _bytes: &[u8]) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        pub fn list_sheets(_bytes: &[u8]) -> anyhow::Result<Vec<String>> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
+
+/// XML reader and writer.
+#[cfg(feature = "xml")]
+pub mod xml;
+#[cfg(not(feature = "xml"))]
+pub mod xml {
+    //! Stub module — XML feature not enabled.
+    use super::{FormatReader, FormatWriter};
+    use crate::value::Value;
+    use std::io::{Read, Write};
+
+    const MSG: &str = "XML support requires the 'xml' feature.\n  Install with: cargo install dkit --features xml";
+
+    #[derive(Default)]
+    pub struct XmlReader {
+        _private: (),
+    }
+    impl XmlReader {
+        #[allow(dead_code)]
+        pub fn new(_strip_namespaces: bool) -> Self {
+            Self { _private: () }
+        }
+    }
+    impl FormatReader for XmlReader {
+        fn read(&self, _: &str) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        fn read_from_reader(&self, _: impl Read) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+    }
+    pub struct XmlWriter {
+        _private: (),
+    }
+    impl XmlWriter {
+        pub fn new(_pretty: bool, _root_element: Option<String>) -> Self {
+            Self { _private: () }
+        }
+    }
+    impl FormatWriter for XmlWriter {
+        fn write(&self, _: &Value) -> anyhow::Result<String> {
+            anyhow::bail!(MSG)
+        }
+        fn write_to_writer(&self, _: &Value, _: impl Write) -> anyhow::Result<()> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
 
 use std::io::{Read, Write};
 use std::path::Path;
@@ -86,23 +312,53 @@ impl Format {
     }
 
     /// 사용 가능한 출력 포맷 목록을 반환한다
-    pub fn list_output_formats() -> &'static [(&'static str, &'static str)] {
-        &[
+    pub fn list_output_formats() -> Vec<(&'static str, &'static str)> {
+        let mut formats = vec![
             ("json", "JSON format"),
             ("csv", "Comma-separated values"),
             ("tsv", "Tab-separated values (CSV variant)"),
             ("yaml", "YAML format"),
             ("toml", "TOML format"),
-            ("xml", "XML format"),
             ("jsonl", "JSON Lines (one JSON object per line)"),
-            ("msgpack", "MessagePack binary format"),
-            ("xlsx", "Excel spreadsheet (input only)"),
-            ("sqlite", "SQLite database (input only)"),
-            ("parquet", "Apache Parquet columnar format"),
-            ("md", "Markdown table"),
-            ("html", "HTML table"),
-            ("table", "Terminal table (default for view)"),
-        ]
+        ];
+
+        if cfg!(feature = "xml") {
+            formats.push(("xml", "XML format"));
+        } else {
+            formats.push(("xml", "XML format (requires --features xml)"));
+        }
+        if cfg!(feature = "msgpack") {
+            formats.push(("msgpack", "MessagePack binary format"));
+        } else {
+            formats.push((
+                "msgpack",
+                "MessagePack binary format (requires --features msgpack)",
+            ));
+        }
+        if cfg!(feature = "excel") {
+            formats.push(("xlsx", "Excel spreadsheet (input only)"));
+        } else {
+            formats.push(("xlsx", "Excel spreadsheet (requires --features excel)"));
+        }
+        if cfg!(feature = "sqlite") {
+            formats.push(("sqlite", "SQLite database (input only)"));
+        } else {
+            formats.push(("sqlite", "SQLite database (requires --features sqlite)"));
+        }
+        if cfg!(feature = "parquet") {
+            formats.push(("parquet", "Apache Parquet columnar format"));
+        } else {
+            formats.push((
+                "parquet",
+                "Apache Parquet columnar format (requires --features parquet)",
+            ));
+        }
+
+        formats.push(("md", "Markdown table"));
+        formats.push(("html", "HTML table"));
+        formats.push(("table", "Terminal table (default for view)"));
+
+        formats
     }
 }
 

@@ -29,7 +29,8 @@ impl Default for StreamingOptions {
 
 /// 스트리밍 변환이 가능한 소스/타겟 포맷 조합인지 확인한다.
 pub fn supports_streaming(source: Format, target: Format) -> bool {
-    let readable = matches!(source, Format::Csv | Format::Jsonl | Format::Parquet);
+    let readable = matches!(source, Format::Csv | Format::Jsonl)
+        || (cfg!(feature = "parquet") && matches!(source, Format::Parquet));
     let writable = matches!(target, Format::Csv | Format::Jsonl);
     readable && writable
 }
@@ -84,6 +85,7 @@ pub fn stream_convert(
             opts,
             file_size,
         ),
+        #[cfg(feature = "parquet")]
         Format::Parquet => {
             // Parquet은 메모리 매핑 기반이므로 바이트를 읽어서 Row Group 단위로 처리
             let bytes = std::fs::read(source_path)
@@ -293,6 +295,7 @@ fn stream_from_csv(
 
 // ── Parquet 스트리밍 리더 (Row Group 단위) ──────────────────────
 
+#[cfg(feature = "parquet")]
 fn stream_from_parquet(
     bytes: &[u8],
     writer: impl Write,
@@ -301,7 +304,7 @@ fn stream_from_parquet(
     opts: &StreamingOptions,
 ) -> Result<()> {
     use bytes::Bytes;
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use parquet_impl::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
     let bytes = Bytes::copy_from_slice(bytes);
     let builder = ParquetRecordBatchReaderBuilder::try_new(bytes).map_err(|e| {
@@ -595,8 +598,11 @@ mod tests {
         assert!(supports_streaming(Format::Jsonl, Format::Csv));
         assert!(supports_streaming(Format::Csv, Format::Jsonl));
         assert!(supports_streaming(Format::Csv, Format::Csv));
-        assert!(supports_streaming(Format::Parquet, Format::Jsonl));
-        assert!(supports_streaming(Format::Parquet, Format::Csv));
+        #[cfg(feature = "parquet")]
+        {
+            assert!(supports_streaming(Format::Parquet, Format::Jsonl));
+            assert!(supports_streaming(Format::Parquet, Format::Csv));
+        }
 
         assert!(!supports_streaming(Format::Json, Format::Jsonl));
         assert!(!supports_streaming(Format::Jsonl, Format::Json));

@@ -10,22 +10,31 @@ homepage = "https://github.com/syangkkim/dkit"
 keywords = ["json", "csv", "yaml", "toml", "data"]
 categories = ["encoding", "parser-implementations"]
 
+[features]
+default = []
+xml = ["dep:quick-xml"]
+msgpack = ["dep:rmp-serde"]
+excel = ["dep:calamine"]
+sqlite = ["dep:rusqlite"]
+parquet = ["dep:arrow", "dep:parquet-impl", "dep:bytes"]
+all = ["xml", "msgpack", "excel", "sqlite", "parquet"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 csv = "1"
 toml = "0.8"
-quick-xml = "0.37"
-rmp-serde = "1"
+quick-xml = { version = "0.37", optional = true }
+rmp-serde = { version = "1", optional = true }
 indexmap = { version = "2", features = ["serde"] }
 thiserror = "1"
 anyhow = "1"
-calamine = "0.26"
-rusqlite = { version = "0.31", features = ["bundled"] }
-arrow = { version = "53", default-features = false, features = ["prettyprint"] }
-parquet = { version = "53", default-features = false, features = ["arrow", "snap", "zstd"] }
-bytes = "1"
+calamine = { version = "0.26", optional = true }
+rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+arrow = { version = "53", default-features = false, features = ["prettyprint"], optional = true }
+parquet-impl = { package = "parquet", version = "53", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
+bytes = { version = "1", optional = true }
 jsonschema = { version = "0.17", default-features = false }
 rand = "0.8"
 
