@@ -519,6 +519,84 @@ pub enum Commands {
         sql: Option<String>,
     },
 
+    /// Sample records from data
+    #[command(
+        after_help = "Examples:\n  dkit sample data.csv -n 100\n  dkit sample data.json --ratio 0.1\n  dkit sample data.csv -n 50 --seed 42\n  dkit sample data.csv -n 100 --method systematic\n  dkit sample data.csv -n 50 --method stratified --stratify-by category\n  dkit sample data.csv -n 100 -o sample.json -f json"
+    )]
+    Sample {
+        /// Input file path (use '-' for stdin)
+        #[arg(value_name = "INPUT")]
+        input: String,
+
+        /// Number of records to sample
+        #[arg(short = 'n', long, value_name = "N")]
+        count: Option<usize>,
+
+        /// Ratio of records to sample (0.0 to 1.0)
+        #[arg(long, value_name = "RATIO")]
+        ratio: Option<f64>,
+
+        /// Random seed for reproducible sampling
+        #[arg(long, value_name = "SEED")]
+        seed: Option<u64>,
+
+        /// Sampling method: random, systematic, stratified
+        #[arg(long, value_name = "METHOD", default_value = "random")]
+        method: String,
+
+        /// Field to stratify by (required for stratified sampling)
+        #[arg(long, value_name = "FIELD")]
+        stratify_by: Option<String>,
+
+        /// Input format (auto-detected from file extension)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
+
+        /// Output format (default: same as input)
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: Option<String>,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// Pretty-print output
+        #[arg(long)]
+        pretty: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+    },
+
     /// Compare two data files and show differences
     #[command(
         after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'\n  dkit diff a.json b.json --mode value --diff-format json\n  dkit diff a.json b.json --array-diff key=id --ignore-order"

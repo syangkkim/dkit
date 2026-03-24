@@ -356,6 +356,47 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 process::exit(1);
             }
         }
+        Commands::Sample {
+            input,
+            count,
+            ratio,
+            seed,
+            method,
+            stratify_by,
+            from,
+            format,
+            output,
+            delimiter,
+            no_header,
+            pretty,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+        } => {
+            commands::sample::run(&commands::sample::SampleArgs {
+                input: &input,
+                count,
+                ratio,
+                seed,
+                method: &method,
+                stratify_by: stratify_by.as_deref(),
+                from: from.as_deref(),
+                format: format.as_deref(),
+                output: output.as_deref(),
+                delimiter,
+                no_header,
+                pretty,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+            })?;
+        }
         Commands::Diff {
             file1,
             file2,

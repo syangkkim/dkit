@@ -2,6 +2,7 @@ pub mod convert;
 pub mod diff;
 pub mod merge;
 pub mod query;
+pub mod sample;
 pub mod schema;
 pub mod stats;
 pub mod streaming;
