@@ -729,6 +729,15 @@ pub enum Commands {
         sql: Option<String>,
     },
 
+    /// Manage dkit configuration
+    #[command(
+        after_help = "Examples:\n  dkit config show              # Show current effective configuration\n  dkit config init              # Create user config at XDG/home location\n  dkit config init --project    # Create project config (.dkit.toml)"
+    )]
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+
     /// Compare two data files and show differences
     #[command(
         after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'\n  dkit diff a.json b.json --mode value --diff-format json\n  dkit diff a.json b.json --array-diff key=id --ignore-order"
@@ -793,5 +802,17 @@ pub enum Commands {
         /// SQL query to execute on SQLite database
         #[arg(long, value_name = "SQL")]
         sql: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigAction {
+    /// Show current effective configuration
+    Show,
+    /// Create a default configuration file
+    Init {
+        /// Create project-level config (.dkit.toml) instead of user-level
+        #[arg(long)]
+        project: bool,
     },
 }
