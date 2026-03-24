@@ -51,6 +51,7 @@ pub struct ConvertArgs<'a> {
     pub continue_on_error: bool,
     pub data_filter: super::DataFilterOptions,
     pub parquet_opts: ParquetWriteOptions,
+    pub streaming_opts: Option<super::streaming::StreamingOptions>,
 }
 
 /// convert 서브커맨드 실행
@@ -90,6 +91,72 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     // stdin mode: no input files or explicit "-"
     let is_stdin =
         args.input.is_empty() || (args.input.len() == 1 && args.input[0] == Path::new("-"));
+
+    // 스트리밍 모드: --chunk-size가 지정된 경우 스트리밍 파이프라인 시도
+    if let Some(ref streaming_opts) = args.streaming_opts {
+        if is_stdin {
+            // stdin 스트리밍
+            let source_format = match args.from {
+                Some(f) => Format::from_str(f)?,
+                None => bail!("--from is required for streaming from stdin"),
+            };
+            if super::streaming::supports_streaming(source_format, target_format) {
+                let read_options = FormatOptions {
+                    delimiter: args
+                        .delimiter
+                        .or_else(|| args.from.and_then(default_delimiter_for_format)),
+                    no_header: args.no_header,
+                    ..Default::default()
+                };
+                return super::streaming::stream_convert_stdin(
+                    io::stdin().lock(),
+                    source_format,
+                    target_format,
+                    &read_options,
+                    &write_options,
+                    args.output,
+                    streaming_opts,
+                );
+            }
+            // 스트리밍 미지원 조합이면 일반 모드로 fallback
+        } else {
+            let resolved_files = expand_inputs(args.input)?;
+            if resolved_files.len() == 1 {
+                let path = &resolved_files[0];
+                let source_format = match args.from {
+                    Some(f) => Format::from_str(f)?,
+                    None => detect_format(path)?,
+                };
+                if super::streaming::supports_streaming(source_format, target_format) {
+                    let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
+                    let read_options = FormatOptions {
+                        delimiter: read_delimiter,
+                        no_header: args.no_header,
+                        ..Default::default()
+                    };
+
+                    let outdir_path = args.outdir.map(|d| {
+                        let name = make_output_name(path, args.to, args.rename);
+                        d.join(name)
+                    });
+                    let out_path = args.output.or(outdir_path.as_deref());
+
+                    return super::streaming::stream_convert(
+                        path,
+                        source_format,
+                        target_format,
+                        &read_options,
+                        &write_options,
+                        out_path,
+                        streaming_opts,
+                    );
+                }
+                // 스트리밍 미지원 조합이면 일반 모드로 fallback
+            }
+            // 멀티 파일 배치에서의 스트리밍은 일반 모드로 fallback
+        }
+    }
+
     if is_stdin {
         let value = if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();

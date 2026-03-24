@@ -4,6 +4,7 @@ pub mod merge;
 pub mod query;
 pub mod schema;
 pub mod stats;
+pub mod streaming;
 pub mod view;
 
 use std::path::Path;

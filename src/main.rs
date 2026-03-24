@@ -100,6 +100,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             filter,
             compression,
             row_group_size,
+            chunk_size,
+            progress,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -134,6 +136,10 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     compression,
                     row_group_size,
                 },
+                streaming_opts: chunk_size.map(|cs| commands::streaming::StreamingOptions {
+                    chunk_size: cs,
+                    progress,
+                }),
             })?;
         }
         Commands::Query {

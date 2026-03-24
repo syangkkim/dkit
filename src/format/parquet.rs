@@ -390,7 +390,7 @@ fn get_field_value<'a>(row: &'a Value, field_name: &str) -> Option<&'a Value> {
 }
 
 /// Arrow 배열의 특정 행 값을 Value로 변환한다.
-fn arrow_value_to_value(array: &dyn Array, idx: usize) -> Value {
+pub fn arrow_value_to_value(array: &dyn Array, idx: usize) -> Value {
     if array.is_null(idx) {
         return Value::Null;
     }
