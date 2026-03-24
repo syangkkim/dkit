@@ -126,6 +126,31 @@ pub fn read_parquet_from_bytes(bytes: &[u8]) -> anyhow::Result<crate::value::Val
     ParquetReader::new(ParquetOptions::default()).read_from_bytes(bytes)
 }
 
+/// Parquet 쓰기 옵션
+#[derive(Debug, Clone, Default)]
+pub struct ParquetWriteOptions {
+    /// 압축 방식 문자열 (none, snappy, gzip, zstd)
+    pub compression: String,
+    /// Row Group 최대 크기
+    pub row_group_size: Option<usize>,
+}
+
+/// Value를 Parquet 바이트로 직렬화한다.
+pub fn write_parquet_to_bytes(
+    value: &crate::value::Value,
+    opts: &ParquetWriteOptions,
+) -> anyhow::Result<Vec<u8>> {
+    use crate::format::parquet::{
+        ParquetCompression, ParquetWriteOptions as FmtOpts, ParquetWriter,
+    };
+    let compression: ParquetCompression = opts.compression.parse()?;
+    let write_opts = FmtOpts {
+        compression,
+        row_group_size: opts.row_group_size,
+    };
+    ParquetWriter::new(write_opts).write_to_bytes(value)
+}
+
 /// 인코딩을 고려하여 파일을 읽는다.
 ///
 /// 동작 우선순위:

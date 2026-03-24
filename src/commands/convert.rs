@@ -6,7 +6,8 @@ use anyhow::{bail, Context, Result};
 
 use super::{
     read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
-    read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
+    read_xlsx_from_bytes, write_parquet_to_bytes, EncodingOptions, ExcelOptions,
+    ParquetWriteOptions, SqliteOptions,
 };
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::html::HtmlWriter;
@@ -49,6 +50,7 @@ pub struct ConvertArgs<'a> {
     pub rename: Option<&'a str>,
     pub continue_on_error: bool,
     pub data_filter: super::DataFilterOptions,
+    pub parquet_opts: ParquetWriteOptions,
 }
 
 /// convert 서브커맨드 실행
@@ -120,7 +122,13 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         };
 
         let value = super::apply_data_filters(value, &args.data_filter)?;
-        write_output(&value, target_format, &write_options, args.output)?;
+        write_output(
+            &value,
+            target_format,
+            &write_options,
+            args.output,
+            &args.parquet_opts,
+        )?;
         return Ok(());
     }
 
@@ -222,7 +230,13 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
             }
         }
     }
-    write_output(&value, target_format, &write_options, out_path)?;
+    write_output(
+        &value,
+        target_format,
+        &write_options,
+        out_path,
+        &args.parquet_opts,
+    )?;
 
     Ok(())
 }
@@ -259,7 +273,13 @@ fn convert_single_file(
 
     let out_name = make_output_name(path, args.to, args.rename);
     let out_path = outdir.join(out_name);
-    write_output(&value, target_format, write_options, Some(&out_path))
+    write_output(
+        &value,
+        target_format,
+        write_options,
+        Some(&out_path),
+        &args.parquet_opts,
+    )
 }
 
 /// 입력 경로를 확장한다: 글롭 패턴, 디렉토리, 일반 파일을 처리
@@ -418,6 +438,7 @@ fn write_output(
     format: Format,
     options: &FormatOptions,
     output: Option<&Path>,
+    parquet_opts: &ParquetWriteOptions,
 ) -> Result<()> {
     if format == Format::Msgpack {
         let bytes = MsgpackWriter.write_bytes(value)?;
@@ -428,6 +449,16 @@ fn write_output(
             io::stdout()
                 .write_all(&bytes)
                 .context("Failed to write to stdout")?;
+        }
+    } else if format == Format::Parquet {
+        let bytes = write_parquet_to_bytes(value, parquet_opts)?;
+        if let Some(out_path) = output {
+            fs::write(out_path, &bytes)
+                .with_context(|| format!("Failed to write to {}", out_path.display()))?;
+        } else {
+            io::stdout()
+                .write_all(&bytes)
+                .context("Failed to write Parquet to stdout")?;
         }
     } else {
         let result = write_value(value, format, options)?;
@@ -452,7 +483,9 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
-        Format::Parquet => bail!("Parquet is an input-only format and cannot be used as output\n  Hint: Parquet Writer will be available in a future version"),
+        Format::Parquet => {
+            bail!("Internal error: Parquet output should be handled via write_output")
+        }
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => {

@@ -129,6 +129,14 @@ pub enum Commands {
         /// Filter expression (e.g. 'age > 30 and city == "Seoul"')
         #[arg(long, value_name = "EXPR", alias = "where")]
         filter: Option<String>,
+
+        /// Parquet compression codec (none, snappy, gzip, zstd)
+        #[arg(long, value_name = "CODEC", default_value = "none")]
+        compression: String,
+
+        /// Parquet row group size (number of rows per row group)
+        #[arg(long, value_name = "N")]
+        row_group_size: Option<usize>,
     },
 
     /// Query data using path expressions

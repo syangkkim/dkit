@@ -68,7 +68,7 @@ impl Format {
             ("msgpack", "MessagePack binary format"),
             ("xlsx", "Excel spreadsheet (input only)"),
             ("sqlite", "SQLite database (input only)"),
-            ("parquet", "Apache Parquet columnar format (input only)"),
+            ("parquet", "Apache Parquet columnar format"),
             ("md", "Markdown table"),
             ("html", "HTML table"),
             ("table", "Terminal table (default for view)"),
