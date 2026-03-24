@@ -269,7 +269,13 @@ fn stats_format_md() {
 fn stats_histogram() {
     dkit()
         .args(&[
-            "stats", "-", "--from", "json", "--column", "v", "--histogram",
+            "stats",
+            "-",
+            "--from",
+            "json",
+            "--column",
+            "v",
+            "--histogram",
         ])
         .write_stdin(r#"[{"v":10},{"v":20},{"v":30},{"v":40},{"v":50}]"#)
         .assert()
