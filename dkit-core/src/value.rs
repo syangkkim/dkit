@@ -3,14 +3,37 @@ use std::fmt;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+/// Unified data model for all supported formats.
+///
+/// Every data format (JSON, CSV, YAML, TOML, XML, etc.) is converted to and
+/// from this common representation. The variants cover all primitive and
+/// composite data types needed for lossless round-trip conversion.
+///
+/// # Examples
+///
+/// ```
+/// use dkit_core::value::Value;
+///
+/// let v = Value::Integer(42);
+/// assert_eq!(v.as_i64(), Some(42));
+/// assert!(v.as_str().is_none());
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Value {
+    /// JSON `null` / missing value.
     Null,
+    /// Boolean value.
     Bool(bool),
+    /// 64-bit signed integer.
     Integer(i64),
+    /// 64-bit floating-point number.
     Float(f64),
+    /// UTF-8 string.
     String(String),
+    /// Ordered sequence of values.
     Array(Vec<Value>),
+    /// Ordered map of string keys to values (insertion order preserved).
     Object(IndexMap<String, Value>),
 }
 
@@ -60,6 +83,7 @@ impl fmt::Display for Value {
 
 #[allow(dead_code)]
 impl Value {
+    /// Returns the boolean value if this is a `Bool`, otherwise `None`.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -67,6 +91,7 @@ impl Value {
         }
     }
 
+    /// Returns the integer value if this is an `Integer`, otherwise `None`.
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             Value::Integer(n) => Some(*n),
@@ -74,6 +99,7 @@ impl Value {
         }
     }
 
+    /// Returns the value as `f64`. Works for both `Float` and `Integer` variants.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Float(f) => Some(*f),
@@ -82,6 +108,7 @@ impl Value {
         }
     }
 
+    /// Returns a string slice if this is a `String`, otherwise `None`.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::String(s) => Some(s),
@@ -89,6 +116,7 @@ impl Value {
         }
     }
 
+    /// Returns a reference to the inner `Vec` if this is an `Array`, otherwise `None`.
     pub fn as_array(&self) -> Option<&Vec<Value>> {
         match self {
             Value::Array(a) => Some(a),
@@ -96,6 +124,7 @@ impl Value {
         }
     }
 
+    /// Returns a reference to the inner `IndexMap` if this is an `Object`, otherwise `None`.
     pub fn as_object(&self) -> Option<&IndexMap<String, Value>> {
         match self {
             Value::Object(o) => Some(o),
@@ -103,6 +132,7 @@ impl Value {
         }
     }
 
+    /// Returns `true` if this value is `Null`.
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }

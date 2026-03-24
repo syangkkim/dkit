@@ -233,6 +233,7 @@ fn format_cell_value(v: &Value) -> String {
             format!("[{}]", items.join(", "))
         }
         Value::Object(_) => "{...}".to_string(),
+        _ => format!("{v}"),
     }
 }
 

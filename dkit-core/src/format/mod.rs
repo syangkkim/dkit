@@ -1,14 +1,26 @@
+/// CSV/TSV reader and writer.
 pub mod csv;
+/// HTML table writer.
 pub mod html;
+/// JSON reader, writer, and value conversion utilities.
 pub mod json;
+/// JSON Lines (NDJSON) reader and writer.
 pub mod jsonl;
+/// Markdown table writer.
 pub mod markdown;
+/// MessagePack binary reader and writer.
 pub mod msgpack;
+/// Apache Parquet columnar format reader and writer.
 pub mod parquet;
+/// SQLite database reader.
 pub mod sqlite;
+/// TOML reader and writer.
 pub mod toml;
+/// Excel (XLSX) reader.
 pub mod xlsx;
+/// XML reader and writer.
 pub mod xml;
+/// YAML reader and writer.
 pub mod yaml;
 
 use std::io::{Read, Write};
@@ -17,21 +29,38 @@ use std::path::Path;
 use crate::error::DkitError;
 use crate::value::Value;
 
-/// 지원하는 데이터 포맷
+/// Supported data formats for reading and writing.
+///
+/// Each variant represents a data serialization format that dkit can
+/// convert to or from the unified [`Value`] model.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Format {
+    /// JSON (`*.json`)
     Json,
+    /// JSON Lines / NDJSON (`*.jsonl`, `*.ndjson`)
     Jsonl,
+    /// Comma/Tab-separated values (`*.csv`, `*.tsv`)
     Csv,
+    /// YAML (`*.yaml`, `*.yml`)
     Yaml,
+    /// TOML (`*.toml`)
     Toml,
+    /// XML (`*.xml`)
     Xml,
+    /// MessagePack binary format (`*.msgpack`)
     Msgpack,
+    /// Excel spreadsheet (`*.xlsx`, read-only)
     Xlsx,
+    /// SQLite database (`*.sqlite`, read-only)
     Sqlite,
+    /// Apache Parquet columnar format (`*.parquet`)
     Parquet,
+    /// Markdown table (write-only)
     Markdown,
+    /// HTML table (write-only)
     Html,
+    /// Terminal table (write-only, used by `dkit view`)
     Table,
 }
 
@@ -231,7 +260,9 @@ pub fn default_delimiter_for_format(format_str: &str) -> Option<char> {
     }
 }
 
-/// 포맷별 옵션
+/// Format-specific options controlling how data is read or written.
+///
+/// Use [`Default::default()`] to get sensible defaults.
 #[derive(Debug, Clone)]
 pub struct FormatOptions {
     /// CSV delimiter (기본: ',')
@@ -267,17 +298,27 @@ impl Default for FormatOptions {
     }
 }
 
-/// 데이터 포맷 읽기 트레이트
+/// Trait for reading a data format into a [`Value`].
+///
+/// Implement this trait to add support for reading a new data format.
 #[allow(dead_code)]
 pub trait FormatReader {
+    /// Parse the given string content and return a [`Value`].
     fn read(&self, input: &str) -> anyhow::Result<Value>;
+
+    /// Parse data from an [`io::Read`](std::io::Read) source and return a [`Value`].
     fn read_from_reader(&self, reader: impl Read) -> anyhow::Result<Value>;
 }
 
-/// 데이터 포맷 쓰기 트레이트
+/// Trait for writing a [`Value`] to a data format.
+///
+/// Implement this trait to add support for writing a new data format.
 #[allow(dead_code)]
 pub trait FormatWriter {
+    /// Serialize the given [`Value`] and return the formatted string.
     fn write(&self, value: &Value) -> anyhow::Result<String>;
+
+    /// Serialize the given [`Value`] and write to an [`io::Write`](std::io::Write) destination.
     fn write_to_writer(&self, value: &Value, writer: impl Write) -> anyhow::Result<()>;
 }
 

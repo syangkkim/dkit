@@ -204,6 +204,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),
+        _ => bail!("Unsupported input format: {format}"),
     }
 }
 
@@ -225,6 +226,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
             use crate::output::table::{render_table, TableOptions};
             Ok(render_table(value, &TableOptions::default()) + "\n")
         }
+        _ => bail!("Unsupported output format: {format}"),
     }
 }
 

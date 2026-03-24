@@ -37,11 +37,12 @@ pub fn suggest_format(input: &str) -> Option<&'static str> {
         .min_by_key(|&f| levenshtein(&input_lower, f))
 }
 
-/// dkit 에러 타입 정의
+/// Error types for dkit operations.
 ///
-/// 포맷 파싱, 쓰기, IO, 쿼리 등 카테고리별 에러를 구분하며,
-/// `thiserror`로 `Display`와 `Error`를 자동 구현한다.
+/// Covers format parsing, writing, IO, query evaluation, and path navigation.
+/// Uses `thiserror` for automatic `Display` and `Error` implementations.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum DkitError {
     #[error("Unknown format: '{0}'\n  Supported formats: {}", SUPPORTED_FORMATS.join(", "))]
     UnknownFormat(String),

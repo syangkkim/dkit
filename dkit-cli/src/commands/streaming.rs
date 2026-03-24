@@ -515,6 +515,7 @@ fn value_to_csv_field(v: &Value) -> String {
             let parts: Vec<String> = o.iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
             format!("{{{}}}", parts.join(", "))
         }
+        _ => format!("{v}"),
     }
 }
 
