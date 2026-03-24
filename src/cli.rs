@@ -109,6 +109,26 @@ pub enum Commands {
         /// Continue processing remaining files when an error occurs
         #[arg(long)]
         continue_on_error: bool,
+
+        /// Sort by field name
+        #[arg(long, value_name = "FIELD")]
+        sort_by: Option<String>,
+
+        /// Sort order (asc or desc, default: asc)
+        #[arg(long, value_name = "ORDER", default_value = "asc")]
+        sort_order: String,
+
+        /// Show only the first N records
+        #[arg(long, value_name = "N")]
+        head: Option<usize>,
+
+        /// Show only the last N records
+        #[arg(long, value_name = "N")]
+        tail: Option<usize>,
+
+        /// Filter expression (e.g. 'age > 30 and city == "Seoul"')
+        #[arg(long, value_name = "EXPR", alias = "where")]
+        filter: Option<String>,
     },
 
     /// Query data using path expressions
@@ -249,6 +269,26 @@ pub enum Commands {
         /// List table names in a SQLite database
         #[arg(long)]
         list_tables: bool,
+
+        /// Sort by field name
+        #[arg(long, value_name = "FIELD")]
+        sort_by: Option<String>,
+
+        /// Sort order (asc or desc, default: asc)
+        #[arg(long, value_name = "ORDER", default_value = "asc")]
+        sort_order: String,
+
+        /// Show only the first N records
+        #[arg(long, value_name = "N")]
+        head: Option<usize>,
+
+        /// Show only the last N records
+        #[arg(long, value_name = "N")]
+        tail: Option<usize>,
+
+        /// Filter expression (e.g. 'age > 30 and city == "Seoul"')
+        #[arg(long, value_name = "EXPR", alias = "where")]
+        filter: Option<String>,
     },
 
     /// Show statistics about data

@@ -93,6 +93,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             sql,
             rename,
             continue_on_error,
+            sort_by,
+            sort_order,
+            head,
+            tail,
+            filter,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -116,6 +121,13 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 sqlite_opts: SqliteOptions { table, sql },
                 rename: rename.as_deref(),
                 continue_on_error,
+                data_filter: commands::DataFilterOptions {
+                    sort_by,
+                    descending: sort_order.eq_ignore_ascii_case("desc"),
+                    head,
+                    tail,
+                    filter,
+                },
             })?;
         }
         Commands::Query {
@@ -167,6 +179,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             table,
             sql,
             list_tables,
+            sort_by,
+            sort_order,
+            head,
+            tail,
+            filter,
         } => {
             commands::view::run(&commands::view::ViewArgs {
                 input: &input,
@@ -190,6 +207,13 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 list_sheets,
                 sqlite_opts: SqliteOptions { table, sql },
                 list_tables,
+                data_filter: commands::DataFilterOptions {
+                    sort_by,
+                    descending: sort_order.eq_ignore_ascii_case("desc"),
+                    head,
+                    tail,
+                    filter,
+                },
             })?;
         }
         Commands::Stats {

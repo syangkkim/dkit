@@ -48,6 +48,7 @@ pub struct ConvertArgs<'a> {
     pub sqlite_opts: SqliteOptions,
     pub rename: Option<&'a str>,
     pub continue_on_error: bool,
+    pub data_filter: super::DataFilterOptions,
 }
 
 /// convert 서브커맨드 실행
@@ -112,6 +113,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
             read_value(&buf, source_format, &read_options)?
         };
 
+        let value = super::apply_data_filters(value, &args.data_filter)?;
         write_output(&value, target_format, &write_options, args.output)?;
         return Ok(());
     }
@@ -198,6 +200,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         &args.excel_opts,
         &args.sqlite_opts,
     )?;
+    let value = super::apply_data_filters(value, &args.data_filter)?;
 
     let outdir_path = args.outdir.map(|d| {
         let name = make_output_name(path, args.to, args.rename);
@@ -246,6 +249,7 @@ fn convert_single_file(
         &args.excel_opts,
         &args.sqlite_opts,
     )?;
+    let value = super::apply_data_filters(value, &args.data_filter)?;
 
     let out_name = make_output_name(path, args.to, args.rename);
     let out_path = outdir.join(out_name);
