@@ -23,10 +23,10 @@ pub struct Cli {
 pub enum Commands {
     /// Convert between data formats (JSON, CSV, YAML, TOML)
     #[command(
-        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  cat data.json | dkit convert --from json --format toml"
+        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  cat data.json | dkit convert --from json --format toml\n  dkit convert - --from json --format csv < data.json\n  dkit convert data.json -f csv | dkit query - '.items[]' --from csv"
     )]
     Convert {
-        /// Input file path(s). Use stdin if not provided (requires --from)
+        /// Input file path(s). Use '-' or omit for stdin (auto-detects format or use --from)
         #[arg(value_name = "INPUT")]
         input: Vec<PathBuf>,
 

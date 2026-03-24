@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -115,8 +115,14 @@ pub fn run(args: &QueryArgs) -> Result<()> {
             }
         }
     } else {
+        // Auto-detect: pretty when writing to terminal or file, compact when piped
+        let effective_pretty = match args.output {
+            Some(_) => true,
+            None => io::stdout().is_terminal(),
+        };
         let write_options = FormatOptions {
-            pretty: true,
+            pretty: effective_pretty,
+            compact: !effective_pretty,
             ..Default::default()
         };
         let output = write_value(&result, output_format, &write_options)?;
