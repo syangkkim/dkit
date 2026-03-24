@@ -3,7 +3,9 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use colored::Colorize;
 
-use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
+use super::{
+    read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes, EncodingOptions, ExcelOptions,
+};
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
 use crate::format::jsonl::JsonlReader;
@@ -20,12 +22,13 @@ pub struct DiffArgs<'a> {
     pub path: Option<&'a str>,
     pub quiet: bool,
     pub encoding_opts: EncodingOptions,
+    pub excel_opts: ExcelOptions,
 }
 
 /// diff 서브커맨드 실행. 차이가 있으면 true, 없으면 false 반환.
 pub fn run(args: &DiffArgs) -> Result<bool> {
-    let value1 = read_value_from_path(args.file1, &args.encoding_opts)?;
-    let value2 = read_value_from_path(args.file2, &args.encoding_opts)?;
+    let value1 = read_value_from_path(args.file1, &args.encoding_opts, &args.excel_opts)?;
+    let value2 = read_value_from_path(args.file2, &args.encoding_opts, &args.excel_opts)?;
 
     // --path 옵션으로 중첩 데이터 접근
     let (v1, v2) = match args.path {
@@ -57,7 +60,11 @@ pub fn run(args: &DiffArgs) -> Result<bool> {
 }
 
 /// 파일 경로에서 Value를 읽는다
-fn read_value_from_path(path: &Path, encoding_opts: &EncodingOptions) -> Result<Value> {
+fn read_value_from_path(
+    path: &Path,
+    encoding_opts: &EncodingOptions,
+    excel_opts: &ExcelOptions,
+) -> Result<Value> {
     let format = detect_format(path)?;
     let delimiter = default_delimiter(path);
     let options = FormatOptions {
@@ -68,6 +75,9 @@ fn read_value_from_path(path: &Path, encoding_opts: &EncodingOptions) -> Result<
     if format == Format::Msgpack {
         let bytes = read_file_bytes(path)?;
         MsgpackReader.read_from_bytes(&bytes)
+    } else if format == Format::Xlsx {
+        let bytes = read_file_bytes(path)?;
+        read_xlsx_from_bytes(&bytes, excel_opts)
     } else {
         let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, &options)
@@ -83,6 +93,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
+        Format::Xlsx => {
+            bail!("Excel files must be read as binary; use file path input instead of stdin")
+        }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),

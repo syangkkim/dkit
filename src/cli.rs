@@ -85,6 +85,14 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
     },
 
     /// Query data using path expressions
@@ -119,6 +127,14 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
     },
 
     /// View data in a formatted table
@@ -185,6 +201,18 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// List sheet names in an Excel file
+        #[arg(long)]
+        list_sheets: bool,
     },
 
     /// Show statistics about data
@@ -227,6 +255,14 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
     },
 
     /// Merge multiple data files into one
@@ -273,6 +309,14 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
     },
 
     /// Show schema/structure of data
@@ -295,6 +339,14 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
     },
 
     /// Compare two data files and show differences
@@ -325,5 +377,13 @@ pub enum Commands {
         /// Auto-detect input file encoding
         #[arg(long)]
         detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
     },
 }

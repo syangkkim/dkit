@@ -1,7 +1,9 @@
 use std::io::{self, Read};
 use std::path::Path;
 
-use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
+use super::{
+    read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes, EncodingOptions, ExcelOptions,
+};
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
 use crate::format::jsonl::JsonlReader;
@@ -20,6 +22,7 @@ pub struct SchemaArgs<'a> {
     pub input: &'a str,
     pub from: Option<&'a str>,
     pub encoding_opts: EncodingOptions,
+    pub excel_opts: ExcelOptions,
 }
 
 pub fn run(args: &SchemaArgs) -> Result<()> {
@@ -52,6 +55,9 @@ pub fn run(args: &SchemaArgs) -> Result<()> {
         if source_format == Format::Msgpack {
             let bytes = read_file_bytes(Path::new(args.input))?;
             MsgpackReader.read_from_bytes(&bytes)?
+        } else if source_format == Format::Xlsx {
+            let bytes = read_file_bytes(Path::new(args.input))?;
+            read_xlsx_from_bytes(&bytes, &args.excel_opts)?
         } else {
             let content = read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?;
             let auto_delimiter = default_delimiter(Path::new(args.input));
@@ -218,6 +224,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
+        Format::Xlsx => {
+            bail!("Excel files must be read as binary; use file path input instead of stdin")
+        }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),

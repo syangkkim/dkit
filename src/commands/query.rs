@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
+use super::{
+    read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes, EncodingOptions, ExcelOptions,
+};
 use crate::format::csv::CsvReader;
 use crate::format::html::HtmlWriter;
 use crate::format::json::{JsonReader, JsonWriter};
@@ -30,6 +32,7 @@ pub struct QueryArgs<'a> {
     pub to: Option<&'a str>,
     pub output: Option<&'a Path>,
     pub encoding_opts: EncodingOptions,
+    pub excel_opts: ExcelOptions,
 }
 
 /// query 서브커맨드 실행
@@ -64,6 +67,9 @@ pub fn run(args: &QueryArgs) -> Result<()> {
         if source_format == Format::Msgpack {
             let bytes = read_file_bytes(Path::new(args.input))?;
             MsgpackReader.read_from_bytes(&bytes)?
+        } else if source_format == Format::Xlsx {
+            let bytes = read_file_bytes(Path::new(args.input))?;
+            read_xlsx_from_bytes(&bytes, &args.excel_opts)?
         } else {
             let content = read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?;
             let auto_delimiter = default_delimiter(Path::new(args.input));
@@ -160,6 +166,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
+        Format::Xlsx => {
+            bail!("Excel files must be read as binary; use file path input instead of stdin")
+        }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),
@@ -184,6 +193,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Toml => TomlWriter::new(options.clone()).write(value),
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
+        Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => {

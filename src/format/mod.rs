@@ -5,6 +5,7 @@ pub mod jsonl;
 pub mod markdown;
 pub mod msgpack;
 pub mod toml;
+pub mod xlsx;
 pub mod xml;
 pub mod yaml;
 
@@ -24,6 +25,7 @@ pub enum Format {
     Toml,
     Xml,
     Msgpack,
+    Xlsx,
     Markdown,
     Html,
     Table,
@@ -39,6 +41,7 @@ impl Format {
             "toml" => Ok(Format::Toml),
             "xml" => Ok(Format::Xml),
             "msgpack" | "messagepack" => Ok(Format::Msgpack),
+            "xlsx" | "excel" | "xls" => Ok(Format::Xlsx),
             "md" | "markdown" => Ok(Format::Markdown),
             "html" => Ok(Format::Html),
             "table" => Ok(Format::Table),
@@ -57,6 +60,7 @@ impl Format {
             ("xml", "XML format"),
             ("jsonl", "JSON Lines (one JSON object per line)"),
             ("msgpack", "MessagePack binary format"),
+            ("xlsx", "Excel spreadsheet (input only)"),
             ("md", "Markdown table"),
             ("html", "HTML table"),
             ("table", "Terminal table (default for view)"),
@@ -74,6 +78,7 @@ impl std::fmt::Display for Format {
             Format::Toml => write!(f, "TOML"),
             Format::Xml => write!(f, "XML"),
             Format::Msgpack => write!(f, "MessagePack"),
+            Format::Xlsx => write!(f, "Excel"),
             Format::Markdown => write!(f, "Markdown"),
             Format::Html => write!(f, "HTML"),
             Format::Table => write!(f, "Table"),
@@ -91,6 +96,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("toml") => Ok(Format::Toml),
         Some("xml") => Ok(Format::Xml),
         Some("msgpack") => Ok(Format::Msgpack),
+        Some("xlsx" | "xls" | "xlsm" | "xlsb" | "ods") => Ok(Format::Xlsx),
         Some("md") => Ok(Format::Markdown),
         Some("html") => Ok(Format::Html),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),

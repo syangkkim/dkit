@@ -12,7 +12,7 @@ use clap::Parser;
 use colored::Colorize;
 
 use cli::{Cli, Commands};
-use commands::EncodingOptions;
+use commands::{EncodingOptions, ExcelOptions};
 
 fn main() {
     let cli = Cli::parse();
@@ -87,6 +87,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             full_html,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -106,6 +108,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
             })?;
         }
         Commands::Query {
@@ -116,6 +119,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             output,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
         } => {
             commands::query::run(&commands::query::QueryArgs {
                 input: &input,
@@ -127,6 +132,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
             })?;
         }
         Commands::View {
@@ -145,6 +151,9 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             color,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
+            list_sheets,
         } => {
             commands::view::run(&commands::view::ViewArgs {
                 input: &input,
@@ -164,6 +173,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
+                list_sheets,
             })?;
         }
         Commands::Stats {
@@ -176,6 +187,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             no_header,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
         } => {
             commands::stats::run(&commands::stats::StatsArgs {
                 input: &input,
@@ -189,6 +202,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
             })?;
         }
         Commands::Merge {
@@ -202,6 +216,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             flow,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
         } => {
             commands::merge::run(&commands::merge::MergeArgs {
                 input: &input,
@@ -216,6 +232,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
             })?;
         }
         Commands::Schema {
@@ -223,6 +240,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             from,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
         } => {
             commands::schema::run(&commands::schema::SchemaArgs {
                 input: &input,
@@ -231,6 +250,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
             })?;
         }
         Commands::Diff {
@@ -240,6 +260,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             quiet,
             encoding,
             detect_encoding,
+            sheet,
+            header_row,
         } => {
             let has_diff = commands::diff::run(&commands::diff::DiffArgs {
                 file1: &file1,
@@ -250,6 +272,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     encoding,
                     detect_encoding,
                 },
+                excel_opts: ExcelOptions { sheet, header_row },
             })?;
             if has_diff {
                 process::exit(1);
