@@ -171,6 +171,42 @@ pub struct FormatOptions {
 - 파이프 문자 이스케이프 (`|` → `\|`)
 - 중첩 값은 JSON 인라인 표시
 
+### Excel (.xlsx) → Value (입력 전용)
+
+- `calamine` 크레이트 사용 (`.xlsx` 형식 지원)
+- 바이트 기반 읽기 (`read_from_bytes`) — 파일 경로가 아닌 바이트에서 파싱
+- 시트 선택: 이름 또는 0-based 인덱스 (`--sheet`)
+- 헤더 행 지정 (1-based, `--header-row`, 기본값: 1)
+- 빈 헤더 셀은 `col1`, `col2`, ... 자동 생성
+- 셀 타입 매핑:
+  - `Empty` → `Value::Null`
+  - `Bool` → `Value::Bool`
+  - `Int` → `Value::Integer`
+  - `Float` → 정수값이면 `Value::Integer`, 아니면 `Value::Float`
+  - `String` → `Value::String`
+  - `DateTime` → Excel 시리얼 날짜를 `"YYYY-MM-DD"` 또는 `"YYYY-MM-DD HH:MM:SS"` 문자열로 변환
+  - `DateTimeIso`, `DurationIso` → `Value::String`
+  - `Error` → `Value::String("#ERROR:...")` 형태
+- 누락 컬럼은 `Value::Null`로 채움
+- `list_sheets()`: 시트 이름 목록 반환
+- **제한**: 입력 전용 (쓰기 불가), `.xls` 미지원
+
+### SQLite (.db, .sqlite) → Value (입력 전용)
+
+- `rusqlite` 크레이트 사용 (읽기 전용 모드: `SQLITE_OPEN_READ_ONLY`)
+- 파일 경로 기반 읽기 (`read_from_path`)
+- 테이블 선택: `--table` 옵션 (미지정 시 첫 번째 테이블)
+- 커스텀 SQL: `--sql` 옵션 (SELECT, JOIN, GROUP BY, 집계 함수 등)
+- 타입 매핑:
+  - `NULL` → `Value::Null`
+  - `INTEGER` → `Value::Integer`
+  - `REAL` → `Value::Float`
+  - `TEXT` → `Value::String`
+  - `BLOB` → `Value::String("x'hex...'")` (16진수 인코딩)
+- 테이블 이름 검증 (SQL 인젝션 방지: 영숫자, `_`, `.`만 허용)
+- `list_tables()`: 테이블 이름 목록 반환
+- **제한**: 입력 전용 (쓰기 불가)
+
 ### HTML → Value (출력 전용)
 
 - HTML 테이블 생성 (Array<Object>, Single Object, Array<Primitive>)

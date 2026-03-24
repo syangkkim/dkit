@@ -46,7 +46,9 @@ src/
 │   ├── xml.rs              # XML (quick-xml 기반)
 │   ├── msgpack.rs          # MessagePack
 │   ├── markdown.rs         # Markdown 테이블 (GFM, 출력 전용)
-│   └── html.rs             # HTML 테이블 (출력 전용)
+│   ├── html.rs             # HTML 테이블 (출력 전용)
+│   ├── xlsx.rs             # Excel (.xlsx, 입력 전용, calamine)
+│   └── sqlite.rs           # SQLite (.db/.sqlite, 입력 전용, rusqlite)
 │
 ├── query/                  # 쿼리 엔진
 │   ├── mod.rs
@@ -88,9 +90,10 @@ pub trait FormatWriter {
 
 포맷 감지는 두 가지 전략을 사용한다:
 
-1. **파일 확장자**: `.json`, `.jsonl`/`.ndjson`, `.csv`/`.tsv`, `.yaml`/`.yml`, `.toml`, `.xml`, `.msgpack`, `.md` (출력 전용)
+1. **파일 확장자**: `.json`, `.jsonl`/`.ndjson`, `.csv`/`.tsv`, `.yaml`/`.yml`, `.toml`, `.xml`, `.msgpack`, `.xlsx`, `.db`/`.sqlite`, `.md` (출력 전용)
 2. **콘텐츠 스니핑**: stdin 입력 시 내용 기반으로 포맷을 추론 (XML → JSONL → JSON → TOML → YAML → CSV 순)
 3. **인코딩 감지**: BOM 우선 → `--encoding` 명시 → `--detect-encoding` 자동 감지 → UTF-8 기본
+4. **바이너리 포맷**: Excel(.xlsx)은 바이트 기반 읽기, SQLite는 파일 경로 기반 읽기
 
 ## Dependencies
 
@@ -109,8 +112,10 @@ pub trait FormatWriter {
 | 에러 처리 | thiserror + anyhow | 1.x / 1.x | 라이브러리 + 애플리케이션 에러 |
 | 인코딩 | encoding_rs | 0.8.x | 다중 인코딩 지원 (EUC-KR, Shift-JIS, Latin1 등) |
 | 인코딩 자동 감지 | chardetng | 0.1.x | BOM 없는 파일의 인코딩 휴리스틱 감지 |
+| Excel 읽기 | calamine | 0.26.x | .xlsx 파일 파싱 (입력 전용) |
+| SQLite 읽기 | rusqlite | 0.32.x | SQLite 데이터베이스 읽기 (입력 전용) |
 
-## Conversion Matrix (v0.5)
+## Conversion Matrix (v0.6)
 
 | FROM \ TO | JSON | JSONL | CSV | YAML | TOML | XML | MsgPack | MD | HTML |
 |-----------|------|-------|-----|------|------|-----|---------|----|------|
@@ -121,6 +126,9 @@ pub trait FormatWriter {
 | TOML      | O    | O     | O   | O    | -    | O   | O       | O  | O    |
 | XML       | O    | O     | O*  | O    | O    | -   | O       | O  | O    |
 | MsgPack   | O    | O     | O   | O    | O    | O   | -       | O  | O    |
+| Excel     | O    | O     | O   | O    | O    | O   | O       | O  | O    |
+| SQLite    | O    | O     | O   | O    | O    | O   | O       | O  | O    |
 
 *XML → CSV는 데이터가 Array of Objects 구조인 경우에만 가능
 **MD, HTML은 출력 전용 포맷 (Write-only)
+***Excel, SQLite은 입력 전용 포맷 (Read-only)

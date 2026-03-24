@@ -43,6 +43,15 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 | `--full-html` | | HTML 출력 시 완전한 HTML 문서로 출력 | false |
 | `--encoding <ENCODING>` | | 입력 파일 인코딩 (euc-kr, shift_jis, latin1 등) | UTF-8 |
 | `--detect-encoding` | | 입력 파일 인코딩 자동 감지 | false |
+| `--sheet <SHEET>` | | Excel 시트 이름 또는 0-based 인덱스 | 첫 번째 시트 |
+| `--header-row <N>` | | Excel 헤더 행 번호 (1-based) | 1 |
+| `--list-sheets` | | Excel 시트 목록 출력 | |
+| `--table <TABLE>` | | SQLite 테이블 이름 | 첫 번째 테이블 |
+| `--sql <SQL>` | | SQLite 커스텀 SQL 쿼리 | |
+| `--list-tables` | | SQLite 테이블 목록 출력 | |
+| `--outdir <DIR>` | | 일괄 변환 시 출력 디렉토리 | |
+| `--rename <PATTERN>` | | 일괄 변환 시 파일명 패턴 (`{name}`, `{ext}`) | |
+| `--continue-on-error` | | 일괄 변환 시 에러 발생해도 계속 진행 | false |
 
 ### Examples
 
@@ -84,6 +93,26 @@ dkit convert data.csv --to html                          # HTML 테이블
 dkit convert data.json --to html --styled                # 인라인 CSS 스타일
 dkit convert data.json --to html --full-html             # 완전한 HTML 문서
 dkit convert data.json --to html --styled --full-html    # 스타일 포함 HTML 문서
+
+# Excel (.xlsx) 입력
+dkit convert data.xlsx --to json                         # Excel → JSON
+dkit convert data.xlsx --to csv --sheet Products         # 시트 이름으로 선택
+dkit convert data.xlsx --to yaml --sheet 1               # 시트 인덱스로 선택 (0-based)
+dkit convert data.xlsx --to json --header-row 2          # 헤더 행 지정
+dkit view data.xlsx --list-sheets                        # 시트 목록 출력
+
+# SQLite (.db, .sqlite) 입력
+dkit convert data.db --to json                           # SQLite → JSON
+dkit convert data.db --to csv --table users              # 테이블 지정
+dkit convert data.db --to json --sql "SELECT name, age FROM users WHERE age > 25"  # 커스텀 SQL
+dkit view data.db --list-tables                          # 테이블 목록 출력
+
+# 일괄 변환
+dkit convert *.json --to csv --outdir ./out/             # glob 패턴
+dkit convert ./data/ --to yaml --outdir ./out/           # 디렉토리 입력
+dkit convert a.json b.csv --to yaml --outdir ./out/      # 여러 파일 명시
+dkit convert *.json --to csv --outdir ./out/ --rename "{name}.converted.{ext}"  # 파일명 패턴
+dkit convert ./data/ --to csv --outdir ./out/ --continue-on-error  # 에러 무시하고 계속
 
 # 인코딩 변환
 dkit convert data.csv --to json --encoding euc-kr        # EUC-KR 입력
@@ -181,6 +210,10 @@ dkit view <INPUT> [OPTIONS]
 | `--format <FORMAT>` | 출력 포맷 (table, json, csv, yaml, md, html 등) | table |
 | `--encoding <ENCODING>` | 입력 파일 인코딩 (euc-kr, shift_jis, latin1 등) | UTF-8 |
 | `--detect-encoding` | 입력 파일 인코딩 자동 감지 | false |
+| `--sheet <SHEET>` | Excel 시트 이름 또는 인덱스 | 첫 번째 시트 |
+| `--list-sheets` | Excel 시트 목록 출력 | |
+| `--table <TABLE>` | SQLite 테이블 이름 | 첫 번째 테이블 |
+| `--list-tables` | SQLite 테이블 목록 출력 | |
 
 ### Examples
 
@@ -201,6 +234,16 @@ dkit view data.json --format html
 # 인코딩
 dkit view korean.csv --encoding euc-kr
 dkit view data.csv --detect-encoding
+
+# Excel
+dkit view data.xlsx                              # Excel 파일 미리보기
+dkit view data.xlsx --sheet Products             # 특정 시트 보기
+dkit view data.xlsx --list-sheets                # 시트 목록
+
+# SQLite
+dkit view data.db                                # SQLite 테이블 미리보기
+dkit view data.db --table users                  # 특정 테이블 보기
+dkit view data.db --list-tables                  # 테이블 목록
 ```
 
 ## stats
