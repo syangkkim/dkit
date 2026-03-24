@@ -15,8 +15,9 @@ pub struct Path {
     pub segments: Vec<Segment>,
 }
 
-/// 경로 세그먼트
+/// A single segment of a navigation path.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Segment {
     /// 필드 접근 (`.name`)
     Field(String),
@@ -26,8 +27,9 @@ pub enum Segment {
     Iterate,
 }
 
-/// 파이프라인 연산
+/// Pipeline operation applied after path navigation (e.g., `| where ...`, `| sort ...`).
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Operation {
     /// `where` 필터링
     Where(Condition),
@@ -66,8 +68,9 @@ pub struct GroupAggregate {
     pub alias: String,
 }
 
-/// 집계 함수 종류
+/// Aggregate function used in `group_by` operations.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum AggregateFunc {
     Count,
     Sum,
@@ -76,8 +79,9 @@ pub enum AggregateFunc {
     Max,
 }
 
-/// 조건식 (where 절)
+/// Boolean condition used in `where` clauses.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Condition {
     /// 단일 비교: `field op value`
     Comparison(Comparison),
@@ -95,8 +99,9 @@ pub struct Comparison {
     pub value: LiteralValue,
 }
 
-/// 비교 연산자
+/// Comparison operator used in `where` conditions.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum CompareOp {
     Eq,         // ==
     Ne,         // !=
@@ -109,8 +114,9 @@ pub enum CompareOp {
     EndsWith,   // ends_with
 }
 
-/// 리터럴 값 (비교 대상)
+/// Literal value used as a comparison operand or in expressions.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum LiteralValue {
     String(String),
     Integer(i64),
@@ -119,8 +125,9 @@ pub enum LiteralValue {
     Null,
 }
 
-/// 표현식 (select 절 등에서 사용)
+/// Expression used in `select` clauses and function arguments.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Expr {
     /// 필드 참조: `name`
     Field(String),
@@ -138,22 +145,24 @@ pub struct SelectExpr {
     pub alias: Option<String>,
 }
 
-/// 쿼리 문자열을 파싱하는 파서
-pub struct Parser {
+/// Internal query string parser.
+///
+/// Use the public [`parse_query`] function instead of constructing this directly.
+pub(crate) struct Parser {
     input: Vec<char>,
     pos: usize,
 }
 
 impl Parser {
-    pub fn new(input: &str) -> Self {
+    pub(crate) fn new(input: &str) -> Self {
         Self {
             input: input.chars().collect(),
             pos: 0,
         }
     }
 
-    /// 쿼리 문자열을 파싱하여 Query AST를 반환
-    pub fn parse(&mut self) -> Result<Query, DkitError> {
+    /// Parse the query string into a [`Query`] AST.
+    pub(crate) fn parse(&mut self) -> Result<Query, DkitError> {
         self.skip_whitespace();
         let path = self.parse_path()?;
         self.skip_whitespace();
