@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-24
+
+### Added
+
+- **Excel (.xlsx) Reader**: Read Excel files via `calamine` crate with sheet selection (`--sheet <name|index>`), cell type auto-conversion (numbers, strings, dates, booleans), and sheet listing (`dkit view data.xlsx --list-sheets`). (#85)
+- **SQLite Reader**: Read SQLite database tables with `--table` option, custom SQL queries (`--sql`), table listing (`dkit view data.db --list-tables`), and read-only mode for safety. (#86)
+- **stdin/stdout pipeline streaming**: Support reading from stdin and writing to stdout for Unix-style piping (`cat data.json | dkit convert -f csv`), with `-` as explicit stdin marker and content sniffing auto-detection. (#87)
+- **Batch convert (multi-file)**: Convert multiple files at once using glob patterns (`dkit convert *.json -f csv`) or directories, with output directory (`-o`), filename patterns (`--rename`), progress display, and `--continue-on-error` option. (#88)
+- **Sort and filter options for convert/view**: `--sort-by`, `--sort-order`, `--head`, `--tail`, and `--where` options for quick data manipulation without a full query. (#89)
+
+### Testing & Docs
+
+- **Comprehensive v0.6.0 integration tests**: End-to-end tests for Excel reading, SQLite reading, pipeline chaining, batch conversion, and sort/filter options. (#90)
+
 ## [0.5.0] - 2026-03-23
 
 ### Added
@@ -76,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[0.6.0]: https://github.com/syangkkim/dkit/releases/tag/v0.6.0
 [0.5.0]: https://github.com/syangkkim/dkit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/syangkkim/dkit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/syangkkim/dkit/releases/tag/v0.3.0
