@@ -248,7 +248,7 @@ dkit view data.db --list-tables                  # 테이블 목록
 
 ## stats
 
-데이터 기본 통계.
+데이터 통계 (필드별 상세 통계 포함).
 
 ### Usage
 
@@ -262,6 +262,9 @@ dkit stats <INPUT> [OPTIONS]
 |--------|-------------|
 | `--path <QUERY>` | 중첩 데이터 경로 |
 | `--column <NAME>` | 특정 컬럼 통계 |
+| `--field <NAME>` | 특정 필드 상세 분석 (`--column` 별칭) |
+| `-f, --format <FORMAT>` | 출력 포맷 (`json`, `table`, `md`) |
+| `--histogram` | 숫자 필드에 텍스트 히스토그램 출력 |
 
 ### Output
 
@@ -271,15 +274,53 @@ rows: 1,234
 columns: 5 (date, product, region, quantity, revenue)
 ```
 
-컬럼 통계:
+숫자형 컬럼 통계:
 ```
 type: numeric
 count: 1,234
 sum: 45,678,900
 avg: 37,017.34
+std: 12,345.67
 min: 1,200
-max: 892,000
+p25: 18,000
 median: 28,500
+p75: 52,000
+max: 892,000
+```
+
+문자열형 컬럼 통계:
+```
+type: string
+count: 1,234
+unique: 42
+min_length: 3
+max_length: 50
+avg_length: 12.30
+top_values:
+  Seoul (234)
+  Busan (189)
+  Incheon (156)
+```
+
+null 비율 (missing이 있을 때):
+```
+missing: 15 (1.2%)
+```
+
+타입 혼재 감지:
+```
+⚠ mixed types: integer(100), string(20)
+```
+
+### Examples
+
+```bash
+dkit stats data.csv
+dkit stats data.json --path .users
+dkit stats data.csv --column revenue
+dkit stats data.csv --field revenue --format json
+dkit stats data.csv --format md
+dkit stats data.csv --column age --histogram
 ```
 
 ## schema

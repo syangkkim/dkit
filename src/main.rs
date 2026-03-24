@@ -245,6 +245,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             format,
             path,
             column,
+            field,
+            histogram,
             delimiter,
             no_header,
             encoding,
@@ -254,12 +256,14 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             table,
             sql,
         } => {
+            let effective_column = column.or(field);
             commands::stats::run(&commands::stats::StatsArgs {
                 input: &input,
                 from: from.as_deref(),
                 format: format.as_deref(),
                 path: path.as_deref(),
-                column: column.as_deref(),
+                column: effective_column.as_deref(),
+                histogram,
                 delimiter,
                 no_header,
                 encoding_opts: EncodingOptions {

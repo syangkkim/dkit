@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::Path;
 
@@ -18,14 +19,13 @@ use crate::format::{
 };
 use crate::value::Value;
 use anyhow::{bail, Context, Result};
-
 pub struct StatsArgs<'a> {
     pub input: &'a str,
     pub from: Option<&'a str>,
-    #[allow(dead_code)]
     pub format: Option<&'a str>,
     pub path: Option<&'a str>,
     pub column: Option<&'a str>,
+    pub histogram: bool,
     pub delimiter: Option<char>,
     pub no_header: bool,
     pub encoding_opts: EncodingOptions,
@@ -33,72 +33,209 @@ pub struct StatsArgs<'a> {
     pub sqlite_opts: SqliteOptions,
 }
 
+/// 출력 포맷
+enum OutputFormat {
+    Text,
+    Json,
+    Markdown,
+}
+
+impl OutputFormat {
+    fn from_str_opt(s: Option<&str>) -> Result<Self> {
+        match s {
+            None | Some("text") | Some("table") => Ok(Self::Text),
+            Some("json") => Ok(Self::Json),
+            Some("md") | Some("markdown") => Ok(Self::Markdown),
+            Some(other) => bail!(
+                "Unsupported stats output format: '{}'. Use json, table, or md",
+                other
+            ),
+        }
+    }
+}
+
+/// 컬럼별 통계 데이터
+struct ColumnStats {
+    name: String,
+    total_count: usize,
+    missing_count: usize,
+    type_counts: HashMap<&'static str, usize>,
+    numeric: Option<NumericStats>,
+    string: Option<StringStats>,
+}
+
+struct NumericStats {
+    count: usize,
+    sum: f64,
+    mean: f64,
+    min: f64,
+    max: f64,
+    median: f64,
+    std: f64,
+    p25: f64,
+    p75: f64,
+}
+
+struct StringStats {
+    count: usize,
+    min_length: usize,
+    max_length: usize,
+    avg_length: f64,
+    unique_count: usize,
+    top_values: Vec<(String, usize)>,
+}
+
 pub fn run(args: &StatsArgs) -> Result<()> {
     let (value, _source_format) = read_input_as_value(args)?;
+    let output_format = OutputFormat::from_str_opt(args.format)?;
 
-    // --path 옵션으로 중첩 데이터 접근
     let target = match args.path {
         Some(path_expr) => resolve_path(&value, path_expr)?,
         None => value,
     };
 
     if let Some(col_name) = args.column {
-        print_column_stats(&target, col_name)?;
+        run_column_stats(&target, col_name, &output_format, args.histogram)?;
     } else {
-        print_overall_stats(&target)?;
+        run_overall_stats(&target, &output_format, args.histogram)?;
     }
 
     Ok(())
 }
 
-/// 전체 통계 출력
-fn print_overall_stats(value: &Value) -> Result<()> {
+fn run_overall_stats(value: &Value, output_format: &OutputFormat, histogram: bool) -> Result<()> {
     match value {
         Value::Array(arr) => {
             let rows = arr.len();
-            // 배열의 첫 번째 object에서 컬럼 목록 추출
             let columns = collect_columns(arr);
-            println!("rows: {}", format_number(rows as f64));
-            if !columns.is_empty() {
-                println!("columns: {} ({})", columns.len(), columns.join(", "));
-            }
+            let col_values: Vec<Vec<Value>> = columns
+                .iter()
+                .map(|col| extract_column_values(arr, col))
+                .collect();
+            let col_stats: Vec<ColumnStats> = columns
+                .iter()
+                .zip(col_values.iter())
+                .map(|(col, vals)| compute_column_stats(col, vals))
+                .collect();
 
-            // 각 컬럼별 통계 출력
-            if !columns.is_empty() {
-                for col in &columns {
+            match output_format {
+                OutputFormat::Text => {
+                    println!("rows: {}", format_number(rows as f64));
+                    if !columns.is_empty() {
+                        println!("columns: {} ({})", columns.len(), columns.join(", "));
+                    }
+                    for (cs, vals) in col_stats.iter().zip(col_values.iter()) {
+                        println!();
+                        println!("--- {} ---", cs.name);
+                        print_column_stats_text(cs, histogram, vals);
+                    }
+                }
+                OutputFormat::Json => {
+                    let json = build_overall_json(rows, &col_stats);
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                }
+                OutputFormat::Markdown => {
+                    println!("# Statistics");
                     println!();
-                    println!("--- {} ---", col);
-                    let values = extract_column_values(arr, col);
-                    print_values_stats(&values);
+                    println!("- **rows**: {}", format_number(rows as f64));
+                    if !columns.is_empty() {
+                        println!("- **columns**: {} ({})", columns.len(), columns.join(", "));
+                    }
+                    for cs in &col_stats {
+                        println!();
+                        println!("## {}", cs.name);
+                        println!();
+                        print_column_stats_md(cs);
+                    }
                 }
             }
         }
-        Value::Object(obj) => {
-            println!("rows: 1");
-            let columns: Vec<&String> = obj.keys().collect();
-            println!(
-                "columns: {} ({})",
-                columns.len(),
-                columns
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        _ => {
-            println!("type: {}", value_type_name(value));
-            println!("value: {}", value);
-        }
+        Value::Object(obj) => match output_format {
+            OutputFormat::Text => {
+                println!("rows: 1");
+                let columns: Vec<&String> = obj.keys().collect();
+                println!(
+                    "columns: {} ({})",
+                    columns.len(),
+                    columns
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            OutputFormat::Json => {
+                let mut map = serde_json::Map::new();
+                map.insert("rows".to_string(), serde_json::Value::Number(1.into()));
+                let columns: Vec<&String> = obj.keys().collect();
+                map.insert(
+                    "columns".to_string(),
+                    serde_json::Value::Array(
+                        columns
+                            .iter()
+                            .map(|c| serde_json::Value::String(c.to_string()))
+                            .collect(),
+                    ),
+                );
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+                );
+            }
+            OutputFormat::Markdown => {
+                println!("# Statistics");
+                println!();
+                println!("- **rows**: 1");
+                let columns: Vec<&String> = obj.keys().collect();
+                println!(
+                    "- **columns**: {} ({})",
+                    columns.len(),
+                    columns
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        },
+        _ => match output_format {
+            OutputFormat::Text => {
+                println!("type: {}", value_type_name(value));
+                println!("value: {}", value);
+            }
+            OutputFormat::Json => {
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "type".to_string(),
+                    serde_json::Value::String(value_type_name(value).to_string()),
+                );
+                map.insert(
+                    "value".to_string(),
+                    serde_json::Value::String(format!("{}", value)),
+                );
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+                );
+            }
+            OutputFormat::Markdown => {
+                println!("- **type**: {}", value_type_name(value));
+                println!("- **value**: {}", value);
+            }
+        },
     }
     Ok(())
 }
 
-/// 특정 컬럼의 통계 출력
-fn print_column_stats(value: &Value, col_name: &str) -> Result<()> {
+fn run_column_stats(
+    value: &Value,
+    col_name: &str,
+    output_format: &OutputFormat,
+    histogram: bool,
+) -> Result<()> {
     let arr = match value {
         Value::Array(arr) => arr,
-        _ => bail!("--column requires array data (rows of objects)"),
+        _ => bail!("--column/--field requires array data (rows of objects)"),
     };
 
     let columns = collect_columns(arr);
@@ -111,47 +248,420 @@ fn print_column_stats(value: &Value, col_name: &str) -> Result<()> {
     }
 
     let values = extract_column_values(arr, col_name);
-    print_values_stats(&values);
+    let cs = compute_column_stats(col_name, &values);
+
+    match output_format {
+        OutputFormat::Text => print_column_stats_text(&cs, histogram, &values),
+        OutputFormat::Json => {
+            let json = build_column_json(&cs);
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        OutputFormat::Markdown => {
+            println!("## {}", cs.name);
+            println!();
+            print_column_stats_md(&cs);
+        }
+    }
     Ok(())
 }
 
-/// 값 리스트에 대한 통계 출력
-fn print_values_stats(values: &[Value]) {
+// ── 통계 계산 ──
+
+fn compute_column_stats(name: &str, values: &[Value]) -> ColumnStats {
+    let total_count = values.len();
+    let missing_count = values.iter().filter(|v| v.is_null()).count();
+
+    // 타입 카운트
+    let mut type_counts: HashMap<&'static str, usize> = HashMap::new();
+    for v in values {
+        let tn = value_type_name(v);
+        *type_counts.entry(tn).or_insert(0) += 1;
+    }
+
     let numeric_values = extract_numeric_values(values);
     let non_null_count = values.iter().filter(|v| !v.is_null()).count();
 
-    if numeric_values.len() == non_null_count && !numeric_values.is_empty() {
-        // 숫자형 컬럼
-        println!("type: numeric");
-        println!("count: {}", format_number(values.len() as f64));
-        let sum: f64 = numeric_values.iter().sum();
-        let avg = sum / numeric_values.len() as f64;
-        let min = numeric_values.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max = numeric_values
-            .iter()
-            .cloned()
-            .fold(f64::NEG_INFINITY, f64::max);
-        let median = compute_median(&numeric_values);
+    let is_numeric = numeric_values.len() == non_null_count && !numeric_values.is_empty();
 
-        println!("sum: {}", format_number(sum));
-        println!("avg: {}", format_decimal(avg));
-        println!("min: {}", format_number(min));
-        println!("max: {}", format_number(max));
-        println!("median: {}", format_number(median));
+    let numeric = if is_numeric {
+        Some(compute_numeric_stats(&numeric_values))
     } else {
-        // 문자열형 컬럼
-        println!("type: string");
-        println!("count: {}", format_number(values.len() as f64));
-        let null_count = values.iter().filter(|v| v.is_null()).count();
-        if null_count > 0 {
-            println!("null: {}", format_number(null_count as f64));
-        }
-        let unique = count_unique(values);
-        println!("unique: {}", format_number(unique as f64));
+        None
+    };
+
+    let string = if !is_numeric {
+        Some(compute_string_stats(values))
+    } else {
+        None
+    };
+
+    ColumnStats {
+        name: name.to_string(),
+        total_count,
+        missing_count,
+        type_counts,
+        numeric,
+        string,
     }
 }
 
-/// 배열의 object들에서 컬럼 이름 수집 (순서 유지)
+fn compute_numeric_stats(values: &[f64]) -> NumericStats {
+    let count = values.len();
+    let sum: f64 = values.iter().sum();
+    let mean = sum / count as f64;
+
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let min = sorted[0];
+    let max = sorted[count - 1];
+    let median = percentile_sorted(&sorted, 50.0);
+    let p25 = percentile_sorted(&sorted, 25.0);
+    let p75 = percentile_sorted(&sorted, 75.0);
+
+    // 표준편차 (population)
+    let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / count as f64;
+    let std = variance.sqrt();
+
+    NumericStats {
+        count,
+        sum,
+        mean,
+        min,
+        max,
+        median,
+        std,
+        p25,
+        p75,
+    }
+}
+
+fn percentile_sorted(sorted: &[f64], p: f64) -> f64 {
+    if sorted.is_empty() {
+        return 0.0;
+    }
+    if sorted.len() == 1 {
+        return sorted[0];
+    }
+    let rank = (p / 100.0) * (sorted.len() - 1) as f64;
+    let lower = rank.floor() as usize;
+    let upper = rank.ceil() as usize;
+    if lower == upper {
+        sorted[lower]
+    } else {
+        let frac = rank - lower as f64;
+        sorted[lower] * (1.0 - frac) + sorted[upper] * frac
+    }
+}
+
+fn compute_string_stats(values: &[Value]) -> StringStats {
+    let non_null: Vec<String> = values
+        .iter()
+        .filter(|v| !v.is_null())
+        .map(|v| match v {
+            Value::String(s) => s.clone(),
+            other => format!("{}", other),
+        })
+        .collect();
+
+    let count = non_null.len();
+    let (min_length, max_length, avg_length) = if count > 0 {
+        let lengths: Vec<usize> = non_null.iter().map(|s| s.len()).collect();
+        let min_l = *lengths.iter().min().unwrap();
+        let max_l = *lengths.iter().max().unwrap();
+        let avg_l = lengths.iter().sum::<usize>() as f64 / count as f64;
+        (min_l, max_l, avg_l)
+    } else {
+        (0, 0, 0.0)
+    };
+
+    // unique count
+    let unique: std::collections::HashSet<&str> = non_null.iter().map(|s| s.as_str()).collect();
+    let unique_count = unique.len();
+
+    // top values
+    let mut freq: HashMap<&str, usize> = HashMap::new();
+    for s in &non_null {
+        *freq.entry(s.as_str()).or_insert(0) += 1;
+    }
+    let mut freq_vec: Vec<(String, usize)> =
+        freq.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+    freq_vec.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    freq_vec.truncate(5);
+
+    StringStats {
+        count,
+        min_length,
+        max_length,
+        avg_length,
+        unique_count,
+        top_values: freq_vec,
+    }
+}
+
+// ── Text 출력 ──
+
+fn print_column_stats_text(cs: &ColumnStats, histogram: bool, raw_values: &[Value]) {
+    // 타입 일관성 검사
+    let non_null_types: Vec<(&str, usize)> = cs
+        .type_counts
+        .iter()
+        .filter(|(k, _)| **k != "null")
+        .map(|(k, v)| (*k, *v))
+        .collect();
+    if non_null_types.len() > 1 {
+        let mixed: Vec<String> = non_null_types
+            .iter()
+            .map(|(t, c)| format!("{}({})", t, c))
+            .collect();
+        println!("⚠ mixed types: {}", mixed.join(", "));
+    }
+
+    if let Some(ref ns) = cs.numeric {
+        println!("type: numeric");
+        println!("count: {}", format_number(ns.count as f64));
+        if cs.missing_count > 0 {
+            println!(
+                "missing: {} ({:.1}%)",
+                format_number(cs.missing_count as f64),
+                cs.missing_count as f64 / cs.total_count as f64 * 100.0
+            );
+        }
+        println!("sum: {}", format_number(ns.sum));
+        println!("avg: {}", format_decimal(ns.mean));
+        println!("std: {}", format_decimal(ns.std));
+        println!("min: {}", format_number(ns.min));
+        println!("p25: {}", format_number(ns.p25));
+        println!("median: {}", format_number(ns.median));
+        println!("p75: {}", format_number(ns.p75));
+        println!("max: {}", format_number(ns.max));
+
+        if histogram {
+            println!();
+            let nums = extract_numeric_values(raw_values);
+            print_histogram(&nums);
+        }
+    } else if let Some(ref ss) = cs.string {
+        println!("type: string");
+        println!("count: {}", format_number(ss.count as f64));
+        if cs.missing_count > 0 {
+            println!(
+                "missing: {} ({:.1}%)",
+                format_number(cs.missing_count as f64),
+                cs.missing_count as f64 / cs.total_count as f64 * 100.0
+            );
+        }
+        println!("unique: {}", format_number(ss.unique_count as f64));
+        println!("min_length: {}", ss.min_length);
+        println!("max_length: {}", ss.max_length);
+        println!("avg_length: {}", format_decimal(ss.avg_length));
+        if !ss.top_values.is_empty() {
+            println!("top_values:");
+            for (val, count) in &ss.top_values {
+                println!("  {} ({})", val, count);
+            }
+        }
+    }
+}
+
+// ── Markdown 출력 ──
+
+fn print_column_stats_md(cs: &ColumnStats) {
+    let non_null_types: Vec<(&str, usize)> = cs
+        .type_counts
+        .iter()
+        .filter(|(k, _)| **k != "null")
+        .map(|(k, v)| (*k, *v))
+        .collect();
+    if non_null_types.len() > 1 {
+        let mixed: Vec<String> = non_null_types
+            .iter()
+            .map(|(t, c)| format!("{}({})", t, c))
+            .collect();
+        println!("| ⚠ mixed types | {} |", mixed.join(", "));
+    }
+
+    println!("| Stat | Value |");
+    println!("|------|-------|");
+
+    if let Some(ref ns) = cs.numeric {
+        println!("| type | numeric |");
+        println!("| count | {} |", format_number(ns.count as f64));
+        if cs.missing_count > 0 {
+            println!(
+                "| missing | {} ({:.1}%) |",
+                format_number(cs.missing_count as f64),
+                cs.missing_count as f64 / cs.total_count as f64 * 100.0
+            );
+        }
+        println!("| sum | {} |", format_number(ns.sum));
+        println!("| avg | {} |", format_decimal(ns.mean));
+        println!("| std | {} |", format_decimal(ns.std));
+        println!("| min | {} |", format_number(ns.min));
+        println!("| p25 | {} |", format_number(ns.p25));
+        println!("| median | {} |", format_number(ns.median));
+        println!("| p75 | {} |", format_number(ns.p75));
+        println!("| max | {} |", format_number(ns.max));
+    } else if let Some(ref ss) = cs.string {
+        println!("| type | string |");
+        println!("| count | {} |", format_number(ss.count as f64));
+        if cs.missing_count > 0 {
+            println!(
+                "| missing | {} ({:.1}%) |",
+                format_number(cs.missing_count as f64),
+                cs.missing_count as f64 / cs.total_count as f64 * 100.0
+            );
+        }
+        println!("| unique | {} |", format_number(ss.unique_count as f64));
+        println!("| min_length | {} |", ss.min_length);
+        println!("| max_length | {} |", ss.max_length);
+        println!("| avg_length | {} |", format_decimal(ss.avg_length));
+        if !ss.top_values.is_empty() {
+            let top: Vec<String> = ss
+                .top_values
+                .iter()
+                .map(|(v, c)| format!("{}({})", v, c))
+                .collect();
+            println!("| top_values | {} |", top.join(", "));
+        }
+    }
+}
+
+// ── JSON 출력 ──
+
+fn build_overall_json(rows: usize, col_stats: &[ColumnStats]) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("rows".to_string(), serde_json::json!(rows));
+
+    let columns: Vec<serde_json::Value> = col_stats.iter().map(build_column_json).collect();
+    map.insert("columns".to_string(), serde_json::Value::Array(columns));
+
+    serde_json::Value::Object(map)
+}
+
+fn build_column_json(cs: &ColumnStats) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("name".to_string(), serde_json::json!(cs.name));
+    map.insert("total_count".to_string(), serde_json::json!(cs.total_count));
+    map.insert(
+        "missing_count".to_string(),
+        serde_json::json!(cs.missing_count),
+    );
+
+    if cs.total_count > 0 {
+        let ratio = cs.missing_count as f64 / cs.total_count as f64;
+        map.insert(
+            "missing_ratio".to_string(),
+            serde_json::json!(round2(ratio)),
+        );
+    }
+
+    // 타입 일관성
+    let non_null_types: Vec<&str> = cs
+        .type_counts
+        .iter()
+        .filter(|(k, _)| **k != "null")
+        .map(|(k, _)| *k)
+        .collect();
+    if non_null_types.len() > 1 {
+        map.insert("mixed_types".to_string(), serde_json::json!(true));
+        let tc: serde_json::Map<String, serde_json::Value> = cs
+            .type_counts
+            .iter()
+            .map(|(k, v)| (k.to_string(), serde_json::json!(v)))
+            .collect();
+        map.insert("type_counts".to_string(), serde_json::Value::Object(tc));
+    }
+
+    if let Some(ref ns) = cs.numeric {
+        map.insert("type".to_string(), serde_json::json!("numeric"));
+        map.insert("count".to_string(), serde_json::json!(ns.count));
+        map.insert("sum".to_string(), serde_json::json!(round2(ns.sum)));
+        map.insert("mean".to_string(), serde_json::json!(round2(ns.mean)));
+        map.insert("std".to_string(), serde_json::json!(round2(ns.std)));
+        map.insert("min".to_string(), serde_json::json!(ns.min));
+        map.insert("p25".to_string(), serde_json::json!(round2(ns.p25)));
+        map.insert("median".to_string(), serde_json::json!(round2(ns.median)));
+        map.insert("p75".to_string(), serde_json::json!(round2(ns.p75)));
+        map.insert("max".to_string(), serde_json::json!(ns.max));
+    } else if let Some(ref ss) = cs.string {
+        map.insert("type".to_string(), serde_json::json!("string"));
+        map.insert("count".to_string(), serde_json::json!(ss.count));
+        map.insert(
+            "unique_count".to_string(),
+            serde_json::json!(ss.unique_count),
+        );
+        map.insert("min_length".to_string(), serde_json::json!(ss.min_length));
+        map.insert("max_length".to_string(), serde_json::json!(ss.max_length));
+        map.insert(
+            "avg_length".to_string(),
+            serde_json::json!(round2(ss.avg_length)),
+        );
+        if !ss.top_values.is_empty() {
+            let top: Vec<serde_json::Value> = ss
+                .top_values
+                .iter()
+                .map(|(v, c)| serde_json::json!({"value": v, "count": c}))
+                .collect();
+            map.insert("top_values".to_string(), serde_json::Value::Array(top));
+        }
+    }
+
+    serde_json::Value::Object(map)
+}
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+// ── 히스토그램 ──
+
+fn print_histogram(values: &[f64]) {
+    if values.is_empty() {
+        return;
+    }
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    if (max - min).abs() < f64::EPSILON {
+        println!("histogram: all values = {}", format_number(min));
+        return;
+    }
+
+    let bin_count = 10usize;
+    let bin_width = (max - min) / bin_count as f64;
+    let mut bins = vec![0usize; bin_count];
+
+    for &v in values {
+        let idx = ((v - min) / bin_width).floor() as usize;
+        let idx = idx.min(bin_count - 1);
+        bins[idx] += 1;
+    }
+
+    let max_count = *bins.iter().max().unwrap_or(&1);
+    let bar_max_width = 30;
+
+    println!("histogram:");
+    for (i, &count) in bins.iter().enumerate() {
+        let lo = min + i as f64 * bin_width;
+        let hi = lo + bin_width;
+        let bar_len = if max_count > 0 {
+            (count as f64 / max_count as f64 * bar_max_width as f64).round() as usize
+        } else {
+            0
+        };
+        let bar: String = "█".repeat(bar_len);
+        println!(
+            "  [{:>8} - {:>8}) {} {}",
+            format_number(lo),
+            format_number(hi),
+            bar,
+            count
+        );
+    }
+}
+
+// ── 유틸리티 함수 ──
+
 fn collect_columns(arr: &[Value]) -> Vec<String> {
     let mut columns = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -167,7 +677,6 @@ fn collect_columns(arr: &[Value]) -> Vec<String> {
     columns
 }
 
-/// 특정 컬럼의 값들을 추출
 fn extract_column_values(arr: &[Value], col: &str) -> Vec<Value> {
     arr.iter()
         .map(|item| {
@@ -180,7 +689,6 @@ fn extract_column_values(arr: &[Value], col: &str) -> Vec<Value> {
         .collect()
 }
 
-/// 숫자 값만 추출
 fn extract_numeric_values(values: &[Value]) -> Vec<f64> {
     values
         .iter()
@@ -189,28 +697,6 @@ fn extract_numeric_values(values: &[Value]) -> Vec<f64> {
         .collect()
 }
 
-/// 중앙값 계산
-fn compute_median(values: &[f64]) -> f64 {
-    if values.is_empty() {
-        return 0.0;
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let len = sorted.len();
-    if len.is_multiple_of(2) {
-        (sorted[len / 2 - 1] + sorted[len / 2]) / 2.0
-    } else {
-        sorted[len / 2]
-    }
-}
-
-/// 고유 값 개수
-fn count_unique(values: &[Value]) -> usize {
-    let strs: std::collections::HashSet<String> = values.iter().map(|v| format!("{v}")).collect();
-    strs.len()
-}
-
-/// Value 타입 이름
 fn value_type_name(value: &Value) -> &'static str {
     match value {
         Value::Null => "null",
@@ -223,7 +709,6 @@ fn value_type_name(value: &Value) -> &'static str {
     }
 }
 
-/// 숫자 포맷 (천 단위 구분자)
 fn format_number(n: f64) -> String {
     if n.fract() != 0.0 {
         return format_decimal(n);
@@ -243,13 +728,14 @@ fn format_number(n: f64) -> String {
     result.chars().rev().collect()
 }
 
-/// 소수점 포맷
 fn format_decimal(n: f64) -> String {
     let formatted = format!("{:.2}", n);
     let parts: Vec<&str> = formatted.split('.').collect();
     let integer_part = format_number(parts[0].parse::<f64>().unwrap_or(0.0));
     format!("{}.{}", integer_part, parts[1])
 }
+
+// ── 입력 읽기 ──
 
 fn read_input(args: &StatsArgs) -> Result<(String, Format)> {
     let path = Path::new(args.input);
@@ -261,7 +747,6 @@ fn read_input(args: &StatsArgs) -> Result<(String, Format)> {
     Ok((content, format))
 }
 
-/// stdin에서 인코딩을 고려하여 문자열을 읽는다.
 fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
     if opts.encoding.is_some() || opts.detect_encoding {
         let mut buf = Vec::new();
@@ -278,7 +763,6 @@ fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
     }
 }
 
-/// MessagePack 바이너리 입력을 처리하여 Value를 반환
 fn read_input_as_value(args: &StatsArgs) -> Result<(Value, Format)> {
     if args.input == "-" {
         if args.from == Some("msgpack") || args.from == Some("messagepack") {
@@ -362,7 +846,6 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
     }
 }
 
-/// 간단한 경로 접근: ".field.subfield" 또는 ".array[0]" 형태
 fn resolve_path(value: &Value, path_expr: &str) -> Result<Value> {
     let path_expr = path_expr.trim();
     if path_expr.is_empty() || path_expr == "." {
@@ -472,23 +955,61 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_median_odd() {
-        assert_eq!(compute_median(&[1.0, 3.0, 5.0]), 3.0);
+    fn test_percentile_sorted() {
+        let sorted = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        assert_eq!(percentile_sorted(&sorted, 0.0), 1.0);
+        assert_eq!(percentile_sorted(&sorted, 50.0), 3.0);
+        assert_eq!(percentile_sorted(&sorted, 100.0), 5.0);
+        assert_eq!(percentile_sorted(&sorted, 25.0), 2.0);
+        assert_eq!(percentile_sorted(&sorted, 75.0), 4.0);
     }
 
     #[test]
-    fn test_compute_median_even() {
-        assert_eq!(compute_median(&[1.0, 2.0, 3.0, 4.0]), 2.5);
+    fn test_compute_numeric_stats() {
+        let values = vec![10.0, 20.0, 30.0, 40.0, 50.0];
+        let ns = compute_numeric_stats(&values);
+        assert_eq!(ns.count, 5);
+        assert_eq!(ns.sum, 150.0);
+        assert_eq!(ns.mean, 30.0);
+        assert_eq!(ns.min, 10.0);
+        assert_eq!(ns.max, 50.0);
+        assert_eq!(ns.median, 30.0);
+        assert_eq!(ns.p25, 20.0);
+        assert_eq!(ns.p75, 40.0);
+        // std of [10,20,30,40,50] = sqrt(200) ≈ 14.14
+        assert!((ns.std - 14.142135).abs() < 0.01);
     }
 
     #[test]
-    fn test_compute_median_single() {
-        assert_eq!(compute_median(&[42.0]), 42.0);
+    fn test_compute_string_stats() {
+        let values = vec![
+            Value::String("apple".to_string()),
+            Value::String("banana".to_string()),
+            Value::String("apple".to_string()),
+            Value::Null,
+        ];
+        let ss = compute_string_stats(&values);
+        assert_eq!(ss.count, 3);
+        assert_eq!(ss.unique_count, 2);
+        assert_eq!(ss.min_length, 5);
+        assert_eq!(ss.max_length, 6);
+        assert!((ss.avg_length - 5.333).abs() < 0.01);
+        assert_eq!(ss.top_values[0].0, "apple");
+        assert_eq!(ss.top_values[0].1, 2);
     }
 
     #[test]
-    fn test_compute_median_empty() {
-        assert_eq!(compute_median(&[]), 0.0);
+    fn test_compute_column_stats_mixed_types() {
+        let values = vec![
+            Value::Integer(10),
+            Value::String("hello".to_string()),
+            Value::Integer(20),
+        ];
+        let cs = compute_column_stats("mixed", &values);
+        assert!(cs.type_counts.len() >= 2);
+        // mixed types → treated as string
+        assert!(cs.string.is_some());
+        assert!(cs.numeric.is_none());
     }
 
     #[test]
@@ -526,13 +1047,9 @@ mod tests {
     }
 
     #[test]
-    fn test_count_unique() {
-        let values = vec![
-            Value::String("a".to_string()),
-            Value::String("b".to_string()),
-            Value::String("a".to_string()),
-            Value::Null,
-        ];
-        assert_eq!(count_unique(&values), 3); // "a", "b", "null"
+    fn test_round2() {
+        assert_eq!(round2(3.14159), 3.14);
+        assert_eq!(round2(0.0), 0.0);
+        assert_eq!(round2(100.005), 100.01);
     }
 }

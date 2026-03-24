@@ -309,7 +309,7 @@ pub enum Commands {
 
     /// Show statistics about data
     #[command(
-        after_help = "Examples:\n  dkit stats data.csv\n  dkit stats data.json --path .users\n  dkit stats data.csv --column revenue"
+        after_help = "Examples:\n  dkit stats data.csv\n  dkit stats data.json --path .users\n  dkit stats data.csv --column revenue\n  dkit stats data.csv --field revenue --format json\n  dkit stats data.csv --histogram"
     )]
     Stats {
         /// Input file path (use '-' for stdin)
@@ -320,7 +320,7 @@ pub enum Commands {
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
 
-        /// Output format (default: table). Supports: json, jsonl, csv, yaml, toml, xml, md, html, table
+        /// Output format (json, table, md)
         #[arg(short = 'f', long, value_name = "FORMAT")]
         format: Option<String>,
 
@@ -331,6 +331,14 @@ pub enum Commands {
         /// Get statistics for a specific column
         #[arg(long, value_name = "NAME")]
         column: Option<String>,
+
+        /// Get detailed statistics for a specific field (alias for --column)
+        #[arg(long, value_name = "NAME")]
+        field: Option<String>,
+
+        /// Show text histogram for numeric fields
+        #[arg(long)]
+        histogram: bool,
 
         /// CSV delimiter character (default: ',')
         #[arg(long, value_name = "CHAR")]
