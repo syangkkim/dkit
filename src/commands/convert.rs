@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use super::{
-    read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes, EncodingOptions, ExcelOptions,
+    read_file_bytes, read_file_with_encoding, read_sqlite_from_path, read_xlsx_from_bytes,
+    EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::html::HtmlWriter;
@@ -38,6 +39,7 @@ pub struct ConvertArgs<'a> {
     pub full_html: bool,
     pub encoding_opts: EncodingOptions,
     pub excel_opts: ExcelOptions,
+    pub sqlite_opts: SqliteOptions,
 }
 
 /// convert 서브커맨드 실행
@@ -120,6 +122,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
                 &read_options,
                 &args.encoding_opts,
                 &args.excel_opts,
+                &args.sqlite_opts,
             )?;
 
             let out_name = path
@@ -155,6 +158,7 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         &read_options,
         &args.encoding_opts,
         &args.excel_opts,
+        &args.sqlite_opts,
     )?;
 
     let outdir_path = args.outdir.map(|d| {
@@ -206,6 +210,7 @@ fn read_value_from_path(
     options: &FormatOptions,
     encoding_opts: &EncodingOptions,
     excel_opts: &ExcelOptions,
+    sqlite_opts: &SqliteOptions,
 ) -> Result<Value> {
     if format == Format::Msgpack {
         let bytes = read_file_bytes(path)?;
@@ -213,6 +218,8 @@ fn read_value_from_path(
     } else if format == Format::Xlsx {
         let bytes = read_file_bytes(path)?;
         read_xlsx_from_bytes(&bytes, excel_opts)
+    } else if format == Format::Sqlite {
+        read_sqlite_from_path(path, sqlite_opts)
     } else {
         let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, options)
@@ -230,6 +237,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
+        }
+        Format::Sqlite => {
+            bail!("SQLite files must be read from a file path, not from text input")
         }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
@@ -276,6 +286,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
+        Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => {

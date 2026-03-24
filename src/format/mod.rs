@@ -4,6 +4,7 @@ pub mod json;
 pub mod jsonl;
 pub mod markdown;
 pub mod msgpack;
+pub mod sqlite;
 pub mod toml;
 pub mod xlsx;
 pub mod xml;
@@ -26,6 +27,7 @@ pub enum Format {
     Xml,
     Msgpack,
     Xlsx,
+    Sqlite,
     Markdown,
     Html,
     Table,
@@ -42,6 +44,7 @@ impl Format {
             "xml" => Ok(Format::Xml),
             "msgpack" | "messagepack" => Ok(Format::Msgpack),
             "xlsx" | "excel" | "xls" => Ok(Format::Xlsx),
+            "sqlite" | "sqlite3" | "db" => Ok(Format::Sqlite),
             "md" | "markdown" => Ok(Format::Markdown),
             "html" => Ok(Format::Html),
             "table" => Ok(Format::Table),
@@ -61,6 +64,7 @@ impl Format {
             ("jsonl", "JSON Lines (one JSON object per line)"),
             ("msgpack", "MessagePack binary format"),
             ("xlsx", "Excel spreadsheet (input only)"),
+            ("sqlite", "SQLite database (input only)"),
             ("md", "Markdown table"),
             ("html", "HTML table"),
             ("table", "Terminal table (default for view)"),
@@ -79,6 +83,7 @@ impl std::fmt::Display for Format {
             Format::Xml => write!(f, "XML"),
             Format::Msgpack => write!(f, "MessagePack"),
             Format::Xlsx => write!(f, "Excel"),
+            Format::Sqlite => write!(f, "SQLite"),
             Format::Markdown => write!(f, "Markdown"),
             Format::Html => write!(f, "HTML"),
             Format::Table => write!(f, "Table"),
@@ -97,6 +102,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("xml") => Ok(Format::Xml),
         Some("msgpack") => Ok(Format::Msgpack),
         Some("xlsx" | "xls" | "xlsm" | "xlsb" | "ods") => Ok(Format::Xlsx),
+        Some("db" | "sqlite" | "sqlite3") => Ok(Format::Sqlite),
         Some("md") => Ok(Format::Markdown),
         Some("html") => Ok(Format::Html),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),

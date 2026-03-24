@@ -93,6 +93,33 @@ pub fn list_xlsx_sheets(bytes: &[u8]) -> anyhow::Result<Vec<String>> {
     crate::format::xlsx::XlsxReader::list_sheets(bytes)
 }
 
+/// SQLite 읽기 옵션
+#[derive(Debug, Clone, Default)]
+pub struct SqliteOptions {
+    /// 테이블 이름
+    pub table: Option<String>,
+    /// 실행할 SQL 쿼리
+    pub sql: Option<String>,
+}
+
+/// SQLite 파일을 경로에서 Value로 읽는다.
+pub fn read_sqlite_from_path(
+    path: &std::path::Path,
+    sqlite_opts: &SqliteOptions,
+) -> anyhow::Result<crate::value::Value> {
+    use crate::format::sqlite::{SqliteOptions as ReaderOpts, SqliteReader};
+    let opts = ReaderOpts {
+        table: sqlite_opts.table.clone(),
+        sql: sqlite_opts.sql.clone(),
+    };
+    SqliteReader::new(opts).read_from_path(path)
+}
+
+/// SQLite 파일의 테이블 목록을 반환한다.
+pub fn list_sqlite_tables(path: &std::path::Path) -> anyhow::Result<Vec<String>> {
+    crate::format::sqlite::SqliteReader::list_tables(path)
+}
+
 /// 인코딩을 고려하여 파일을 읽는다.
 ///
 /// 동작 우선순위:
