@@ -465,6 +465,52 @@ pub enum Commands {
         sql: Option<String>,
     },
 
+    /// Validate data against a JSON Schema
+    #[command(
+        after_help = "Examples:\n  dkit validate data.json --schema schema.json\n  dkit validate data.yaml --schema schema.json\n  dkit validate data.csv --schema schema.json --from csv\n  dkit validate data.json --schema schema.json --quiet && echo 'valid' || echo 'invalid'"
+    )]
+    Validate {
+        /// Input file path (use '-' for stdin)
+        #[arg(value_name = "INPUT")]
+        input: String,
+
+        /// JSON Schema file path
+        #[arg(long, value_name = "FILE")]
+        schema: PathBuf,
+
+        /// Input format (auto-detected from file extension)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
+
+        /// Suppress detailed error output (print only valid/invalid summary)
+        #[arg(short, long)]
+        quiet: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+    },
+
     /// Compare two data files and show differences
     #[command(
         after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'\n  dkit diff a.json b.json --mode value --diff-format json\n  dkit diff a.json b.json --array-diff key=id --ignore-order"

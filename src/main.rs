@@ -313,6 +313,34 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
+        Commands::Validate {
+            input,
+            schema,
+            from,
+            quiet,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+        } => {
+            let is_invalid = commands::validate::run(&commands::validate::ValidateArgs {
+                input: &input,
+                schema: &schema,
+                from: from.as_deref(),
+                quiet,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+            })?;
+            if is_invalid {
+                process::exit(1);
+            }
+        }
         Commands::Diff {
             file1,
             file2,
