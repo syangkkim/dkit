@@ -38,20 +38,22 @@ cargo install --path .
 
 ## Supported Formats
 
-| Format      | Extensions           | Read | Write |
-|-------------|---------------------|------|-------|
-| JSON        | `.json`             | O    | O     |
-| JSONL       | `.jsonl`, `.ndjson` | O    | O     |
-| CSV         | `.csv`              | O    | O     |
-| TSV         | `.tsv`              | O    | O     |
-| YAML        | `.yaml`, `.yml`     | O    | O     |
-| TOML        | `.toml`             | O    | O     |
-| XML         | `.xml`              | O    | O     |
-| MessagePack | `.msgpack`          | O    | O     |
-| Markdown    | `.md`               | -    | O     |
-| HTML        |                     | -    | O     |
+| Format      | Extensions              | Read | Write |
+|-------------|------------------------|------|-------|
+| JSON        | `.json`                | O    | O     |
+| JSONL       | `.jsonl`, `.ndjson`    | O    | O     |
+| CSV         | `.csv`                 | O    | O     |
+| TSV         | `.tsv`                 | O    | O     |
+| YAML        | `.yaml`, `.yml`        | O    | O     |
+| TOML        | `.toml`                | O    | O     |
+| XML         | `.xml`                 | O    | O     |
+| MessagePack | `.msgpack`             | O    | O     |
+| Excel       | `.xlsx`                | O    | -     |
+| SQLite      | `.db`, `.sqlite`       | O    | -     |
+| Markdown    | `.md`                  | -    | O     |
+| HTML        |                        | -    | O     |
 
-All conversion paths between supported read/write formats are available. Markdown and HTML are output-only formats for table rendering.
+All conversion paths between supported read/write formats are available. Excel and SQLite are input-only formats. Markdown and HTML are output-only formats for table rendering.
 
 ## Commands
 
@@ -96,6 +98,18 @@ dkit convert data.csv --to html                # HTML table
 dkit convert data.json --to html --styled      # HTML with inline CSS
 dkit convert data.json --to html --full-html   # Complete HTML document
 dkit convert data.json --to html --styled --full-html  # Styled full document
+
+# Excel (.xlsx) input
+dkit convert data.xlsx --to json                         # Convert Excel to JSON
+dkit convert data.xlsx --to csv --sheet Products         # Specific sheet by name
+dkit convert data.xlsx --to yaml --sheet 1               # Specific sheet by index
+dkit view data.xlsx --list-sheets                        # List available sheets
+
+# SQLite (.db, .sqlite) input
+dkit convert data.db --to json                           # Convert SQLite to JSON
+dkit convert data.db --to csv --table users              # Specific table
+dkit convert data.db --to json --sql "SELECT * FROM users WHERE age > 25"  # Custom SQL
+dkit view data.db --list-tables                          # List available tables
 
 # Encoding support
 dkit convert data.csv --to json --encoding euc-kr       # EUC-KR input
@@ -237,6 +251,8 @@ dkit merge config1.yaml config2.yaml --to yaml
 | TOML | O | X | X | X |
 | XML | O | X | X | O |
 | MessagePack | O | X | X | X |
+| Excel (.xlsx) input | O | X | X | X |
+| SQLite input | O | X | X | X |
 | Markdown/HTML output | O | X | X | X |
 | Cross-format convert | O | X | Partial | Partial |
 | Table output | O | X | O | X |
