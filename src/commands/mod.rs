@@ -66,6 +66,33 @@ pub struct EncodingOptions {
     pub detect_encoding: bool,
 }
 
+/// Excel 읽기 옵션
+#[derive(Debug, Clone, Default)]
+pub struct ExcelOptions {
+    /// 시트 이름 또는 인덱스
+    pub sheet: Option<String>,
+    /// 헤더 행 번호 (1-based)
+    pub header_row: Option<usize>,
+}
+
+/// Excel 파일을 바이트에서 Value로 읽는다.
+pub fn read_xlsx_from_bytes(
+    bytes: &[u8],
+    excel_opts: &ExcelOptions,
+) -> anyhow::Result<crate::value::Value> {
+    use crate::format::xlsx::{XlsxOptions, XlsxReader};
+    let opts = XlsxOptions {
+        sheet: excel_opts.sheet.clone(),
+        header_row: excel_opts.header_row.unwrap_or(1),
+    };
+    XlsxReader::new(opts).read_from_bytes(bytes)
+}
+
+/// Excel 파일의 시트 목록을 반환한다.
+pub fn list_xlsx_sheets(bytes: &[u8]) -> anyhow::Result<Vec<String>> {
+    crate::format::xlsx::XlsxReader::list_sheets(bytes)
+}
+
 /// 인코딩을 고려하여 파일을 읽는다.
 ///
 /// 동작 우선순위:

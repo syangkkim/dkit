@@ -3,7 +3,10 @@ use std::path::Path;
 
 use anyhow::{bail, Context as _, Result};
 
-use super::{read_file_bytes, read_file_with_encoding, EncodingOptions};
+use super::{
+    list_xlsx_sheets, read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes,
+    EncodingOptions, ExcelOptions,
+};
 use crate::format::csv::CsvReader;
 use crate::format::csv::CsvWriter;
 use crate::format::html::HtmlWriter;
@@ -36,10 +39,25 @@ pub struct ViewArgs<'a> {
     pub border: &'a str,
     pub color: bool,
     pub encoding_opts: EncodingOptions,
+    pub excel_opts: ExcelOptions,
+    pub list_sheets: bool,
 }
 
 /// view 서브커맨드 실행
 pub fn run(args: &ViewArgs) -> Result<()> {
+    // --list-sheets: Excel 시트 목록 출력
+    if args.list_sheets {
+        if args.input == "-" {
+            bail!("--list-sheets requires a file path, not stdin");
+        }
+        let bytes = read_file_bytes(Path::new(args.input))?;
+        let sheets = list_xlsx_sheets(&bytes)?;
+        for (i, name) in sheets.iter().enumerate() {
+            println!("{}: {}", i, name);
+        }
+        return Ok(());
+    }
+
     let value = if args.input == "-" {
         if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
@@ -166,6 +184,12 @@ fn read_input_value(args: &ViewArgs, format: Format, options: &FormatOptions) ->
             let bytes = read_file_bytes(Path::new(args.input))?;
             MsgpackReader.read_from_bytes(&bytes)
         }
+    } else if format == Format::Xlsx {
+        if args.input == "-" {
+            bail!("Excel files cannot be read from stdin; provide a file path");
+        }
+        let bytes = read_file_bytes(Path::new(args.input))?;
+        read_xlsx_from_bytes(&bytes, &args.excel_opts)
     } else {
         let content = if args.input == "-" {
             read_stdin_with_encoding(&args.encoding_opts)?
@@ -185,6 +209,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Msgpack => MsgpackReader.read(content),
+        Format::Xlsx => {
+            bail!("Excel files must be read as binary; use file path input instead of stdin")
+        }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),
@@ -200,6 +227,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Toml => TomlWriter::new(options.clone()).write(value),
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
+        Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => bail!("Table format is handled separately"),
