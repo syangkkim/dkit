@@ -1,8 +1,8 @@
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use dkit::format::{FormatOptions, FormatReader, FormatWriter};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use dkit::format::csv::{CsvReader, CsvWriter};
 use dkit::format::json::{JsonReader, JsonWriter};
 use dkit::format::yaml::{YamlReader, YamlWriter};
+use dkit::format::{FormatOptions, FormatReader, FormatWriter};
 use dkit::value::Value;
 use indexmap::IndexMap;
 
@@ -59,10 +59,7 @@ fn generate_value(n: usize) -> Value {
             map.insert("id".to_string(), Value::Integer(i as i64));
             map.insert("name".to_string(), Value::String(format!("User {i}")));
             map.insert("age".to_string(), Value::Integer((20 + (i % 60)) as i64));
-            map.insert(
-                "score".to_string(),
-                Value::Float((i as f64 * 1.5) % 100.0),
-            );
+            map.insert("score".to_string(), Value::Float((i as f64 * 1.5) % 100.0));
             map.insert("active".to_string(), Value::Bool(i % 2 == 0));
             Value::Object(map)
         })

@@ -1,4 +1,4 @@
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use dkit::query::filter::apply_operations;
 use dkit::query::parser::parse_query;
 use dkit::value::Value;
@@ -12,15 +12,10 @@ fn make_records(n: usize) -> Value {
             map.insert("id".to_string(), Value::Integer(i as i64));
             map.insert("name".to_string(), Value::String(format!("User {i}")));
             map.insert("age".to_string(), Value::Integer((20 + (i % 60)) as i64));
-            map.insert(
-                "score".to_string(),
-                Value::Float((i as f64 * 1.5) % 100.0),
-            );
+            map.insert("score".to_string(), Value::Float((i as f64 * 1.5) % 100.0));
             map.insert(
                 "category".to_string(),
-                Value::String(
-                    ["A", "B", "C", "D"][i % 4].to_string(),
-                ),
+                Value::String(["A", "B", "C", "D"][i % 4].to_string()),
             );
             map.insert("active".to_string(), Value::Bool(i % 2 == 0));
             Value::Object(map)
@@ -113,11 +108,9 @@ fn bench_query_parse(c: &mut Criterion) {
         ". | where active == true | sort age | limit 50",
     ];
     for query_str in queries {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(query_str),
-            query_str,
-            |b, q| b.iter(|| parse_query(q).unwrap()),
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(query_str), query_str, |b, q| {
+            b.iter(|| parse_query(q).unwrap())
+        });
     }
     group.finish();
 }
