@@ -146,6 +146,14 @@ pub enum Commands {
         /// Show progress during streaming conversion
         #[arg(long)]
         progress: bool,
+
+        /// Watch input file(s) for changes and auto re-run
+        #[arg(long)]
+        watch: bool,
+
+        /// Additional paths to watch for changes
+        #[arg(long = "watch-path", value_name = "PATH")]
+        watch_paths: Vec<std::path::PathBuf>,
     },
 
     /// Query data using path expressions
@@ -306,6 +314,14 @@ pub enum Commands {
         /// Filter expression (e.g. 'age > 30 and city == "Seoul"')
         #[arg(long, value_name = "EXPR", alias = "where")]
         filter: Option<String>,
+
+        /// Watch input file for changes and auto re-run
+        #[arg(long)]
+        watch: bool,
+
+        /// Additional paths to watch for changes
+        #[arg(long = "watch-path", value_name = "PATH")]
+        watch_paths: Vec<std::path::PathBuf>,
     },
 
     /// Show statistics about data

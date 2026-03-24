@@ -114,45 +114,62 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             row_group_size,
             chunk_size,
             progress,
+            watch,
+            watch_paths,
         } => {
-            commands::convert::run(&commands::convert::ConvertArgs {
-                input: &input,
-                to: &format,
-                from: from.as_deref(),
-                output: output.as_deref(),
-                outdir: outdir.as_deref(),
-                delimiter,
-                pretty,
-                compact,
-                no_header,
-                flow,
-                root_element,
-                styled,
-                full_html,
-                encoding_opts: EncodingOptions {
-                    encoding,
-                    detect_encoding,
-                },
-                excel_opts: ExcelOptions { sheet, header_row },
-                sqlite_opts: SqliteOptions { table, sql },
-                rename: rename.as_deref(),
-                continue_on_error,
-                data_filter: commands::DataFilterOptions {
-                    sort_by,
-                    descending: sort_order.eq_ignore_ascii_case("desc"),
-                    head,
-                    tail,
-                    filter,
-                },
-                parquet_opts: ParquetWriteOptions {
-                    compression,
-                    row_group_size,
-                },
-                streaming_opts: chunk_size.map(|cs| commands::streaming::StreamingOptions {
-                    chunk_size: cs,
-                    progress,
-                }),
-            })?;
+            let run = || {
+                commands::convert::run(&commands::convert::ConvertArgs {
+                    input: &input,
+                    to: &format,
+                    from: from.as_deref(),
+                    output: output.as_deref(),
+                    outdir: outdir.as_deref(),
+                    delimiter,
+                    pretty,
+                    compact,
+                    no_header,
+                    flow,
+                    root_element: root_element.clone(),
+                    styled,
+                    full_html,
+                    encoding_opts: EncodingOptions {
+                        encoding: encoding.clone(),
+                        detect_encoding,
+                    },
+                    excel_opts: ExcelOptions {
+                        sheet: sheet.clone(),
+                        header_row,
+                    },
+                    sqlite_opts: SqliteOptions {
+                        table: table.clone(),
+                        sql: sql.clone(),
+                    },
+                    rename: rename.as_deref(),
+                    continue_on_error,
+                    data_filter: commands::DataFilterOptions {
+                        sort_by: sort_by.clone(),
+                        descending: sort_order.eq_ignore_ascii_case("desc"),
+                        head,
+                        tail,
+                        filter: filter.clone(),
+                    },
+                    parquet_opts: ParquetWriteOptions {
+                        compression: compression.clone(),
+                        row_group_size,
+                    },
+                    streaming_opts: chunk_size.map(|cs| commands::streaming::StreamingOptions {
+                        chunk_size: cs,
+                        progress,
+                    }),
+                })
+            };
+
+            if watch {
+                let targets = commands::watch::collect_watch_targets(&input, &watch_paths);
+                commands::watch::run_watch(&targets, run)?;
+            } else {
+                run()?;
+            }
         }
         Commands::Query {
             input,
@@ -208,37 +225,55 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             head,
             tail,
             filter,
+            watch,
+            watch_paths,
         } => {
-            commands::view::run(&commands::view::ViewArgs {
-                input: &input,
-                from: from.as_deref(),
-                format: format.as_deref(),
-                path: path.as_deref(),
-                limit,
-                columns,
-                delimiter,
-                no_header,
-                max_width,
-                hide_header,
-                row_numbers,
-                border: &border,
-                color,
-                encoding_opts: EncodingOptions {
-                    encoding,
-                    detect_encoding,
-                },
-                excel_opts: ExcelOptions { sheet, header_row },
-                list_sheets,
-                sqlite_opts: SqliteOptions { table, sql },
-                list_tables,
-                data_filter: commands::DataFilterOptions {
-                    sort_by,
-                    descending: sort_order.eq_ignore_ascii_case("desc"),
-                    head,
-                    tail,
-                    filter,
-                },
-            })?;
+            let run = || {
+                commands::view::run(&commands::view::ViewArgs {
+                    input: &input,
+                    from: from.as_deref(),
+                    format: format.as_deref(),
+                    path: path.as_deref(),
+                    limit,
+                    columns: columns.clone(),
+                    delimiter,
+                    no_header,
+                    max_width,
+                    hide_header,
+                    row_numbers,
+                    border: &border,
+                    color,
+                    encoding_opts: EncodingOptions {
+                        encoding: encoding.clone(),
+                        detect_encoding,
+                    },
+                    excel_opts: ExcelOptions {
+                        sheet: sheet.clone(),
+                        header_row,
+                    },
+                    list_sheets,
+                    sqlite_opts: SqliteOptions {
+                        table: table.clone(),
+                        sql: sql.clone(),
+                    },
+                    list_tables,
+                    data_filter: commands::DataFilterOptions {
+                        sort_by: sort_by.clone(),
+                        descending: sort_order.eq_ignore_ascii_case("desc"),
+                        head,
+                        tail,
+                        filter: filter.clone(),
+                    },
+                })
+            };
+
+            if watch {
+                let targets =
+                    commands::watch::collect_watch_targets_from_input(&input, &watch_paths);
+                commands::watch::run_watch(&targets, run)?;
+            } else {
+                run()?;
+            }
         }
         Commands::Stats {
             input,

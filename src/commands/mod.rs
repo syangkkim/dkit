@@ -9,6 +9,7 @@ pub mod stats;
 pub mod streaming;
 pub mod validate;
 pub mod view;
+pub mod watch;
 
 use std::path::Path;
 
