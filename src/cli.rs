@@ -137,6 +137,14 @@ pub enum Commands {
         /// Parquet row group size (number of rows per row group)
         #[arg(long, value_name = "N")]
         row_group_size: Option<usize>,
+
+        /// Enable streaming mode for large files (chunk-based read/write)
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(usize))]
+        chunk_size: Option<usize>,
+
+        /// Show progress during streaming conversion
+        #[arg(long)]
+        progress: bool,
     },
 
     /// Query data using path expressions
