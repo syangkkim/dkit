@@ -15,11 +15,21 @@ use cli::{Cli, Commands};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
 
 fn main() {
+    // Spawn a thread with a larger stack to prevent stack overflows on Windows,
+    // which has a smaller default stack size (1MB) than Linux/macOS.
+    let builder = std::thread::Builder::new().stack_size(32 * 1024 * 1024);
+    let handler = builder
+        .spawn(run_main)
+        .expect("failed to spawn main thread");
+    process::exit(handler.join().unwrap_or(1));
+}
+
+fn run_main() -> i32 {
     let cli = Cli::parse();
 
     if cli.list_formats {
         print_formats();
-        return;
+        return 0;
     }
 
     match cli.command {
@@ -29,14 +39,15 @@ fn main() {
             use clap::CommandFactory;
             Cli::command().print_help().ok();
             println!();
-            process::exit(2);
+            return 2;
         }
     }
 
     if let Err(err) = run_command(cli) {
         print_error(&err);
-        process::exit(1);
+        return 1;
     }
+    0
 }
 
 /// 지원 포맷 목록 출력
@@ -312,6 +323,34 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 excel_opts: ExcelOptions { sheet, header_row },
                 sqlite_opts: SqliteOptions { table, sql },
             })?;
+        }
+        Commands::Validate {
+            input,
+            schema,
+            from,
+            quiet,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+        } => {
+            let is_invalid = commands::validate::run(&commands::validate::ValidateArgs {
+                input: &input,
+                schema: &schema,
+                from: from.as_deref(),
+                quiet,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+            })?;
+            if is_invalid {
+                process::exit(1);
+            }
         }
         Commands::Diff {
             file1,
