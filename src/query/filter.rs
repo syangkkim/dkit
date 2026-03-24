@@ -156,9 +156,7 @@ fn apply_count(value: Value, field: Option<&str>) -> Result<Value, DkitError> {
                 Some(f) => arr
                     .iter()
                     .filter(|item| match item {
-                        Value::Object(map) => {
-                            map.get(f).is_some_and(|v| !matches!(v, Value::Null))
-                        }
+                        Value::Object(map) => map.get(f).is_some_and(|v| !matches!(v, Value::Null)),
                         _ => false,
                     })
                     .count() as i64,
