@@ -140,11 +140,7 @@ fn convert_json_to_xlsx_fails() {
 #[test]
 fn query_xlsx() {
     dkit()
-        .args([
-            "query",
-            "tests/fixtures/users.xlsx",
-            ".[0].name",
-        ])
+        .args(["query", "tests/fixtures/users.xlsx", ".[0].name"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Alice"));
