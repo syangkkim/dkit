@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -736,6 +737,16 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
+    },
+
+    /// Generate shell completion scripts
+    #[command(
+        after_help = "Examples:\n  dkit completions bash > ~/.bash_completion.d/dkit\n  dkit completions zsh > ~/.zfunc/_dkit\n  dkit completions fish > ~/.config/fish/completions/dkit.fish\n  dkit completions powershell > dkit.ps1\n\nInstallation:\n  Bash:       dkit completions bash > ~/.bash_completion.d/dkit && source ~/.bash_completion.d/dkit\n  Zsh:        dkit completions zsh > ~/.zfunc/_dkit  (ensure ~/.zfunc is in $fpath)\n  Fish:       dkit completions fish > ~/.config/fish/completions/dkit.fish\n  PowerShell: dkit completions powershell > dkit.ps1 && . ./dkit.ps1"
+    )]
+    Completions {
+        /// Target shell (bash, zsh, fish, powershell)
+        #[arg(value_name = "SHELL")]
+        shell: Shell,
     },
 
     /// Compare two data files and show differences
