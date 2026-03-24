@@ -1,11 +1,7 @@
 mod cli;
 mod commands;
 mod config;
-mod error;
-mod format;
 mod output;
-mod query;
-mod value;
 
 use std::process;
 
@@ -15,7 +11,7 @@ use colored::Colorize;
 use clap::CommandFactory;
 use cli::{AliasAction, Cli, Commands, ConfigAction};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
-use error::{suggest_format, DkitError, SUPPORTED_FORMATS};
+use dkit_core::error::{suggest_format, DkitError, SUPPORTED_FORMATS};
 
 fn main() {
     // Spawn a thread with a larger stack to prevent stack overflows on Windows,
@@ -127,7 +123,7 @@ fn expand_alias(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
 fn print_formats() {
     println!("Supported output formats:");
     println!();
-    for (name, desc) in format::Format::list_output_formats() {
+    for (name, desc) in dkit_core::format::Format::list_output_formats() {
         println!("  {:<10} {}", name, desc);
     }
 }

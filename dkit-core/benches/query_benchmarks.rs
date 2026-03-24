@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use dkit::query::filter::apply_operations;
-use dkit::query::parser::parse_query;
-use dkit::value::Value;
+use dkit_core::query::filter::apply_operations;
+use dkit_core::query::parser::parse_query;
+use dkit_core::value::Value;
 use indexmap::IndexMap;
 
 /// Generate a Value::Array with `n` records for query benchmarks

@@ -84,8 +84,8 @@ pub struct ExcelOptions {
 pub fn read_xlsx_from_bytes(
     bytes: &[u8],
     excel_opts: &ExcelOptions,
-) -> anyhow::Result<crate::value::Value> {
-    use crate::format::xlsx::{XlsxOptions, XlsxReader};
+) -> anyhow::Result<dkit_core::value::Value> {
+    use dkit_core::format::xlsx::{XlsxOptions, XlsxReader};
     let opts = XlsxOptions {
         sheet: excel_opts.sheet.clone(),
         header_row: excel_opts.header_row.unwrap_or(1),
@@ -95,7 +95,7 @@ pub fn read_xlsx_from_bytes(
 
 /// Excel 파일의 시트 목록을 반환한다.
 pub fn list_xlsx_sheets(bytes: &[u8]) -> anyhow::Result<Vec<String>> {
-    crate::format::xlsx::XlsxReader::list_sheets(bytes)
+    dkit_core::format::xlsx::XlsxReader::list_sheets(bytes)
 }
 
 /// SQLite 읽기 옵션
@@ -111,8 +111,8 @@ pub struct SqliteOptions {
 pub fn read_sqlite_from_path(
     path: &std::path::Path,
     sqlite_opts: &SqliteOptions,
-) -> anyhow::Result<crate::value::Value> {
-    use crate::format::sqlite::{SqliteOptions as ReaderOpts, SqliteReader};
+) -> anyhow::Result<dkit_core::value::Value> {
+    use dkit_core::format::sqlite::{SqliteOptions as ReaderOpts, SqliteReader};
     let opts = ReaderOpts {
         table: sqlite_opts.table.clone(),
         sql: sqlite_opts.sql.clone(),
@@ -122,12 +122,12 @@ pub fn read_sqlite_from_path(
 
 /// SQLite 파일의 테이블 목록을 반환한다.
 pub fn list_sqlite_tables(path: &std::path::Path) -> anyhow::Result<Vec<String>> {
-    crate::format::sqlite::SqliteReader::list_tables(path)
+    dkit_core::format::sqlite::SqliteReader::list_tables(path)
 }
 
 /// Parquet 파일을 바이트에서 Value로 읽는다.
-pub fn read_parquet_from_bytes(bytes: &[u8]) -> anyhow::Result<crate::value::Value> {
-    use crate::format::parquet::{ParquetOptions, ParquetReader};
+pub fn read_parquet_from_bytes(bytes: &[u8]) -> anyhow::Result<dkit_core::value::Value> {
+    use dkit_core::format::parquet::{ParquetOptions, ParquetReader};
     ParquetReader::new(ParquetOptions::default()).read_from_bytes(bytes)
 }
 
@@ -142,10 +142,10 @@ pub struct ParquetWriteOptions {
 
 /// Value를 Parquet 바이트로 직렬화한다.
 pub fn write_parquet_to_bytes(
-    value: &crate::value::Value,
+    value: &dkit_core::value::Value,
     opts: &ParquetWriteOptions,
 ) -> anyhow::Result<Vec<u8>> {
-    use crate::format::parquet::{
+    use dkit_core::format::parquet::{
         ParquetCompression, ParquetWriteOptions as FmtOpts, ParquetWriter,
     };
     let compression: ParquetCompression = opts.compression.parse()?;
@@ -241,11 +241,11 @@ pub struct DataFilterOptions {
 /// 데이터 필터/정렬 옵션을 Value에 적용한다.
 /// 적용 순서: where → sort → head/tail
 pub fn apply_data_filters(
-    value: crate::value::Value,
+    value: dkit_core::value::Value,
     opts: &DataFilterOptions,
-) -> anyhow::Result<crate::value::Value> {
-    use crate::query::filter::apply_operations;
-    use crate::query::parser::{parse_condition_expr, Operation};
+) -> anyhow::Result<dkit_core::value::Value> {
+    use dkit_core::query::filter::apply_operations;
+    use dkit_core::query::parser::{parse_condition_expr, Operation};
 
     let mut operations = Vec::new();
 
@@ -286,9 +286,9 @@ pub fn apply_data_filters(
 
     // 4. tail: 배열의 마지막 N개 요소 추출
     if let Some(n) = opts.tail {
-        if let crate::value::Value::Array(ref arr) = result {
+        if let dkit_core::value::Value::Array(ref arr) = result {
             let start = arr.len().saturating_sub(n);
-            result = crate::value::Value::Array(arr[start..].to_vec());
+            result = dkit_core::value::Value::Array(arr[start..].to_vec());
         }
     }
 
@@ -408,7 +408,7 @@ mod tests {
 
     // --- apply_data_filters tests ---
 
-    use crate::value::Value;
+    use dkit_core::value::Value;
     use indexmap::IndexMap;
 
     fn make_record(name: &str, age: i64) -> Value {

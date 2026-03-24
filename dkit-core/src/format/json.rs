@@ -6,7 +6,7 @@ use crate::format::{FormatOptions, FormatReader, FormatWriter};
 use crate::value::Value;
 
 /// serde_json::Value → 내부 Value 변환
-pub(crate) fn from_json_value(v: serde_json::Value) -> Value {
+pub fn from_json_value(v: serde_json::Value) -> Value {
     match v {
         serde_json::Value::Null => Value::Null,
         serde_json::Value::Bool(b) => Value::Bool(b),
@@ -35,7 +35,7 @@ pub(crate) fn from_json_value(v: serde_json::Value) -> Value {
 }
 
 /// 내부 Value → serde_json::Value 변환
-pub(crate) fn to_json_value(v: &Value) -> serde_json::Value {
+pub fn to_json_value(v: &Value) -> serde_json::Value {
     match v {
         Value::Null => serde_json::Value::Null,
         Value::Bool(b) => serde_json::Value::Bool(*b),
