@@ -12,6 +12,7 @@ use std::process;
 use clap::Parser;
 use colored::Colorize;
 
+use clap::CommandFactory;
 use cli::{Cli, Commands, ConfigAction};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
 
@@ -37,7 +38,6 @@ fn run_main() -> i32 {
         Some(_) => {}
         None => {
             // No subcommand and no --list-formats: show help
-            use clap::CommandFactory;
             Cli::command().print_help().ok();
             println!();
             return 2;
@@ -468,6 +468,9 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 excel_opts: ExcelOptions { sheet, header_row },
                 sqlite_opts: SqliteOptions { table, sql },
             })?;
+        }
+        Commands::Completions { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "dkit", &mut std::io::stdout());
         }
         Commands::Config { action } => match action {
             ConfigAction::Show => config::run_show()?,
