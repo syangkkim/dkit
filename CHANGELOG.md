@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Comprehensive user documentation: README overhaul, tutorial, cookbook, migration guide, and contributing guide.
+
 ## [0.9.0] - 2026-03-24
 
 ### Added
@@ -134,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[Unreleased]: https://github.com/syangkkim/dkit/compare/v0.9.0...HEAD
 [0.9.0]: https://github.com/syangkkim/dkit/releases/tag/v0.9.0
 [0.8.0]: https://github.com/syangkkim/dkit/releases/tag/v0.8.0
 [0.7.0]: https://github.com/syangkkim/dkit/releases/tag/v0.7.0
