@@ -13,7 +13,7 @@ use clap::Parser;
 use colored::Colorize;
 
 use clap::CommandFactory;
-use cli::{Cli, Commands, ConfigAction};
+use cli::{AliasAction, Cli, Commands, ConfigAction};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
 use error::{suggest_format, DkitError, SUPPORTED_FORMATS};
 
@@ -28,7 +28,16 @@ fn main() {
 }
 
 fn run_main() -> i32 {
-    let cli = Cli::parse();
+    // Collect raw args and expand aliases before clap parsing
+    let raw_args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let expanded = expand_alias(raw_args);
+
+    let cli = match Cli::try_parse_from(&expanded) {
+        Ok(cli) => cli,
+        Err(e) => {
+            e.exit();
+        }
+    };
     let verbose = cli.verbose;
 
     if cli.list_formats {
@@ -51,6 +60,67 @@ fn run_main() -> i32 {
         return 1;
     }
     0
+}
+
+/// Split an alias command string into individual arguments,
+/// handling single and double quoted strings.
+fn split_alias_command(s: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+
+    for ch in s.chars() {
+        match ch {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            ' ' | '\t' if !in_single && !in_double => {
+                if !current.is_empty() {
+                    parts.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
+}
+
+/// Expand aliases in the raw argument list.
+/// If args[1] matches a known alias, replace it with the alias expansion.
+fn expand_alias(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    if args.len() < 2 {
+        return args;
+    }
+
+    let candidate = match args[1].to_str() {
+        Some(s) if !s.starts_with('-') => s.to_string(),
+        _ => return args,
+    };
+
+    // Check built-in aliases first
+    let builtins = config::builtin_aliases();
+    let alias_cmd = if let Some(cmd) = builtins.get(&candidate) {
+        Some(cmd.clone())
+    } else {
+        // Check user-defined aliases from config
+        let source = config::load_config();
+        source.config.aliases.get(&candidate).cloned()
+    };
+
+    if let Some(cmd) = alias_cmd {
+        let mut new_args = vec![args[0].clone()];
+        for part in split_alias_command(&cmd) {
+            new_args.push(std::ffi::OsString::from(part));
+        }
+        new_args.extend_from_slice(&args[2..]);
+        new_args
+    } else {
+        args
+    }
 }
 
 /// 지원 포맷 목록 출력
@@ -587,6 +657,14 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             ConfigAction::Show => config::run_show()?,
             ConfigAction::Init { project } => config::run_init(project)?,
         },
+        Commands::Alias { action } => {
+            let source = config::load_config();
+            match action {
+                AliasAction::Set(args) => config::run_alias_set(&args.name, &args.command)?,
+                AliasAction::List => config::run_alias_list(&source.config.aliases)?,
+                AliasAction::Remove { name } => config::run_alias_remove(&name)?,
+            }
+        }
         Commands::Diff {
             file1,
             file2,

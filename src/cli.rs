@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use clap_complete::Shell;
 
 #[derive(Parser, Debug)]
@@ -759,6 +759,15 @@ pub enum Commands {
         action: ConfigAction,
     },
 
+    /// Manage command aliases
+    #[command(
+        after_help = "Examples:\n  dkit alias list                              # List all aliases\n  dkit alias set j2c 'convert --from json --to csv'  # Set an alias\n  dkit alias set peek 'view --head 5'         # Set an alias\n  dkit alias remove myalias                   # Remove a user alias\n  dkit j2c data.json                          # Use an alias"
+    )]
+    Alias {
+        #[command(subcommand)]
+        action: AliasAction,
+    },
+
     /// Generate shell completion scripts
     #[command(
         after_help = "Examples:\n  dkit completions bash > ~/.bash_completion.d/dkit\n  dkit completions zsh > ~/.zfunc/_dkit\n  dkit completions fish > ~/.config/fish/completions/dkit.fish\n  dkit completions powershell > dkit.ps1\n\nInstallation:\n  Bash:       dkit completions bash > ~/.bash_completion.d/dkit && source ~/.bash_completion.d/dkit\n  Zsh:        dkit completions zsh > ~/.zfunc/_dkit  (ensure ~/.zfunc is in $fpath)\n  Fish:       dkit completions fish > ~/.config/fish/completions/dkit.fish\n  PowerShell: dkit completions powershell > dkit.ps1 && . ./dkit.ps1"
@@ -846,4 +855,28 @@ pub enum ConfigAction {
         #[arg(long)]
         project: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AliasAction {
+    /// Register or update a command alias
+    Set(AliasSetArgs),
+    /// List all aliases (builtin and user-defined)
+    List,
+    /// Remove a user-defined alias
+    Remove {
+        /// Alias name to remove
+        #[arg(value_name = "NAME")]
+        name: String,
+    },
+}
+
+#[derive(Args, Debug)]
+pub struct AliasSetArgs {
+    /// Alias name (e.g. j2c)
+    #[arg(value_name = "NAME")]
+    pub name: String,
+    /// Command to expand to (e.g. 'convert --from json --to csv')
+    #[arg(value_name = "COMMAND")]
+    pub command: String,
 }
