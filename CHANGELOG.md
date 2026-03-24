@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-24
+
+### Added
+
+- **Config file support**: User-level (`~/.dkit.toml`) and project-level (`.dkit.toml`) configuration with priority: CLI > project > user > defaults. Settings include `default_format`, `table.border_style`, `table.max_width`, `color`, and `encoding`. `dkit config show` and `dkit config init` subcommands. (#107)
+- **Shell completion scripts**: Generate shell autocompletion scripts via `dkit completions <bash|zsh|fish|powershell>` using `clap_complete`. Supports subcommand, option, format name, and file path completion. (#108)
+- **`--watch` mode**: File change detection for automatic re-execution — `dkit convert data.json -f csv --watch` and `dkit view data.csv --watch`. Built on `notify` crate with debouncing and Ctrl+C exit. (#109)
+- **Enhanced error messages**: Line/column numbers in parse errors, code snippet with arrow pointer, "Did you mean?" suggestions for field names/subcommands/options, format mismatch hints, `--verbose` flag for stack trace output. Powered by `miette`. (#110)
+- **Alias system**: Define and use command aliases — `dkit alias set j2c "convert --from json --to csv"`, `dkit j2c data.json`. Aliases stored in `~/.dkit.toml` under `[aliases]`. Built-in aliases: `j2c`, `c2j`, `j2y`, `y2j`, etc. `alias list` and `alias remove` subcommands. (#111)
+- **Criterion benchmark suite**: Benchmarks for format I/O (1MB/10MB/100MB), query execution (filter/aggregate/sort), and format conversion (JSON↔CSV, JSON↔Parquet). Three benchmark binaries: `format_benchmarks`, `query_benchmarks`, `conversion_benchmarks`. (#112)
+
+### Testing & Docs
+
+- **Comprehensive v0.9.0 integration tests**: End-to-end tests for config file loading/priority, shell completion generation, watch mode, error messages, and alias system. README and docs updated. (#113)
+
 ## [0.8.0] - 2026-03-24
 
 ### Added
@@ -119,6 +134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[0.9.0]: https://github.com/syangkkim/dkit/releases/tag/v0.9.0
 [0.8.0]: https://github.com/syangkkim/dkit/releases/tag/v0.8.0
 [0.7.0]: https://github.com/syangkkim/dkit/releases/tag/v0.7.0
 [0.6.0]: https://github.com/syangkkim/dkit/releases/tag/v0.6.0
