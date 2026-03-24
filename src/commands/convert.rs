@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, Read, Write as _};
+use std::io::{self, IsTerminal, Read, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -49,23 +49,37 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     let write_delimiter = args
         .delimiter
         .or_else(|| default_delimiter_for_format(args.to));
+
+    // Auto-detect pretty vs compact: if neither --pretty nor --compact is set,
+    // use pretty when writing to a terminal, compact when piped.
+    let (effective_pretty, effective_compact) = if args.pretty {
+        (true, false)
+    } else if args.compact {
+        (false, true)
+    } else if args.output.is_some() {
+        // Writing to a file: default to pretty
+        (true, false)
+    } else {
+        // Writing to stdout: detect terminal vs pipe
+        let is_terminal = io::stdout().is_terminal();
+        (is_terminal, !is_terminal)
+    };
+
     let write_options = FormatOptions {
         delimiter: write_delimiter,
         no_header: args.no_header,
-        pretty: if args.compact {
-            false
-        } else {
-            args.pretty || !args.compact
-        },
-        compact: args.compact,
+        pretty: effective_pretty,
+        compact: effective_compact,
         flow_style: args.flow,
         root_element: args.root_element.clone(),
         styled: args.styled,
         full_html: args.full_html,
     };
 
-    // stdin mode: no input files
-    if args.input.is_empty() {
+    // stdin mode: no input files or explicit "-"
+    let is_stdin =
+        args.input.is_empty() || (args.input.len() == 1 && args.input[0] == Path::new("-"));
+    if is_stdin {
         let value = if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
             io::stdin()
