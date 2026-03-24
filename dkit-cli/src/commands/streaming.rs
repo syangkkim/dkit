@@ -5,9 +5,9 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 
-use crate::format::json::from_json_value;
-use crate::format::{Format, FormatOptions};
-use crate::value::Value;
+use dkit_core::format::json::from_json_value;
+use dkit_core::format::{Format, FormatOptions};
+use dkit_core::value::Value;
 
 /// 스트리밍 변환 옵션
 #[derive(Debug, Clone)]
@@ -222,7 +222,7 @@ fn stream_from_csv(
     } else {
         csv_reader
             .headers()
-            .map_err(|e| crate::error::DkitError::ParseError {
+            .map_err(|e| dkit_core::error::DkitError::ParseError {
                 format: "CSV".to_string(),
                 source: Box::new(e),
             })?
@@ -239,7 +239,7 @@ fn stream_from_csv(
     let mut stream_writer = StreamChunkWriter::new(writer, target_format, write_options)?;
 
     for result in csv_reader.records() {
-        let record = result.map_err(|e| crate::error::DkitError::ParseError {
+        let record = result.map_err(|e| dkit_core::error::DkitError::ParseError {
             format: "CSV".to_string(),
             source: Box::new(e),
         })?;
@@ -305,7 +305,7 @@ fn stream_from_parquet(
 
     let bytes = Bytes::copy_from_slice(bytes);
     let builder = ParquetRecordBatchReaderBuilder::try_new(bytes).map_err(|e| {
-        crate::error::DkitError::ParseError {
+        dkit_core::error::DkitError::ParseError {
             format: "Parquet".to_string(),
             source: Box::new(e),
         }
@@ -317,7 +317,7 @@ fn stream_from_parquet(
     let reader = builder
         .with_batch_size(opts.chunk_size)
         .build()
-        .map_err(|e| crate::error::DkitError::ParseError {
+        .map_err(|e| dkit_core::error::DkitError::ParseError {
             format: "Parquet".to_string(),
             source: Box::new(e),
         })?;
@@ -327,7 +327,7 @@ fn stream_from_parquet(
     let mut is_first_chunk = true;
 
     for batch_result in reader {
-        let batch = batch_result.map_err(|e| crate::error::DkitError::ParseError {
+        let batch = batch_result.map_err(|e| dkit_core::error::DkitError::ParseError {
             format: "Parquet".to_string(),
             source: Box::new(e),
         })?;
@@ -340,7 +340,7 @@ fn stream_from_parquet(
             let mut obj = IndexMap::new();
             for (col_idx, field) in schema.fields().iter().enumerate() {
                 let col = batch.column(col_idx);
-                let value = crate::format::parquet::arrow_value_to_value(col.as_ref(), row_idx);
+                let value = dkit_core::format::parquet::arrow_value_to_value(col.as_ref(), row_idx);
                 obj.insert(field.name().clone(), value);
             }
             chunk.push(Value::Object(obj));
@@ -413,7 +413,7 @@ impl<W: Write> StreamChunkWriter<W> {
 
     fn write_jsonl_chunk(&mut self, records: &[Value]) -> Result<()> {
         for record in records {
-            let json_val = crate::format::json::to_json_value(record);
+            let json_val = dkit_core::format::json::to_json_value(record);
             serde_json::to_writer(&mut self.writer, &json_val)
                 .context("Failed to write JSONL record")?;
             self.writer

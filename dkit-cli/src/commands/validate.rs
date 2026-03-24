@@ -8,18 +8,18 @@ use super::{
     read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
     read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
-use crate::format::csv::CsvReader;
-use crate::format::json::JsonReader;
-use crate::format::jsonl::JsonlReader;
-use crate::format::msgpack::MsgpackReader;
-use crate::format::toml::TomlReader;
-use crate::format::xml::XmlReader;
-use crate::format::yaml::YamlReader;
-use crate::format::{
+use dkit_core::format::csv::CsvReader;
+use dkit_core::format::json::JsonReader;
+use dkit_core::format::jsonl::JsonlReader;
+use dkit_core::format::msgpack::MsgpackReader;
+use dkit_core::format::toml::TomlReader;
+use dkit_core::format::xml::XmlReader;
+use dkit_core::format::yaml::YamlReader;
+use dkit_core::format::{
     default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
     Format, FormatOptions, FormatReader,
 };
-use crate::value::Value;
+use dkit_core::value::Value;
 
 pub struct ValidateArgs<'a> {
     /// 검증할 데이터 파일 경로 (또는 '-' for stdin)
@@ -56,7 +56,7 @@ pub fn run(args: &ValidateArgs) -> Result<bool> {
     // 2. 입력 데이터 로드
     let value = load_input(args)?;
 
-    // 3. crate::value::Value → serde_json::Value 변환
+    // 3. dkit_core::value::Value → serde_json::Value 변환
     let instance = value_to_json(value);
 
     // 4. JSON Schema 컴파일
@@ -104,7 +104,7 @@ pub fn run(args: &ValidateArgs) -> Result<bool> {
     }
 }
 
-/// crate::value::Value를 serde_json::Value로 변환한다.
+/// dkit_core::value::Value를 serde_json::Value로 변환한다.
 ///
 /// serde_json::to_value(&Value)는 enum variant를 tagged로 직렬화하므로
 /// 직접 변환해야 한다.

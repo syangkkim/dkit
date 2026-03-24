@@ -1,9 +1,9 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use dkit::format::csv::{CsvReader, CsvWriter};
-use dkit::format::json::{JsonReader, JsonWriter};
-use dkit::format::jsonl::{JsonlReader, JsonlWriter};
-use dkit::format::{FormatOptions, FormatReader, FormatWriter};
-use dkit::value::Value;
+use dkit_core::format::csv::{CsvReader, CsvWriter};
+use dkit_core::format::json::{JsonReader, JsonWriter};
+use dkit_core::format::jsonl::{JsonlReader, JsonlWriter};
+use dkit_core::format::{FormatOptions, FormatReader, FormatWriter};
+use dkit_core::value::Value;
 use indexmap::IndexMap;
 
 fn generate_json_array(n: usize) -> String {

@@ -8,23 +8,23 @@ use super::{
     read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
     read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
-use crate::format::csv::CsvReader;
-use crate::format::html::HtmlWriter;
-use crate::format::json::{JsonReader, JsonWriter};
-use crate::format::jsonl::{JsonlReader, JsonlWriter};
-use crate::format::markdown::MarkdownWriter;
-use crate::format::msgpack::{MsgpackReader, MsgpackWriter};
-use crate::format::toml::{TomlReader, TomlWriter};
-use crate::format::xml::{XmlReader, XmlWriter};
-use crate::format::yaml::{YamlReader, YamlWriter};
-use crate::format::{
+use dkit_core::format::csv::CsvReader;
+use dkit_core::format::html::HtmlWriter;
+use dkit_core::format::json::{JsonReader, JsonWriter};
+use dkit_core::format::jsonl::{JsonlReader, JsonlWriter};
+use dkit_core::format::markdown::MarkdownWriter;
+use dkit_core::format::msgpack::{MsgpackReader, MsgpackWriter};
+use dkit_core::format::toml::{TomlReader, TomlWriter};
+use dkit_core::format::xml::{XmlReader, XmlWriter};
+use dkit_core::format::yaml::{YamlReader, YamlWriter};
+use dkit_core::format::{
     default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
     Format, FormatOptions, FormatReader, FormatWriter,
 };
-use crate::query::evaluator::evaluate_path;
-use crate::query::filter::apply_operations;
-use crate::query::parser::parse_query;
-use crate::value::Value;
+use dkit_core::query::evaluator::evaluate_path;
+use dkit_core::query::filter::apply_operations;
+use dkit_core::query::parser::parse_query;
+use dkit_core::value::Value;
 
 pub struct QueryArgs<'a> {
     pub input: &'a str,
@@ -202,7 +202,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
             // CSV 출력 시 배열 형태가 아닌 단일 값은 JSON으로 출력
             match value {
                 Value::Array(_) => {
-                    use crate::format::csv::CsvWriter;
+                    use dkit_core::format::csv::CsvWriter;
                     CsvWriter::new(options.clone()).write(value)
                 }
                 _ => JsonWriter::new(options.clone()).write(value),

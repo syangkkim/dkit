@@ -2,7 +2,7 @@ use colored::Colorize;
 use comfy_table::presets;
 use comfy_table::{Cell, ColumnConstraint, ContentArrangement, Table, Width};
 
-use crate::value::Value;
+use dkit_core::value::Value;
 
 /// 테이블 렌더링 옵션
 pub struct TableOptions<'a> {

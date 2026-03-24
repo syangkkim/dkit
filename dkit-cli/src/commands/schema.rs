@@ -5,19 +5,19 @@ use super::{
     read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
     read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
-use crate::format::csv::CsvReader;
-use crate::format::json::JsonReader;
-use crate::format::jsonl::JsonlReader;
-use crate::format::msgpack::MsgpackReader;
-use crate::format::toml::TomlReader;
-use crate::format::xml::XmlReader;
-use crate::format::yaml::YamlReader;
-use crate::format::{
+use anyhow::{bail, Result};
+use dkit_core::format::csv::CsvReader;
+use dkit_core::format::json::JsonReader;
+use dkit_core::format::jsonl::JsonlReader;
+use dkit_core::format::msgpack::MsgpackReader;
+use dkit_core::format::toml::TomlReader;
+use dkit_core::format::xml::XmlReader;
+use dkit_core::format::yaml::YamlReader;
+use dkit_core::format::{
     default_delimiter, default_delimiter_for_format, detect_format, detect_format_from_content,
     Format, FormatOptions, FormatReader,
 };
-use crate::value::Value;
-use anyhow::{bail, Result};
+use dkit_core::value::Value;
 
 pub struct SchemaArgs<'a> {
     pub input: &'a str,
