@@ -12,6 +12,13 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
+    // Use a larger stack thread to avoid stack overflow on Windows (default 1MB).
+    let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
+    let handler = builder.spawn(generate_man_pages).expect("failed to spawn thread");
+    handler.join().unwrap();
+}
+
+fn generate_man_pages() {
     let out_dir = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
     let man_dir = out_dir.join("man");
     fs::create_dir_all(&man_dir).expect("failed to create man directory");
