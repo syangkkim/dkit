@@ -573,4 +573,161 @@ dkit unflatten flat.json                                 # 기본 복원
 dkit unflatten flat.json --separator '/'                 # 구분자 지정
 dkit unflatten flat.json -f yaml -o nested.yaml          # YAML 출력
 cat flat.json | dkit unflatten - --from json              # stdin 입력
+
+## config
+
+설정 파일 관리.
+
+### Usage
+
+```bash
+dkit config show              # 현재 설정 표시
+dkit config init              # 사용자 설정 파일 생성
+dkit config init --project    # 프로젝트 설정 파일 생성 (.dkit.toml)
+```
+
+### 설정 파일 우선순위
+
+높은 우선순위 → 낮은 우선순위:
+
+1. CLI 옵션 (최우선)
+2. 프로젝트 설정 (`.dkit.toml` in 현재 디렉토리)
+3. 사용자 설정 (`$XDG_CONFIG_HOME/dkit/config.toml` 또는 `~/.dkit.toml`)
+4. 기본값
+
+### 설정 파일 형식 (TOML)
+
+```toml
+# dkit configuration file
+
+# 기본 출력 포맷 (json, csv, yaml, toml, xml, md, html, table)
+# default_format = "json"
+
+# 컬러 출력: "auto", "always", "never"
+# color = "auto"
+
+# 기본 입력 인코딩 (예: "utf-8", "euc-kr", "shift_jis")
+# encoding = "utf-8"
+
+[table]
+# 기본 테이블 테두리 스타일 (simple, rounded, heavy, none, double, ascii)
+# border_style = "simple"
+
+# 기본 최대 컬럼 너비
+# max_width = 40
+
+[aliases]
+# 사용자 정의 별칭
+# mytool = "convert --from json --to yaml"
+```
+
+### Examples
+
+```bash
+dkit config show                    # 현재 유효 설정 표시 (소스 포함)
+dkit config init                    # 사용자 설정 파일 생성
+dkit config init --project          # 프로젝트 설정 파일 (.dkit.toml) 생성
+```
+
+## alias
+
+커맨드 별칭 관리.
+
+### Usage
+
+```bash
+dkit alias list                     # 모든 별칭 목록 (내장 + 사용자)
+dkit alias set <NAME> <COMMAND>     # 사용자 별칭 등록/수정
+dkit alias remove <NAME>            # 사용자 별칭 삭제
+```
+
+### 내장 별칭 (Built-in Aliases)
+
+| 별칭 | 확장 커맨드 |
+|------|------------|
+| `j2c` | `convert --from json --to csv` |
+| `c2j` | `convert --from csv --to json` |
+| `j2y` | `convert --from json --to yaml` |
+| `y2j` | `convert --from yaml --to json` |
+| `j2t` | `convert --from json --to toml` |
+| `t2j` | `convert --from toml --to json` |
+| `c2y` | `convert --from csv --to yaml` |
+| `y2c` | `convert --from yaml --to csv` |
+
+### Examples
+
+```bash
+dkit j2c data.json                  # JSON → CSV (내장 별칭)
+dkit c2j data.csv                   # CSV → JSON (내장 별칭)
+dkit alias list                     # 모든 별칭 목록
+dkit alias set j2t2c "convert --from json --to csv"  # 사용자 별칭 등록
+dkit alias remove j2t2c             # 사용자 별칭 삭제
+```
+
+## completions
+
+쉘 자동완성 스크립트 생성.
+
+### Usage
+
+```bash
+dkit completions <SHELL>
+```
+
+지원 쉘: `bash`, `zsh`, `fish`, `powershell`
+
+### Examples
+
+```bash
+# Bash
+dkit completions bash > ~/.bash_completion.d/dkit
+source ~/.bash_completion.d/dkit
+
+# Zsh
+dkit completions zsh > ~/.zfunc/_dkit
+# ~/.zshrc에 fpath=(~/.zfunc $fpath) 추가 후 compinit 재실행
+
+# Fish
+dkit completions fish > ~/.config/fish/completions/dkit.fish
+
+# PowerShell
+dkit completions powershell > dkit.ps1
+. ./dkit.ps1
+```
+
+## watch 모드
+
+`convert` 및 `view` 커맨드에서 파일 변경을 감지하여 자동으로 재실행.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--watch` | 파일 변경 감지 모드 활성화 |
+| `--watch-path <PATH>` | 추가 감시 경로 지정 (여러 번 사용 가능) |
+
+### Examples
+
+```bash
+dkit convert data.json -f csv --watch                   # 파일 변경 시 자동 변환
+dkit view data.csv --watch                              # 파일 변경 시 자동 새로고침
+dkit convert data.json -f yaml --watch --watch-path ./templates/  # 추가 경로 감시
+```
+
+## 에러 메시지 출력
+
+dkit는 에러 발생 시 색상 강조와 컨텍스트 정보를 포함한 메시지를 출력.
+
+| 에러 종류 | 출력 내용 |
+|----------|----------|
+| 알 수 없는 포맷 | 지원 포맷 목록 + "Did you mean?" 제안 |
+| 파싱 에러 | 줄/열 번호 + 코드 스니펫 + 화살표 |
+| 포맷 감지 실패 | `--from` 옵션 사용 힌트 |
+| 일반 에러 | `error:` 접두사 + 메시지 |
+
+### 전역 옵션
+
+| Option | Description |
+|--------|-------------|
+| `--verbose` | 상세 에러 출력 (전체 에러 체인 + 백트레이스) |
 ```
