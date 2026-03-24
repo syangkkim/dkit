@@ -10,6 +10,14 @@ homepage = "https://github.com/syangkkim/dkit"
 keywords = ["cli", "json", "csv", "yaml", "toml"]
 categories = ["command-line-utilities", "encoding"]
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/dkit-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "dkit{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [dependencies]
 dkit-core = { path = "../dkit-core" }
 clap = { version = "4", features = ["derive"] }
