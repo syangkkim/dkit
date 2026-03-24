@@ -3,6 +3,40 @@ pub const SUPPORTED_FORMATS: &[&str] = &[
     "json", "jsonl", "csv", "tsv", "yaml", "yml", "toml", "xml", "msgpack", "md", "html", "table",
 ];
 
+/// Compute Levenshtein edit distance between two strings.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let m = a.len();
+    let n = b.len();
+    let mut row: Vec<usize> = (0..=n).collect();
+    for i in 1..=m {
+        let mut prev = row[0];
+        row[0] = i;
+        for j in 1..=n {
+            let temp = row[j];
+            row[j] = if a[i - 1] == b[j - 1] {
+                prev
+            } else {
+                1 + prev.min(row[j]).min(row[j - 1])
+            };
+            prev = temp;
+        }
+    }
+    row[n]
+}
+
+/// Return the closest supported format name for "Did you mean?" hints.
+/// Returns `None` if no candidate is close enough (distance > 3).
+pub fn suggest_format(input: &str) -> Option<&'static str> {
+    let input_lower = input.to_lowercase();
+    SUPPORTED_FORMATS
+        .iter()
+        .copied()
+        .filter(|&f| levenshtein(&input_lower, f) <= 3)
+        .min_by_key(|&f| levenshtein(&input_lower, f))
+}
+
 /// dkit 에러 타입 정의
 ///
 /// 포맷 파싱, 쓰기, IO, 쿼리 등 카테고리별 에러를 구분하며,
@@ -17,6 +51,20 @@ pub enum DkitError {
         format: String,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    /// Parse error with source location info for rich display (line/column + snippet).
+    #[error("Failed to parse {format} at line {line}, column {column}: {source}")]
+    ParseErrorAt {
+        format: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+        /// 1-indexed line number
+        line: usize,
+        /// 1-indexed column number
+        column: usize,
+        /// The text of the line where the error occurred
+        line_text: String,
     },
 
     #[error("Failed to write {format}: {source}")]

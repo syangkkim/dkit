@@ -15,6 +15,7 @@ use colored::Colorize;
 use clap::CommandFactory;
 use cli::{Cli, Commands, ConfigAction};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
+use error::{suggest_format, DkitError, SUPPORTED_FORMATS};
 
 fn main() {
     // Spawn a thread with a larger stack to prevent stack overflows on Windows,
@@ -28,6 +29,7 @@ fn main() {
 
 fn run_main() -> i32 {
     let cli = Cli::parse();
+    let verbose = cli.verbose;
 
     if cli.list_formats {
         print_formats();
@@ -45,7 +47,7 @@ fn run_main() -> i32 {
     }
 
     if let Err(err) = run_command(cli) {
-        print_error(&err);
+        print_error(&err, verbose);
         return 1;
     }
     0
@@ -61,7 +63,76 @@ fn print_formats() {
 }
 
 /// 에러를 색상 강조와 함께 stderr에 출력
-fn print_error(err: &anyhow::Error) {
+/// - error=빨강, hint/warning=노랑, suggestion=청색
+/// - ParseErrorAt: 줄/열 번호 + 코드 스니펫(화살표)
+/// - UnknownFormat: "Did you mean?" 제안
+/// - verbose=true: 전체 에러 체인 출력
+fn print_error(err: &anyhow::Error, verbose: bool) {
+    // DkitError로 다운캐스트하여 향상된 출력 시도
+    if let Some(dkit_err) = err.downcast_ref::<DkitError>() {
+        match dkit_err {
+            DkitError::UnknownFormat(s) => {
+                eprintln!("{} Unknown format: '{s}'", "error:".red().bold());
+                eprintln!(
+                    "  {}",
+                    format!("Supported formats: {}", SUPPORTED_FORMATS.join(", ")).yellow()
+                );
+                if let Some(suggestion) = suggest_format(s) {
+                    eprintln!(
+                        "  {}",
+                        format!("Did you mean '{suggestion}'?").cyan().bold()
+                    );
+                }
+                return;
+            }
+            DkitError::ParseErrorAt {
+                format,
+                source,
+                line,
+                column,
+                line_text,
+            } => {
+                eprintln!(
+                    "{} Failed to parse {format}: {source}",
+                    "error:".red().bold()
+                );
+                eprintln!("  {} line {line}, column {column}", "-->".blue().bold());
+                if !line_text.is_empty() {
+                    let line_num = line.to_string();
+                    let pad = " ".repeat(line_num.len());
+                    eprintln!("  {pad} {}", "|".blue());
+                    eprintln!("  {line_num} {} {line_text}", "|".blue());
+                    let arrow_pad = " ".repeat(column.saturating_sub(1));
+                    eprintln!("  {pad} {} {arrow_pad}{}", "|".blue(), "^".red().bold());
+                    eprintln!("  {pad} {}", "|".blue());
+                }
+                eprintln!(
+                    "  {}",
+                    format!("Hint: check that the input is valid {format}").yellow()
+                );
+                if verbose {
+                    eprintln!("\n  {}", "verbose backtrace:".dimmed());
+                    eprintln!("  {}", format!("{err:?}").dimmed());
+                }
+                return;
+            }
+            DkitError::FormatDetectionFailed(s) => {
+                eprintln!("{} Failed to detect format: {s}", "error:".red().bold());
+                eprintln!(
+                    "  {}",
+                    "Hint: specify the input format explicitly, e.g. --from json".yellow()
+                );
+                eprintln!(
+                    "  {}",
+                    format!("Supported formats: {}", SUPPORTED_FORMATS.join(", ")).yellow()
+                );
+                return;
+            }
+            _ => {} // fall through to generic display
+        }
+    }
+
+    // 제네릭 에러 출력
     let msg = format!("{err:#}");
     let mut lines = msg.lines();
 
@@ -78,6 +149,11 @@ fn print_error(err: &anyhow::Error) {
         } else if !line.is_empty() {
             eprintln!("  {line}");
         }
+    }
+
+    if verbose {
+        eprintln!("\n  {}", "verbose backtrace:".dimmed());
+        eprintln!("  {}", format!("{err:?}").dimmed());
     }
 }
 
