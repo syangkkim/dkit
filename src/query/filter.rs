@@ -1,6 +1,9 @@
 use crate::error::DkitError;
-use crate::query::parser::{CompareOp, Comparison, Condition, LiteralValue, Operation};
+use crate::query::parser::{
+    AggregateFunc, CompareOp, Comparison, Condition, GroupAggregate, LiteralValue, Operation,
+};
 use crate::value::Value;
+use indexmap::IndexMap;
 
 /// 연산 목록을 순차적으로 적용
 pub fn apply_operations(value: Value, operations: &[Operation]) -> Result<Value, DkitError> {
@@ -24,6 +27,11 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         Operation::Min { field } => apply_min(value, field),
         Operation::Max { field } => apply_max(value, field),
         Operation::Distinct { field } => apply_distinct(value, field),
+        Operation::GroupBy {
+            fields,
+            having,
+            aggregates,
+        } => apply_group_by(value, fields, having.as_ref(), aggregates),
     }
 }
 
@@ -380,6 +388,230 @@ fn apply_distinct(value: Value, field: &str) -> Result<Value, DkitError> {
         _ => Err(DkitError::QueryError(
             "distinct requires an array input".to_string(),
         )),
+    }
+}
+
+/// group_by: 배열을 지정된 필드 기준으로 그룹화하고 집계
+fn apply_group_by(
+    value: Value,
+    fields: &[String],
+    having: Option<&Condition>,
+    aggregates: &[GroupAggregate],
+) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            // Group items by key fields
+            let mut groups: Vec<(IndexMap<String, Value>, Vec<Value>)> = Vec::new();
+
+            for item in arr {
+                let key = extract_group_key(&item, fields);
+                if let Some(pos) = groups.iter().position(|(k, _)| *k == key) {
+                    groups[pos].1.push(item);
+                } else {
+                    groups.push((key, vec![item]));
+                }
+            }
+
+            // Build result objects for each group
+            let mut results = Vec::new();
+            for (key, group_items) in groups {
+                let mut obj = IndexMap::new();
+
+                // Add group key fields
+                for (field_name, field_value) in &key {
+                    obj.insert(field_name.clone(), field_value.clone());
+                }
+
+                // If no explicit aggregates, add default count
+                if aggregates.is_empty() {
+                    obj.insert(
+                        "count".to_string(),
+                        Value::Integer(group_items.len() as i64),
+                    );
+                } else {
+                    // Compute each aggregate
+                    for agg in aggregates {
+                        let agg_value =
+                            compute_group_aggregate(&agg.func, agg.field.as_deref(), &group_items)?;
+                        obj.insert(agg.alias.clone(), agg_value);
+                    }
+                }
+
+                let result_obj = Value::Object(obj);
+
+                // Apply HAVING filter
+                if let Some(having_cond) = having {
+                    if !evaluate_condition(&result_obj, having_cond).unwrap_or(false) {
+                        continue;
+                    }
+                }
+
+                results.push(result_obj);
+            }
+
+            Ok(Value::Array(results))
+        }
+        _ => Err(DkitError::QueryError(
+            "group_by requires an array input".to_string(),
+        )),
+    }
+}
+
+/// 그룹 키 추출: 지정된 필드들의 값을 IndexMap으로 반환
+fn extract_group_key(value: &Value, fields: &[String]) -> IndexMap<String, Value> {
+    let mut key = IndexMap::new();
+    if let Value::Object(map) = value {
+        for field in fields {
+            let v = map.get(field).cloned().unwrap_or(Value::Null);
+            key.insert(field.clone(), v);
+        }
+    } else {
+        for field in fields {
+            key.insert(field.clone(), Value::Null);
+        }
+    }
+    key
+}
+
+/// 그룹 내 집계 함수 계산
+fn compute_group_aggregate(
+    func: &AggregateFunc,
+    field: Option<&str>,
+    items: &[Value],
+) -> Result<Value, DkitError> {
+    match func {
+        AggregateFunc::Count => {
+            let count = match field {
+                None => items.len() as i64,
+                Some(f) => items
+                    .iter()
+                    .filter(|item| match item {
+                        Value::Object(map) => map.get(f).is_some_and(|v| !matches!(v, Value::Null)),
+                        _ => false,
+                    })
+                    .count() as i64,
+            };
+            Ok(Value::Integer(count))
+        }
+        AggregateFunc::Sum => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("sum() requires a field argument".to_string())
+            })?;
+            let mut sum_int: i64 = 0;
+            let mut sum_float: f64 = 0.0;
+            let mut has_float = false;
+
+            for item in items {
+                if let Value::Object(map) = item {
+                    match map.get(f) {
+                        Some(Value::Integer(n)) => {
+                            if has_float {
+                                sum_float += *n as f64;
+                            } else {
+                                sum_int = sum_int.saturating_add(*n);
+                            }
+                        }
+                        Some(Value::Float(fv)) => {
+                            if !has_float {
+                                sum_float = sum_int as f64;
+                                has_float = true;
+                            }
+                            sum_float += fv;
+                        }
+                        Some(Value::Null) | None => {}
+                        _ => {}
+                    }
+                }
+            }
+            if has_float {
+                Ok(Value::Float(sum_float))
+            } else {
+                Ok(Value::Integer(sum_int))
+            }
+        }
+        AggregateFunc::Avg => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("avg() requires a field argument".to_string())
+            })?;
+            let mut sum: f64 = 0.0;
+            let mut count: usize = 0;
+
+            for item in items {
+                if let Value::Object(map) = item {
+                    match map.get(f) {
+                        Some(Value::Integer(n)) => {
+                            sum += *n as f64;
+                            count += 1;
+                        }
+                        Some(Value::Float(fv)) => {
+                            sum += fv;
+                            count += 1;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if count == 0 {
+                Ok(Value::Null)
+            } else {
+                Ok(Value::Float(sum / count as f64))
+            }
+        }
+        AggregateFunc::Min => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("min() requires a field argument".to_string())
+            })?;
+            let mut min_val: Option<Value> = None;
+
+            for item in items {
+                if let Value::Object(map) = item {
+                    if let Some(v) = map.get(f) {
+                        if matches!(v, Value::Null) {
+                            continue;
+                        }
+                        min_val = Some(match &min_val {
+                            None => v.clone(),
+                            Some(current) => {
+                                if compare_value_ordering(v, current) == std::cmp::Ordering::Less {
+                                    v.clone()
+                                } else {
+                                    current.clone()
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            Ok(min_val.unwrap_or(Value::Null))
+        }
+        AggregateFunc::Max => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("max() requires a field argument".to_string())
+            })?;
+            let mut max_val: Option<Value> = None;
+
+            for item in items {
+                if let Value::Object(map) = item {
+                    if let Some(v) = map.get(f) {
+                        if matches!(v, Value::Null) {
+                            continue;
+                        }
+                        max_val = Some(match &max_val {
+                            None => v.clone(),
+                            Some(current) => {
+                                if compare_value_ordering(v, current) == std::cmp::Ordering::Greater
+                                {
+                                    v.clone()
+                                } else {
+                                    current.clone()
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            Ok(max_val.unwrap_or(Value::Null))
+        }
     }
 }
 
@@ -1504,5 +1736,237 @@ mod tests {
         let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
         let result = apply_operations(path_result, &query.operations).unwrap();
         assert_eq!(result, Value::Integer(65)); // 30+35
+    }
+
+    // --- GROUP BY tests ---
+
+    fn sample_sales() -> Value {
+        Value::Array(vec![
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::String("electronics".to_string()),
+                "product".to_string() => Value::String("phone".to_string()),
+                "price".to_string() => Value::Integer(1000),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::String("electronics".to_string()),
+                "product".to_string() => Value::String("laptop".to_string()),
+                "price".to_string() => Value::Integer(2000),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::String("clothing".to_string()),
+                "product".to_string() => Value::String("shirt".to_string()),
+                "price".to_string() => Value::Integer(50),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::String("clothing".to_string()),
+                "product".to_string() => Value::String("pants".to_string()),
+                "price".to_string() => Value::Integer(80),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::String("food".to_string()),
+                "product".to_string() => Value::String("apple".to_string()),
+                "price".to_string() => Value::Integer(5),
+            }),
+        ])
+    }
+
+    #[test]
+    fn test_group_by_basic() {
+        let data = sample_sales();
+        let query = parse_query(".[] | group_by category").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            assert_eq!(arr.len(), 3);
+            // Default count aggregate
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(
+                    map.get("category"),
+                    Some(&Value::String("electronics".to_string()))
+                );
+                assert_eq!(map.get("count"), Some(&Value::Integer(2)));
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_group_by_with_aggregates() {
+        let data = sample_sales();
+        let query = parse_query(".[] | group_by category count(), sum(price), avg(price)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            assert_eq!(arr.len(), 3);
+            // electronics: count=2, sum=3000, avg=1500.0
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(map.get("count"), Some(&Value::Integer(2)));
+                assert_eq!(map.get("sum_price"), Some(&Value::Integer(3000)));
+                assert_eq!(map.get("avg_price"), Some(&Value::Float(1500.0)));
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_group_by_having() {
+        let data = sample_sales();
+        let query = parse_query(".[] | group_by category count() having count > 1").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            assert_eq!(arr.len(), 2); // electronics(2) and clothing(2), food(1) filtered out
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_group_by_multiple_keys() {
+        let data = Value::Array(vec![
+            Value::Object(indexmap::indexmap! {
+                "region".to_string() => Value::String("east".to_string()),
+                "category".to_string() => Value::String("A".to_string()),
+                "amount".to_string() => Value::Integer(100),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "region".to_string() => Value::String("east".to_string()),
+                "category".to_string() => Value::String("A".to_string()),
+                "amount".to_string() => Value::Integer(200),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "region".to_string() => Value::String("east".to_string()),
+                "category".to_string() => Value::String("B".to_string()),
+                "amount".to_string() => Value::Integer(150),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "region".to_string() => Value::String("west".to_string()),
+                "category".to_string() => Value::String("A".to_string()),
+                "amount".to_string() => Value::Integer(300),
+            }),
+        ]);
+
+        let query = parse_query(".[] | group_by region, category count(), sum(amount)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            assert_eq!(arr.len(), 3); // east-A, east-B, west-A
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(map.get("region"), Some(&Value::String("east".to_string())));
+                assert_eq!(map.get("category"), Some(&Value::String("A".to_string())));
+                assert_eq!(map.get("count"), Some(&Value::Integer(2)));
+                assert_eq!(map.get("sum_amount"), Some(&Value::Integer(300)));
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_group_by_min_max() {
+        let data = sample_sales();
+        let query = parse_query(".[] | group_by category min(price), max(price)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            // electronics: min=1000, max=2000
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(map.get("min_price"), Some(&Value::Integer(1000)));
+                assert_eq!(map.get("max_price"), Some(&Value::Integer(2000)));
+            } else {
+                panic!("expected object");
+            }
+            // clothing: min=50, max=80
+            if let Value::Object(map) = &arr[1] {
+                assert_eq!(map.get("min_price"), Some(&Value::Integer(50)));
+                assert_eq!(map.get("max_price"), Some(&Value::Integer(80)));
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_group_by_empty_array() {
+        let data = Value::Array(vec![]);
+        let query = parse_query(".[] | group_by category").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        assert_eq!(result, Value::Array(vec![]));
+    }
+
+    #[test]
+    fn test_group_by_non_array_error() {
+        let data = Value::Object(indexmap::indexmap! {
+            "name".to_string() => Value::String("test".to_string()),
+        });
+        let result = apply_group_by(data, &["name".to_string()], None, &[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_group_by_with_sort() {
+        let data = sample_sales();
+        let query = parse_query(".[] | group_by category count() | sort count desc").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            // electronics(2), clothing(2) come first, food(1) last
+            if let Value::Object(map) = &arr[2] {
+                assert_eq!(map.get("count"), Some(&Value::Integer(1)));
+                assert_eq!(
+                    map.get("category"),
+                    Some(&Value::String("food".to_string()))
+                );
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_group_by_with_null_keys() {
+        let data = Value::Array(vec![
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::String("A".to_string()),
+                "val".to_string() => Value::Integer(1),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "category".to_string() => Value::Null,
+                "val".to_string() => Value::Integer(2),
+            }),
+            Value::Object(indexmap::indexmap! {
+                "val".to_string() => Value::Integer(3),
+            }),
+        ]);
+
+        let query = parse_query(".[] | group_by category count()").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+
+        if let Value::Array(arr) = &result {
+            assert_eq!(arr.len(), 2); // "A" group and null group (null + missing)
+        } else {
+            panic!("expected array");
+        }
     }
 }
