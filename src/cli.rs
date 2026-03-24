@@ -18,6 +18,10 @@ pub struct Cli {
     /// List all supported output formats
     #[arg(long)]
     pub list_formats: bool,
+
+    /// Show verbose error output (error chain, debug info)
+    #[arg(long, global = true)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand, Debug)]

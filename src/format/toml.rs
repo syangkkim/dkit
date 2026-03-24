@@ -55,13 +55,38 @@ fn to_toml_value(v: &Value) -> toml::Value {
 /// TOML 포맷 Reader
 pub struct TomlReader;
 
+/// Convert a byte offset into a 1-indexed (line, column) pair.
+fn byte_offset_to_line_col(s: &str, offset: usize) -> (usize, usize) {
+    let before = &s[..offset.min(s.len())];
+    let line = before.chars().filter(|&c| c == '\n').count() + 1;
+    let column = before.rfind('\n').map(|p| offset - p).unwrap_or(offset + 1);
+    (line, column)
+}
+
 impl FormatReader for TomlReader {
     fn read(&self, input: &str) -> anyhow::Result<Value> {
-        let toml_val: toml::Value =
-            toml::from_str(input).map_err(|e| crate::error::DkitError::ParseError {
-                format: "TOML".to_string(),
-                source: Box::new(e),
-            })?;
+        let toml_val: toml::Value = toml::from_str(input).map_err(|e: toml::de::Error| {
+            if let Some(span) = e.span() {
+                let (line, column) = byte_offset_to_line_col(input, span.start);
+                let line_text = input
+                    .lines()
+                    .nth(line.saturating_sub(1))
+                    .unwrap_or("")
+                    .to_string();
+                crate::error::DkitError::ParseErrorAt {
+                    format: "TOML".to_string(),
+                    source: Box::new(e),
+                    line,
+                    column,
+                    line_text,
+                }
+            } else {
+                crate::error::DkitError::ParseError {
+                    format: "TOML".to_string(),
+                    source: Box::new(e),
+                }
+            }
+        })?;
         Ok(from_toml_value(toml_val))
     }
 

@@ -77,9 +77,28 @@ pub struct YamlReader;
 impl FormatReader for YamlReader {
     fn read(&self, input: &str) -> anyhow::Result<Value> {
         let yaml_val: serde_yaml::Value =
-            serde_yaml::from_str(input).map_err(|e| crate::error::DkitError::ParseError {
-                format: "YAML".to_string(),
-                source: Box::new(e),
+            serde_yaml::from_str(input).map_err(|e: serde_yaml::Error| {
+                if let Some(loc) = e.location() {
+                    let line = loc.line();
+                    let column = loc.column();
+                    let line_text = input
+                        .lines()
+                        .nth(line.saturating_sub(1))
+                        .unwrap_or("")
+                        .to_string();
+                    crate::error::DkitError::ParseErrorAt {
+                        format: "YAML".to_string(),
+                        source: Box::new(e),
+                        line,
+                        column,
+                        line_text,
+                    }
+                } else {
+                    crate::error::DkitError::ParseError {
+                        format: "YAML".to_string(),
+                        source: Box::new(e),
+                    }
+                }
             })?;
         Ok(from_yaml_value(yaml_val))
     }

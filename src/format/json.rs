@@ -60,11 +60,22 @@ pub struct JsonReader;
 
 impl FormatReader for JsonReader {
     fn read(&self, input: &str) -> anyhow::Result<Value> {
-        let json_val: serde_json::Value =
-            serde_json::from_str(input).map_err(|e| crate::error::DkitError::ParseError {
+        let json_val: serde_json::Value = serde_json::from_str(input).map_err(|e| {
+            let line = e.line();
+            let column = e.column();
+            let line_text = input
+                .lines()
+                .nth(line.saturating_sub(1))
+                .unwrap_or("")
+                .to_string();
+            crate::error::DkitError::ParseErrorAt {
                 format: "JSON".to_string(),
                 source: Box::new(e),
-            })?;
+                line,
+                column,
+                line_text,
+            }
+        })?;
         Ok(from_json_value(json_val))
     }
 
