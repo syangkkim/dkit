@@ -37,6 +37,18 @@ pub enum Operation {
     Sort { field: String, descending: bool },
     /// `limit` 결과 제한: `limit 10`
     Limit(usize),
+    /// `count` 전체 카운트 / `count field` 비null 카운트
+    Count { field: Option<String> },
+    /// `sum field` 숫자 필드 합계
+    Sum { field: String },
+    /// `avg field` 숫자 필드 평균
+    Avg { field: String },
+    /// `min field` 최솟값
+    Min { field: String },
+    /// `max field` 최댓값
+    Max { field: String },
+    /// `distinct field` 고유값 목록
+    Distinct { field: String },
 }
 
 /// 조건식 (where 절)
@@ -259,6 +271,36 @@ impl Parser {
                 self.skip_whitespace();
                 let n = self.parse_positive_integer()?;
                 Ok(Operation::Limit(n))
+            }
+            "count" => {
+                self.skip_whitespace();
+                let field = self.try_parse_identifier();
+                Ok(Operation::Count { field })
+            }
+            "sum" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Sum { field })
+            }
+            "avg" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Avg { field })
+            }
+            "min" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Min { field })
+            }
+            "max" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Max { field })
+            }
+            "distinct" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Distinct { field })
             }
             _ => Err(DkitError::QueryError(format!(
                 "unknown operation '{}' at position {}",
@@ -569,6 +611,21 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         self.pos >= self.input.len()
+    }
+
+    /// 식별자를 시도적으로 파싱: 식별자가 없으면 None 반환 (위치 복원)
+    fn try_parse_identifier(&mut self) -> Option<String> {
+        if !self.peek_is_identifier_start() {
+            return None;
+        }
+        let saved_pos = self.pos;
+        match self.parse_identifier() {
+            Ok(id) => Some(id),
+            Err(_) => {
+                self.pos = saved_pos;
+                None
+            }
+        }
     }
 
     /// 키워드를 시도적으로 소비: 매치하면 true, 아니면 위치를 복원하고 false

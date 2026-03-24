@@ -18,6 +18,12 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         Operation::Select(fields) => apply_select(value, fields),
         Operation::Sort { field, descending } => apply_sort(value, field, *descending),
         Operation::Limit(n) => apply_limit(value, *n),
+        Operation::Count { field } => apply_count(value, field.as_deref()),
+        Operation::Sum { field } => apply_sum(value, field),
+        Operation::Avg { field } => apply_avg(value, field),
+        Operation::Min { field } => apply_min(value, field),
+        Operation::Max { field } => apply_max(value, field),
+        Operation::Distinct { field } => apply_distinct(value, field),
     }
 }
 
@@ -135,6 +141,246 @@ fn apply_limit(value: Value, n: usize) -> Result<Value, DkitError> {
         }
         _ => Err(DkitError::QueryError(
             "limit clause requires an array input".to_string(),
+        )),
+    }
+}
+
+// --- 집계 함수 ---
+
+/// count: 배열의 전체 요소 수 또는 특정 필드의 비null 요소 수를 반환
+fn apply_count(value: Value, field: Option<&str>) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let count = match field {
+                None => arr.len() as i64,
+                Some(f) => arr
+                    .iter()
+                    .filter(|item| match item {
+                        Value::Object(map) => {
+                            map.get(f).is_some_and(|v| !matches!(v, Value::Null))
+                        }
+                        _ => false,
+                    })
+                    .count() as i64,
+            };
+            Ok(Value::Integer(count))
+        }
+        _ => Err(DkitError::QueryError(
+            "count requires an array input".to_string(),
+        )),
+    }
+}
+
+/// sum: 배열에서 지정된 숫자 필드의 합계를 반환
+fn apply_sum(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut sum_int: i64 = 0;
+            let mut sum_float: f64 = 0.0;
+            let mut has_float = false;
+
+            for item in &arr {
+                match item {
+                    Value::Object(map) => match map.get(field) {
+                        Some(Value::Integer(n)) => {
+                            if has_float {
+                                sum_float += *n as f64;
+                            } else {
+                                sum_int = sum_int.saturating_add(*n);
+                            }
+                        }
+                        Some(Value::Float(f)) => {
+                            if !has_float {
+                                sum_float = sum_int as f64;
+                                has_float = true;
+                            }
+                            sum_float += f;
+                        }
+                        Some(Value::Null) | None => {}
+                        Some(v) => {
+                            return Err(DkitError::QueryError(format!(
+                                "sum: field '{}' is not numeric (got {})",
+                                field, v
+                            )));
+                        }
+                    },
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "sum requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            if has_float {
+                Ok(Value::Float(sum_float))
+            } else {
+                Ok(Value::Integer(sum_int))
+            }
+        }
+        _ => Err(DkitError::QueryError(
+            "sum requires an array input".to_string(),
+        )),
+    }
+}
+
+/// avg: 배열에서 지정된 숫자 필드의 평균을 반환
+fn apply_avg(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut sum: f64 = 0.0;
+            let mut count: usize = 0;
+
+            for item in &arr {
+                match item {
+                    Value::Object(map) => match map.get(field) {
+                        Some(Value::Integer(n)) => {
+                            sum += *n as f64;
+                            count += 1;
+                        }
+                        Some(Value::Float(f)) => {
+                            sum += f;
+                            count += 1;
+                        }
+                        Some(Value::Null) | None => {}
+                        Some(v) => {
+                            return Err(DkitError::QueryError(format!(
+                                "avg: field '{}' is not numeric (got {})",
+                                field, v
+                            )));
+                        }
+                    },
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "avg requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            if count == 0 {
+                Ok(Value::Null)
+            } else {
+                Ok(Value::Float(sum / count as f64))
+            }
+        }
+        _ => Err(DkitError::QueryError(
+            "avg requires an array input".to_string(),
+        )),
+    }
+}
+
+/// min: 배열에서 지정된 필드의 최솟값을 반환
+fn apply_min(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut min_val: Option<Value> = None;
+
+            for item in &arr {
+                match item {
+                    Value::Object(map) => {
+                        if let Some(v) = map.get(field) {
+                            if matches!(v, Value::Null) {
+                                continue;
+                            }
+                            min_val = Some(match &min_val {
+                                None => v.clone(),
+                                Some(current) => {
+                                    if compare_value_ordering(v, current)
+                                        == std::cmp::Ordering::Less
+                                    {
+                                        v.clone()
+                                    } else {
+                                        current.clone()
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "min requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            Ok(min_val.unwrap_or(Value::Null))
+        }
+        _ => Err(DkitError::QueryError(
+            "min requires an array input".to_string(),
+        )),
+    }
+}
+
+/// max: 배열에서 지정된 필드의 최댓값을 반환
+fn apply_max(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut max_val: Option<Value> = None;
+
+            for item in &arr {
+                match item {
+                    Value::Object(map) => {
+                        if let Some(v) = map.get(field) {
+                            if matches!(v, Value::Null) {
+                                continue;
+                            }
+                            max_val = Some(match &max_val {
+                                None => v.clone(),
+                                Some(current) => {
+                                    if compare_value_ordering(v, current)
+                                        == std::cmp::Ordering::Greater
+                                    {
+                                        v.clone()
+                                    } else {
+                                        current.clone()
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "max requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            Ok(max_val.unwrap_or(Value::Null))
+        }
+        _ => Err(DkitError::QueryError(
+            "max requires an array input".to_string(),
+        )),
+    }
+}
+
+/// distinct: 배열에서 지정된 필드의 고유값 목록을 반환
+fn apply_distinct(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut seen: Vec<Value> = Vec::new();
+
+            for item in &arr {
+                match item {
+                    Value::Object(map) => {
+                        if let Some(v) = map.get(field) {
+                            if matches!(v, Value::Null) {
+                                continue;
+                            }
+                            if !seen.contains(v) {
+                                seen.push(v.clone());
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "distinct requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            Ok(Value::Array(seen))
+        }
+        _ => Err(DkitError::QueryError(
+            "distinct requires an array input".to_string(),
         )),
     }
 }
@@ -1099,5 +1345,166 @@ mod tests {
             arr[1].as_object().unwrap().get("name"),
             Some(&Value::String("Charlie".to_string()))
         );
+    }
+
+    // --- 집계 함수 테스트 ---
+
+    #[test]
+    fn test_count_all() {
+        let data = sample_users();
+        let query = parse_query(".[] | count").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(3));
+    }
+
+    #[test]
+    fn test_count_field() {
+        // name 필드가 있는 요소 수 (모두 있음)
+        let data = sample_users();
+        let query = parse_query(".[] | count name").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(3));
+    }
+
+    #[test]
+    fn test_count_field_with_nulls() {
+        // null이 포함된 경우
+        let arr = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("email".to_string(), Value::String("a@b.com".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("email".to_string(), Value::Null);
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("email".to_string(), Value::String("c@d.com".to_string()));
+                Value::Object(m)
+            },
+        ]);
+        let query = parse_query(".[] | count email").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&arr, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(2));
+    }
+
+    #[test]
+    fn test_sum_integer() {
+        let data = sample_users();
+        let query = parse_query(".[] | sum age").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(90)); // 30+25+35
+    }
+
+    #[test]
+    fn test_sum_float() {
+        let arr = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("price".to_string(), Value::Float(1.5));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("price".to_string(), Value::Float(2.5));
+                Value::Object(m)
+            },
+        ]);
+        let query = parse_query(".[] | sum price").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&arr, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Float(4.0));
+    }
+
+    #[test]
+    fn test_avg_integer() {
+        let data = sample_users();
+        let query = parse_query(".[] | avg age").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Float(30.0)); // (30+25+35)/3
+    }
+
+    #[test]
+    fn test_avg_empty() {
+        let arr = Value::Array(vec![]);
+        let result = apply_avg(arr, "age").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_min_integer() {
+        let data = sample_users();
+        let query = parse_query(".[] | min age").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(25));
+    }
+
+    #[test]
+    fn test_max_integer() {
+        let data = sample_users();
+        let query = parse_query(".[] | max age").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(35));
+    }
+
+    #[test]
+    fn test_min_string() {
+        let data = sample_users();
+        let result = apply_min(data, "name").unwrap();
+        assert_eq!(result, Value::String("Alice".to_string()));
+    }
+
+    #[test]
+    fn test_max_string() {
+        let data = sample_users();
+        let result = apply_max(data, "name").unwrap();
+        assert_eq!(result, Value::String("Charlie".to_string()));
+    }
+
+    #[test]
+    fn test_min_empty() {
+        let arr = Value::Array(vec![]);
+        let result = apply_min(arr, "age").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_distinct() {
+        let data = sample_users();
+        let query = parse_query(".[] | distinct city").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert!(arr.contains(&Value::String("Seoul".to_string())));
+        assert!(arr.contains(&Value::String("Busan".to_string())));
+    }
+
+    #[test]
+    fn test_count_after_filter() {
+        let data = sample_users();
+        let query = parse_query(".[] | where age > 28 | count").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(2)); // Alice(30), Charlie(35)
+    }
+
+    #[test]
+    fn test_sum_after_filter() {
+        let data = sample_users();
+        let query = parse_query(".[] | where age > 28 | sum age").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::Integer(65)); // 30+35
     }
 }
