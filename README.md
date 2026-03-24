@@ -252,8 +252,18 @@ dkit stats data.csv
 # Navigate to nested data
 dkit stats data.json --path .users
 
-# Statistics for a specific column
+# Statistics for a specific column (numeric: sum, avg, median, std, p25, p75)
 dkit stats data.csv --column revenue
+
+# String column stats (unique count, length distribution, top values)
+dkit stats data.csv --column category
+
+# Histogram visualization
+dkit stats data.csv --column age --histogram
+
+# Output formats
+dkit stats data.csv --format json
+dkit stats data.csv --format md
 ```
 
 ### `schema` — Data structure inspection
@@ -282,6 +292,73 @@ dkit diff old.json new.json --path '.database'
 
 # Quiet mode (exit code: 0=same, 1=different)
 dkit diff a.json b.json --quiet && echo 'same' || echo 'different'
+
+# Comparison modes
+dkit diff a.json b.json --mode value          # Value changes only
+dkit diff a.json b.json --mode key            # Key existence only
+
+# Output formats
+dkit diff a.json b.json --diff-format json           # JSON output
+dkit diff a.json b.json --diff-format side-by-side    # Side-by-side view
+dkit diff a.json b.json --diff-format summary         # Summary only
+
+# Array comparison strategies
+dkit diff a.json b.json --array-diff value            # Match by value
+dkit diff a.json b.json --array-diff key=id           # Match by key field
+
+# Ignore options
+dkit diff a.json b.json --ignore-order                # Ignore array order
+dkit diff a.json b.json --ignore-case                 # Ignore string case
+```
+
+### `validate` — JSON Schema validation
+
+```bash
+# Validate data against JSON Schema
+dkit validate data.json --schema schema.json
+dkit validate data.yaml --schema schema.json
+dkit validate data.toml --schema schema.json
+
+# Quiet mode (only valid/invalid)
+dkit validate data.json --schema schema.json --quiet
+
+# From stdin
+cat data.json | dkit validate - --schema schema.json --from json
+```
+
+### `sample` — Random/stratified sampling
+
+```bash
+# Random sampling
+dkit sample data.csv -n 100                    # 100 random records
+dkit sample data.json --ratio 0.1              # 10% sample
+dkit sample data.csv -n 50 --seed 42           # Reproducible sampling
+
+# Systematic sampling (every k-th element)
+dkit sample data.csv -n 100 --method systematic
+
+# Stratified sampling (proportional per group)
+dkit sample data.csv -n 50 --method stratified --stratify-by category
+
+# Output format
+dkit sample data.csv -n 100 -f json -o sample.json
+```
+
+### `flatten` / `unflatten` — Flatten/restore nested structures
+
+```bash
+# Flatten nested JSON
+dkit flatten data.json                         # {"a.b.c": 1}
+dkit flatten data.json --separator '/'         # {"a/b/c": 1}
+dkit flatten data.json --array-format bracket  # {"items[0].name": "Alice"}
+dkit flatten data.json --max-depth 2           # Limit depth
+
+# Unflatten (restore nested structure)
+dkit unflatten flat.json                       # {"a": {"b": {"c": 1}}}
+dkit unflatten flat.json --separator '/'
+
+# Roundtrip
+dkit flatten data.json -o flat.json && dkit unflatten flat.json
 ```
 
 ### `merge` — Combine multiple files
@@ -322,7 +399,10 @@ dkit merge config1.yaml config2.yaml --to yaml
 | Statistics | O | X | O | X |
 | Schema inspection | O | X | X | X |
 | File merging | O | X | O | X |
-| File diff | O | X | X | X |
+| File diff (modes/formats) | O | X | X | X |
+| JSON Schema validation | O | X | X | X |
+| Random/stratified sampling | O | X | X | X |
+| Flatten/unflatten | O | X | X | X |
 | Multi-encoding support | O | X | X | X |
 | Single binary | O | O | O | O |
 
