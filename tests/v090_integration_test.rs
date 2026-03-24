@@ -374,10 +374,7 @@ fn builtin_alias_y2j_expands_to_convert() {
 fn alias_set_and_list_user_alias() {
     // alias set uses the user config file; we test via alias list
     // (Actual file I/O to user config directory; we just verify the subcommand doesn't error)
-    dkit()
-        .args(["alias", "list"])
-        .assert()
-        .success();
+    dkit().args(["alias", "list"]).assert().success();
 }
 
 #[test]
