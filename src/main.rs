@@ -318,6 +318,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             file2,
             path,
             quiet,
+            mode,
+            diff_format,
+            array_diff,
+            ignore_order,
+            ignore_case,
             encoding,
             detect_encoding,
             sheet,
@@ -325,11 +330,19 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             table,
             sql,
         } => {
+            let diff_mode = commands::diff::DiffMode::from_str(&mode)?;
+            let diff_output_format = commands::diff::DiffOutputFormat::from_str(&diff_format)?;
+            let array_diff_strategy = commands::diff::ArrayDiffStrategy::from_str(&array_diff)?;
             let has_diff = commands::diff::run(&commands::diff::DiffArgs {
                 file1: &file1,
                 file2: &file2,
                 path: path.as_deref(),
                 quiet,
+                mode: diff_mode,
+                diff_format: diff_output_format,
+                array_diff: array_diff_strategy,
+                ignore_order,
+                ignore_case,
                 encoding_opts: EncodingOptions {
                     encoding,
                     detect_encoding,
