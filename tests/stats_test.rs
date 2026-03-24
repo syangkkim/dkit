@@ -150,3 +150,142 @@ fn stats_single_object() {
         .stdout(predicate::str::contains("rows: 1"))
         .stdout(predicate::str::contains("columns: 2"));
 }
+
+// --- 확장 통계: 숫자 필드 상세 ---
+
+#[test]
+fn stats_numeric_extended() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--column", "v"])
+        .write_stdin(r#"[{"v":10},{"v":20},{"v":30},{"v":40},{"v":50}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: numeric"))
+        .stdout(predicate::str::contains("std:"))
+        .stdout(predicate::str::contains("p25:"))
+        .stdout(predicate::str::contains("p75:"))
+        .stdout(predicate::str::contains("median: 30"));
+}
+
+// --- 확장 통계: 문자열 필드 상세 ---
+
+#[test]
+fn stats_string_extended() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--column", "name"])
+        .write_stdin(r#"[{"name":"Alice"},{"name":"Bob"},{"name":"Alice"},{"name":"Charlie"}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: string"))
+        .stdout(predicate::str::contains("unique: 3"))
+        .stdout(predicate::str::contains("min_length:"))
+        .stdout(predicate::str::contains("max_length:"))
+        .stdout(predicate::str::contains("avg_length:"))
+        .stdout(predicate::str::contains("top_values:"))
+        .stdout(predicate::str::contains("Alice (2)"));
+}
+
+// --- null 비율 ---
+
+#[test]
+fn stats_missing_ratio() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--column", "x"])
+        .write_stdin(r#"[{"x":1},{"x":null},{"x":3}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("missing: 1 (33.3%)"));
+}
+
+// --- 타입 일관성 검사 ---
+
+#[test]
+fn stats_mixed_types() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--column", "v"])
+        .write_stdin(r#"[{"v":1},{"v":"hello"},{"v":3}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("mixed types"));
+}
+
+// --- --field 옵션 (--column 별칭) ---
+
+#[test]
+fn stats_field_alias() {
+    dkit()
+        .args(&["stats", "tests/fixtures/users.json", "--field", "age"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: numeric"))
+        .stdout(predicate::str::contains("count: 2"));
+}
+
+// --- --format json 출력 ---
+
+#[test]
+fn stats_format_json() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--format", "json"])
+        .write_stdin(r#"[{"x":10},{"x":20}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"rows\": 2"))
+        .stdout(predicate::str::contains("\"columns\""));
+}
+
+#[test]
+fn stats_column_format_json() {
+    dkit()
+        .args(&[
+            "stats", "-", "--from", "json", "--column", "x", "--format", "json",
+        ])
+        .write_stdin(r#"[{"x":10},{"x":20},{"x":30}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"type\": \"numeric\""))
+        .stdout(predicate::str::contains("\"mean\""))
+        .stdout(predicate::str::contains("\"std\""))
+        .stdout(predicate::str::contains("\"p25\""))
+        .stdout(predicate::str::contains("\"p75\""));
+}
+
+// --- --format md 출력 ---
+
+#[test]
+fn stats_format_md() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--format", "md"])
+        .write_stdin(r#"[{"x":10},{"x":20}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("# Statistics"))
+        .stdout(predicate::str::contains("| Stat | Value |"));
+}
+
+// --- --histogram ---
+
+#[test]
+fn stats_histogram() {
+    dkit()
+        .args(&[
+            "stats", "-", "--from", "json", "--column", "v", "--histogram",
+        ])
+        .write_stdin(r#"[{"v":10},{"v":20},{"v":30},{"v":40},{"v":50}]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("histogram:"))
+        .stdout(predicate::str::contains("█"));
+}
+
+// --- 잘못된 --format ---
+
+#[test]
+fn stats_invalid_format() {
+    dkit()
+        .args(&["stats", "-", "--from", "json", "--format", "invalid"])
+        .write_stdin(r#"[{"x":1}]"#)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unsupported stats output format"));
+}
