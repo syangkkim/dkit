@@ -93,6 +93,14 @@ pub enum Commands {
         /// Excel header row number, 1-based (default: 1)
         #[arg(long, value_name = "N")]
         header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
     },
 
     /// Query data using path expressions
@@ -135,6 +143,14 @@ pub enum Commands {
         /// Excel header row number, 1-based (default: 1)
         #[arg(long, value_name = "N")]
         header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
     },
 
     /// View data in a formatted table
@@ -213,6 +229,18 @@ pub enum Commands {
         /// List sheet names in an Excel file
         #[arg(long)]
         list_sheets: bool,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+
+        /// List table names in a SQLite database
+        #[arg(long)]
+        list_tables: bool,
     },
 
     /// Show statistics about data
@@ -263,6 +291,14 @@ pub enum Commands {
         /// Excel header row number, 1-based (default: 1)
         #[arg(long, value_name = "N")]
         header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
     },
 
     /// Merge multiple data files into one
@@ -317,6 +353,14 @@ pub enum Commands {
         /// Excel header row number, 1-based (default: 1)
         #[arg(long, value_name = "N")]
         header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
     },
 
     /// Show schema/structure of data
@@ -347,6 +391,14 @@ pub enum Commands {
         /// Excel header row number, 1-based (default: 1)
         #[arg(long, value_name = "N")]
         header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
     },
 
     /// Compare two data files and show differences
@@ -385,5 +437,13 @@ pub enum Commands {
         /// Excel header row number, 1-based (default: 1)
         #[arg(long, value_name = "N")]
         header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
     },
 }

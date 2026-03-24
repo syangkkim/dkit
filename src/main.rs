@@ -12,7 +12,7 @@ use clap::Parser;
 use colored::Colorize;
 
 use cli::{Cli, Commands};
-use commands::{EncodingOptions, ExcelOptions};
+use commands::{EncodingOptions, ExcelOptions, SqliteOptions};
 
 fn main() {
     let cli = Cli::parse();
@@ -89,6 +89,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             detect_encoding,
             sheet,
             header_row,
+            table,
+            sql,
         } => {
             commands::convert::run(&commands::convert::ConvertArgs {
                 input: &input,
@@ -109,6 +111,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     detect_encoding,
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
         Commands::Query {
@@ -121,6 +124,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             detect_encoding,
             sheet,
             header_row,
+            table,
+            sql,
         } => {
             commands::query::run(&commands::query::QueryArgs {
                 input: &input,
@@ -133,6 +138,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     detect_encoding,
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
         Commands::View {
@@ -154,6 +160,9 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             sheet,
             header_row,
             list_sheets,
+            table,
+            sql,
+            list_tables,
         } => {
             commands::view::run(&commands::view::ViewArgs {
                 input: &input,
@@ -175,6 +184,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
                 list_sheets,
+                sqlite_opts: SqliteOptions { table, sql },
+                list_tables,
             })?;
         }
         Commands::Stats {
@@ -189,6 +200,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             detect_encoding,
             sheet,
             header_row,
+            table,
+            sql,
         } => {
             commands::stats::run(&commands::stats::StatsArgs {
                 input: &input,
@@ -203,6 +216,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     detect_encoding,
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
         Commands::Merge {
@@ -218,6 +232,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             detect_encoding,
             sheet,
             header_row,
+            table,
+            sql,
         } => {
             commands::merge::run(&commands::merge::MergeArgs {
                 input: &input,
@@ -233,6 +249,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     detect_encoding,
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
         Commands::Schema {
@@ -242,6 +259,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             detect_encoding,
             sheet,
             header_row,
+            table,
+            sql,
         } => {
             commands::schema::run(&commands::schema::SchemaArgs {
                 input: &input,
@@ -251,6 +270,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     detect_encoding,
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
         Commands::Diff {
@@ -262,6 +282,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             detect_encoding,
             sheet,
             header_row,
+            table,
+            sql,
         } => {
             let has_diff = commands::diff::run(&commands::diff::DiffArgs {
                 file1: &file1,
@@ -273,6 +295,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     detect_encoding,
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
             })?;
             if has_diff {
                 process::exit(1);

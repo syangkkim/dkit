@@ -4,7 +4,8 @@ use anyhow::{bail, Result};
 use colored::Colorize;
 
 use super::{
-    read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes, EncodingOptions, ExcelOptions,
+    read_file_bytes, read_file_with_encoding, read_sqlite_from_path, read_xlsx_from_bytes,
+    EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::CsvReader;
 use crate::format::json::JsonReader;
@@ -23,12 +24,23 @@ pub struct DiffArgs<'a> {
     pub quiet: bool,
     pub encoding_opts: EncodingOptions,
     pub excel_opts: ExcelOptions,
+    pub sqlite_opts: SqliteOptions,
 }
 
 /// diff 서브커맨드 실행. 차이가 있으면 true, 없으면 false 반환.
 pub fn run(args: &DiffArgs) -> Result<bool> {
-    let value1 = read_value_from_path(args.file1, &args.encoding_opts, &args.excel_opts)?;
-    let value2 = read_value_from_path(args.file2, &args.encoding_opts, &args.excel_opts)?;
+    let value1 = read_value_from_path(
+        args.file1,
+        &args.encoding_opts,
+        &args.excel_opts,
+        &args.sqlite_opts,
+    )?;
+    let value2 = read_value_from_path(
+        args.file2,
+        &args.encoding_opts,
+        &args.excel_opts,
+        &args.sqlite_opts,
+    )?;
 
     // --path 옵션으로 중첩 데이터 접근
     let (v1, v2) = match args.path {
@@ -64,6 +76,7 @@ fn read_value_from_path(
     path: &Path,
     encoding_opts: &EncodingOptions,
     excel_opts: &ExcelOptions,
+    sqlite_opts: &SqliteOptions,
 ) -> Result<Value> {
     let format = detect_format(path)?;
     let delimiter = default_delimiter(path);
@@ -78,6 +91,8 @@ fn read_value_from_path(
     } else if format == Format::Xlsx {
         let bytes = read_file_bytes(path)?;
         read_xlsx_from_bytes(&bytes, excel_opts)
+    } else if format == Format::Sqlite {
+        read_sqlite_from_path(path, sqlite_opts)
     } else {
         let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, &options)
@@ -95,6 +110,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
+        }
+        Format::Sqlite => {
+            bail!("SQLite files must be read from a file path, not from text input")
         }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),

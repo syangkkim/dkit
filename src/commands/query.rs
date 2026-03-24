@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use super::{
-    read_file_bytes, read_file_with_encoding, read_xlsx_from_bytes, EncodingOptions, ExcelOptions,
+    read_file_bytes, read_file_with_encoding, read_sqlite_from_path, read_xlsx_from_bytes,
+    EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::CsvReader;
 use crate::format::html::HtmlWriter;
@@ -33,6 +34,7 @@ pub struct QueryArgs<'a> {
     pub output: Option<&'a Path>,
     pub encoding_opts: EncodingOptions,
     pub excel_opts: ExcelOptions,
+    pub sqlite_opts: SqliteOptions,
 }
 
 /// query 서브커맨드 실행
@@ -70,6 +72,8 @@ pub fn run(args: &QueryArgs) -> Result<()> {
         } else if source_format == Format::Xlsx {
             let bytes = read_file_bytes(Path::new(args.input))?;
             read_xlsx_from_bytes(&bytes, &args.excel_opts)?
+        } else if source_format == Format::Sqlite {
+            read_sqlite_from_path(Path::new(args.input), &args.sqlite_opts)?
         } else {
             let content = read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?;
             let auto_delimiter = default_delimiter(Path::new(args.input));
@@ -169,6 +173,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
         }
+        Format::Sqlite => {
+            bail!("SQLite files must be read from a file path, not from text input")
+        }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),
@@ -194,6 +201,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
+        Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => {
