@@ -361,6 +361,63 @@ dkit unflatten flat.json --separator '/'
 dkit flatten data.json -o flat.json && dkit unflatten flat.json
 ```
 
+### `config` — Configuration management
+
+```bash
+# Show current effective configuration (with source information)
+dkit config show
+
+# Create a default user config file
+dkit config init
+
+# Create a project-level config file (.dkit.toml in current directory)
+dkit config init --project
+```
+
+Config file priority (highest to lowest):
+1. CLI options
+2. Project config (`.dkit.toml` in current directory)
+3. User config (`$XDG_CONFIG_HOME/dkit/config.toml` or `~/.dkit.toml`)
+4. Defaults
+
+### `alias` — Command aliases
+
+```bash
+# List all aliases (built-in + user-defined)
+dkit alias list
+
+# Register a user alias
+dkit alias set <NAME> <COMMAND>
+
+# Remove a user alias
+dkit alias remove <NAME>
+
+# Use a built-in alias (j2c, c2j, j2y, y2j, j2t, t2j, c2y, y2c)
+dkit j2c data.json          # JSON → CSV
+dkit c2j data.csv           # CSV → JSON
+dkit y2j config.yaml        # YAML → JSON
+```
+
+### `completions` — Shell completion scripts
+
+```bash
+# Generate and install shell completions
+dkit completions bash > ~/.bash_completion.d/dkit && source ~/.bash_completion.d/dkit
+dkit completions zsh > ~/.zfunc/_dkit
+dkit completions fish > ~/.config/fish/completions/dkit.fish
+dkit completions powershell > dkit.ps1 && . ./dkit.ps1
+```
+
+### Watch mode
+
+`convert` and `view` support `--watch` to automatically re-run on file changes:
+
+```bash
+dkit convert data.json --to csv --watch           # Re-convert on change
+dkit view data.csv --watch                        # Refresh table on change
+dkit convert data.json --to yaml --watch --watch-path ./templates/  # Watch extra path
+```
+
 ### `merge` — Combine multiple files
 
 ```bash
@@ -404,6 +461,10 @@ dkit merge config1.yaml config2.yaml --to yaml
 | Random/stratified sampling | O | X | X | X |
 | Flatten/unflatten | O | X | X | X |
 | Multi-encoding support | O | X | X | X |
+| Watch mode (auto re-run) | O | X | X | X |
+| Config file | O | X | X | X |
+| Command aliases | O | X | X | X |
+| Shell completions | O | O | O | O |
 | Single binary | O | O | O | O |
 
 dkit focuses on **seamless conversion between all supported formats** with a unified query syntax, eliminating the need for separate tools per format.
