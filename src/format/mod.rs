@@ -36,6 +36,7 @@ pub enum Format {
 }
 
 impl Format {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, DkitError> {
         match s.to_lowercase().as_str() {
             "json" => Ok(Format::Json),
