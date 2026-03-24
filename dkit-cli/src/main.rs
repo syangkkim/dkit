@@ -41,6 +41,11 @@ fn run_main() -> i32 {
         return 0;
     }
 
+    if cli.examples {
+        print_examples();
+        return 0;
+    }
+
     match cli.command {
         Some(_) => {}
         None => {
@@ -117,6 +122,63 @@ fn expand_alias(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
     } else {
         args
     }
+}
+
+/// 자주 사용하는 예시 모음 출력
+fn print_examples() {
+    println!(
+        "\
+Frequently used examples:
+
+  Format conversion:
+    dkit convert data.json -f csv              # JSON → CSV
+    dkit convert data.csv -f yaml -o out.yaml  # CSV → YAML (file output)
+    dkit convert '*.json' -f csv --outdir out  # Batch convert all JSON files
+    cat data.json | dkit convert --from json -f toml  # Pipe: JSON → TOML
+
+  Querying:
+    dkit query data.json '.users[0].name'      # Extract a field
+    dkit query data.yaml '.config.database'    # Navigate nested data
+    dkit query data.json '.items[*].price' -f csv  # Query with output format
+
+  Viewing:
+    dkit view data.csv                         # Pretty table output
+    dkit view data.json --path .users -n 5     # Nested data, limit rows
+    dkit view data.csv --columns name,email    # Select columns
+    dkit view data.csv --sort-by age --head 10 # Sort and limit
+
+  Statistics:
+    dkit stats data.csv                        # Overview statistics
+    dkit stats data.csv --column revenue       # Single column stats
+    dkit stats data.csv --histogram            # Text histogram
+
+  Comparing:
+    dkit diff old.json new.json                # Show differences
+    dkit diff a.yaml b.yaml --quiet            # Exit code only
+
+  Merging:
+    dkit merge a.json b.json -f json           # Merge files
+    dkit merge users1.csv users2.csv -f csv    # Merge CSV files
+
+  Sampling:
+    dkit sample data.csv -n 100               # Random sample
+    dkit sample data.csv -n 50 --seed 42      # Reproducible sample
+
+  Schema & validation:
+    dkit schema data.json                     # Show data structure
+    dkit validate data.json --schema s.json   # Validate against schema
+
+  Flatten / unflatten:
+    dkit flatten nested.json                  # Flatten nested keys
+    dkit unflatten flat.json                  # Restore nested structure
+
+  Other:
+    dkit completions bash > ~/.bash_completion.d/dkit  # Shell completions
+    dkit config show                          # Show configuration
+    dkit alias set j2c 'convert -f csv'       # Create alias
+
+Use 'dkit <command> --help' for detailed help on each command."
+    );
 }
 
 /// 지원 포맷 목록 출력
