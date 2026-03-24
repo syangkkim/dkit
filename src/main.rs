@@ -397,6 +397,77 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
+        Commands::Flatten {
+            input,
+            separator,
+            array_format,
+            max_depth,
+            from,
+            format,
+            output,
+            delimiter,
+            no_header,
+            pretty,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+        } => {
+            let af = commands::flatten::ArrayFormat::from_str(&array_format)?;
+            commands::flatten::run_flatten(&commands::flatten::FlattenArgs {
+                input: &input,
+                separator: &separator,
+                array_format: af,
+                max_depth,
+                from: from.as_deref(),
+                format: format.as_deref(),
+                output: output.as_deref(),
+                delimiter,
+                no_header,
+                pretty,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+            })?;
+        }
+        Commands::Unflatten {
+            input,
+            separator,
+            from,
+            format,
+            output,
+            delimiter,
+            no_header,
+            pretty,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+        } => {
+            commands::flatten::run_unflatten(&commands::flatten::UnflattenArgs {
+                input: &input,
+                separator: &separator,
+                from: from.as_deref(),
+                format: format.as_deref(),
+                output: output.as_deref(),
+                delimiter,
+                no_header,
+                pretty,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+            })?;
+        }
         Commands::Diff {
             file1,
             file2,

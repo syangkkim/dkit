@@ -597,6 +597,138 @@ pub enum Commands {
         sql: Option<String>,
     },
 
+    /// Flatten nested structures into dot-notation keys
+    #[command(
+        after_help = "Examples:\n  dkit flatten data.json\n  dkit flatten data.json --separator '/'\n  dkit flatten data.json --array-format bracket\n  dkit flatten data.json --max-depth 2\n  dkit flatten data.json -f yaml -o flat.yaml\n  cat data.json | dkit flatten - --from json"
+    )]
+    Flatten {
+        /// Input file path (use '-' for stdin)
+        #[arg(value_name = "INPUT")]
+        input: String,
+
+        /// Key separator (default: '.')
+        #[arg(long, value_name = "SEP", default_value = ".")]
+        separator: String,
+
+        /// Array flattening format: index (items.0.name) or bracket (items[0].name)
+        #[arg(long, value_name = "FORMAT", default_value = "index")]
+        array_format: String,
+
+        /// Maximum depth to flatten (default: unlimited)
+        #[arg(long, value_name = "N")]
+        max_depth: Option<usize>,
+
+        /// Input format (auto-detected from file extension)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
+
+        /// Output format (default: same as input)
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: Option<String>,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// Pretty-print output
+        #[arg(long)]
+        pretty: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+    },
+
+    /// Unflatten dot-notation keys back into nested structures
+    #[command(
+        after_help = "Examples:\n  dkit unflatten flat.json\n  dkit unflatten flat.json --separator '/'\n  dkit unflatten flat.json -f yaml -o nested.yaml\n  cat flat.json | dkit unflatten - --from json"
+    )]
+    Unflatten {
+        /// Input file path (use '-' for stdin)
+        #[arg(value_name = "INPUT")]
+        input: String,
+
+        /// Key separator (default: '.')
+        #[arg(long, value_name = "SEP", default_value = ".")]
+        separator: String,
+
+        /// Input format (auto-detected from file extension)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
+
+        /// Output format (default: same as input)
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: Option<String>,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// Pretty-print output
+        #[arg(long)]
+        pretty: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+    },
+
     /// Compare two data files and show differences
     #[command(
         after_help = "Examples:\n  dkit diff old.json new.json\n  dkit diff config_dev.yaml config_prod.yaml\n  dkit diff data.json data.yaml\n  dkit diff old.json new.json --path '.database'\n  dkit diff a.json b.json --quiet && echo 'same' || echo 'different'\n  dkit diff a.json b.json --mode value --diff-format json\n  dkit diff a.json b.json --array-diff key=id --ignore-order"
