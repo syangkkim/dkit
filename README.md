@@ -48,6 +48,7 @@ cargo install --path .
 | TOML        | `.toml`                | O    | O     |
 | XML         | `.xml`                 | O    | O     |
 | MessagePack | `.msgpack`             | O    | O     |
+| Parquet     | `.parquet`             | O    | O     |
 | Excel       | `.xlsx`                | O    | -     |
 | SQLite      | `.db`, `.sqlite`       | O    | -     |
 | Markdown    | `.md`                  | -    | O     |
@@ -115,6 +116,17 @@ dkit view data.db --list-tables                          # List available tables
 dkit convert data.csv --to json --encoding euc-kr       # EUC-KR input
 dkit convert data.csv --to json --encoding shift_jis     # Shift-JIS input
 dkit convert data.csv --to json --detect-encoding        # Auto-detect encoding
+
+# Parquet (.parquet) input/output
+dkit convert data.parquet --to json                      # Parquet → JSON
+dkit convert data.parquet --to csv                       # Parquet → CSV
+dkit convert data.json --to parquet -o out.parquet       # JSON → Parquet
+dkit convert data.csv --to parquet --compression snappy  # Parquet with Snappy compression
+dkit convert data.csv --to parquet --compression zstd    # Parquet with Zstd compression
+
+# Streaming mode for large files (chunk-based processing)
+dkit convert large.jsonl --from jsonl -f csv --chunk-size 1000 -o out.csv
+dkit convert large.csv --from csv -f jsonl --chunk-size 500 -o out.jsonl
 ```
 
 ### `query` — Data querying
@@ -152,12 +164,56 @@ dkit query data.json '.items[-1]'
 
 ```bash
 # Advanced query examples
-dkit query data.json '.users[] | where .age > 20 | select .name, .email'
-dkit query data.json '.items[] | sort .price desc | limit 5'
-dkit query data.json '.users[] | where .name contains "Kim"'
+dkit query data.json '.users[] | where age > 20 | select name, email'
+dkit query data.json '.items[] | sort price desc | limit 5'
+dkit query data.json '.users[] | where name contains "Kim"'
 
 # Output query results in different formats
 dkit query data.json '.users[]' --to csv -o users.csv
+```
+
+**Aggregate functions:**
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `count` | Count elements | `.[] \| count` |
+| `count field` | Count non-null values | `.[] \| count email` |
+| `sum field` | Sum numeric field | `.[] \| sum price` |
+| `avg field` | Average of numeric field | `.[] \| avg score` |
+| `min field` | Minimum value | `.[] \| min price` |
+| `max field` | Maximum value | `.[] \| max price` |
+| `distinct field` | Unique values | `.[] \| distinct category` |
+
+```bash
+# Aggregate examples
+dkit query data.csv '.[] | count'
+dkit query data.csv '.[] | sum price'
+dkit query data.json '.users[] | where age > 30 | avg score'
+dkit query data.csv '.[] | distinct category'
+
+# GROUP BY examples
+dkit query data.csv '.[] | group_by category count(), sum(price)'
+dkit query data.csv '.[] | group_by region min(price), max(price)'
+dkit query data.csv '.[] | group_by category count() having count > 1'
+dkit query data.csv '.[] | group_by category count() | sort count desc | limit 5'
+```
+
+**Built-in functions (usable in `select`):**
+
+| Category | Functions |
+|----------|-----------|
+| String | `upper()`, `lower()`, `trim()`, `ltrim()`, `rtrim()`, `length()`, `substr()`, `concat()`, `replace()`, `split()` |
+| Math | `round()`, `ceil()`, `floor()`, `abs()`, `sqrt()`, `pow()` |
+| Date | `now()`, `date()`, `year()`, `month()`, `day()` |
+| Type | `to_int()`, `to_float()`, `to_string()`, `to_bool()` |
+| Util | `coalesce()`, `if_null()` |
+
+```bash
+# Function examples
+dkit query data.csv '.[] | select upper(name), round(price, 2)'
+dkit query data.json '.users[] | select upper(trim(name)) as NAME, year(created_at)'
+dkit query data.csv '.[] | where score > 80 | select name, to_string(score)'
+dkit query data.json '.[] | select name, coalesce(email, "N/A")'
 ```
 
 ### `view` — Table preview
@@ -251,13 +307,18 @@ dkit merge config1.yaml config2.yaml --to yaml
 | TOML | O | X | X | X |
 | XML | O | X | X | O |
 | MessagePack | O | X | X | X |
+| Parquet | O | X | X | X |
 | Excel (.xlsx) input | O | X | X | X |
 | SQLite input | O | X | X | X |
 | Markdown/HTML output | O | X | X | X |
 | Cross-format convert | O | X | Partial | Partial |
 | Table output | O | X | O | X |
 | Query (where/select/sort) | O | O | O | O |
+| Aggregate functions | O | O | O | X |
+| GROUP BY | O | Partial | O | X |
+| Built-in functions | O | O | O | X |
 | Pipeline chaining | O | O | O | X |
+| Streaming (large files) | O | X | O | X |
 | Statistics | O | X | O | X |
 | Schema inspection | O | X | X | X |
 | File merging | O | X | O | X |
