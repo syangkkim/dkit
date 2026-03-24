@@ -30,7 +30,9 @@ fn create_typed_parquet(path: &std::path::Path) {
     ]));
 
     let ids: ArrayRef = Arc::new(Int64Array::from(vec![1, 2, 3, 4, 5]));
-    let names: ArrayRef = Arc::new(StringArray::from(vec!["Alice", "Bob", "Charlie", "Diana", "Eve"]));
+    let names: ArrayRef = Arc::new(StringArray::from(vec![
+        "Alice", "Bob", "Charlie", "Diana", "Eve",
+    ]));
     let scores: ArrayRef = Arc::new(Float64Array::from(vec![
         Some(85.0),
         Some(92.5),
@@ -188,15 +190,22 @@ fn json_to_parquet_with_snappy_compression() {
     let json_path = dir.path().join("data.json");
     let pq_path = dir.path().join("out.parquet");
 
-    fs::write(&json_path, r#"[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]"#).unwrap();
+    fs::write(
+        &json_path,
+        r#"[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]"#,
+    )
+    .unwrap();
 
     dkit()
         .args([
             "convert",
             json_path.to_str().unwrap(),
-            "-f", "parquet",
-            "-o", pq_path.to_str().unwrap(),
-            "--compression", "snappy",
+            "-f",
+            "parquet",
+            "-o",
+            pq_path.to_str().unwrap(),
+            "--compression",
+            "snappy",
         ])
         .assert()
         .success();
@@ -217,9 +226,12 @@ fn json_to_parquet_with_zstd_compression() {
         .args([
             "convert",
             json_path.to_str().unwrap(),
-            "-f", "parquet",
-            "-o", pq_path.to_str().unwrap(),
-            "--compression", "zstd",
+            "-f",
+            "parquet",
+            "-o",
+            pq_path.to_str().unwrap(),
+            "--compression",
+            "zstd",
         ])
         .assert()
         .success();
@@ -298,7 +310,10 @@ fn aggregate_sum_field() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     // 85 + 92 + 78 + 95 + 88 = 438
-    assert!(stdout.contains("438"), "sum of scores should be 438, got: {stdout}");
+    assert!(
+        stdout.contains("438"),
+        "sum of scores should be 438, got: {stdout}"
+    );
 }
 
 #[test]
@@ -310,7 +325,10 @@ fn aggregate_avg_field() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     // avg = 438 / 5 = 87.6
-    assert!(stdout.contains("87.6"), "avg score should be 87.6, got: {stdout}");
+    assert!(
+        stdout.contains("87.6"),
+        "avg score should be 87.6, got: {stdout}"
+    );
 }
 
 #[test]
@@ -352,7 +370,11 @@ fn aggregate_max_string() {
 #[test]
 fn aggregate_distinct_field() {
     let output = dkit()
-        .args(["query", "tests/fixtures/employees.json", ".[] | distinct city"])
+        .args([
+            "query",
+            "tests/fixtures/employees.json",
+            ".[] | distinct city",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -388,7 +410,10 @@ fn aggregate_sum_after_filter() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     // Alice(85) + Diana(95) + Eve(88) = 268
-    assert!(stdout.contains("268"), "sum of engineer scores should be 268, got: {stdout}");
+    assert!(
+        stdout.contains("268"),
+        "sum of engineer scores should be 268, got: {stdout}"
+    );
 }
 
 #[test]
@@ -404,7 +429,10 @@ fn aggregate_avg_after_filter() {
     assert!(output.status.success());
     // Charlie(78) + Eve(88) = 166 / 2 = 83.0
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("83"), "avg score for age>30 should be 83, got: {stdout}");
+    assert!(
+        stdout.contains("83"),
+        "avg score for age>30 should be 83, got: {stdout}"
+    );
 }
 
 // ============================================================
@@ -493,7 +521,10 @@ fn group_by_result_sortable() {
     // Seoul(3) 이 먼저 나와야 함
     let seoul_pos = stdout.find("Seoul").unwrap();
     let busan_pos = stdout.find("Busan").unwrap();
-    assert!(seoul_pos < busan_pos, "Seoul (count=3) should come before Busan (count=1)");
+    assert!(
+        seoul_pos < busan_pos,
+        "Seoul (count=3) should come before Busan (count=1)"
+    );
 }
 
 #[test]
@@ -508,9 +539,18 @@ fn group_by_having_filter() {
         .unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("Seoul"), "Seoul (count=3) should pass having count>1");
-    assert!(!stdout.contains("Busan"), "Busan (count=1) should be filtered out");
-    assert!(!stdout.contains("Incheon"), "Incheon (count=1) should be filtered out");
+    assert!(
+        stdout.contains("Seoul"),
+        "Seoul (count=3) should pass having count>1"
+    );
+    assert!(
+        !stdout.contains("Busan"),
+        "Busan (count=1) should be filtered out"
+    );
+    assert!(
+        !stdout.contains("Incheon"),
+        "Incheon (count=1) should be filtered out"
+    );
 }
 
 // ============================================================
@@ -549,16 +589,23 @@ fn streaming_jsonl_to_csv_chunk_size() {
         .args([
             "convert",
             jsonl.to_str().unwrap(),
-            "--from", "jsonl",
-            "-f", "csv",
-            "--chunk-size", "100",
-            "-o", out.to_str().unwrap(),
+            "--from",
+            "jsonl",
+            "-f",
+            "csv",
+            "--chunk-size",
+            "100",
+            "-o",
+            out.to_str().unwrap(),
         ])
         .assert()
         .success();
 
     let content = fs::read_to_string(&out).unwrap();
-    assert!(content.contains("id,name,value"), "CSV header should be present");
+    assert!(
+        content.contains("id,name,value"),
+        "CSV header should be present"
+    );
     assert!(content.contains("user0"), "first record should be present");
     assert!(content.contains("user499"), "last record should be present");
 }
@@ -574,10 +621,14 @@ fn streaming_csv_to_jsonl_chunk_size() {
         .args([
             "convert",
             csv.to_str().unwrap(),
-            "--from", "csv",
-            "-f", "jsonl",
-            "--chunk-size", "50",
-            "-o", out.to_str().unwrap(),
+            "--from",
+            "csv",
+            "-f",
+            "jsonl",
+            "--chunk-size",
+            "50",
+            "-o",
+            out.to_str().unwrap(),
         ])
         .assert()
         .success();
@@ -598,10 +649,14 @@ fn streaming_large_csv_to_csv() {
         .args([
             "convert",
             csv.to_str().unwrap(),
-            "--from", "csv",
-            "-f", "csv",
-            "--chunk-size", "200",
-            "-o", out.to_str().unwrap(),
+            "--from",
+            "csv",
+            "-f",
+            "csv",
+            "--chunk-size",
+            "200",
+            "-o",
+            out.to_str().unwrap(),
         ])
         .assert()
         .success();
@@ -622,10 +677,14 @@ fn streaming_parquet_to_csv_chunk_size() {
         .args([
             "convert",
             pq.to_str().unwrap(),
-            "--from", "parquet",
-            "-f", "csv",
-            "--chunk-size", "2",
-            "-o", out.to_str().unwrap(),
+            "--from",
+            "parquet",
+            "-f",
+            "csv",
+            "--chunk-size",
+            "2",
+            "-o",
+            out.to_str().unwrap(),
         ])
         .assert()
         .success();
@@ -677,7 +736,10 @@ fn query_func_length_string() {
         .unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("5"), "length of 'Alice' should be 5, got: {stdout}");
+    assert!(
+        stdout.contains("5"),
+        "length of 'Alice' should be 5, got: {stdout}"
+    );
 }
 
 #[test]
@@ -707,7 +769,10 @@ fn query_func_round() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     // Bob's score is 92, round(92) = 92
-    assert!(stdout.contains("92"), "round(92) should be 92, got: {stdout}");
+    assert!(
+        stdout.contains("92"),
+        "round(92) should be 92, got: {stdout}"
+    );
 }
 
 #[test]
@@ -802,8 +867,11 @@ fn query_func_nested_upper_trim() {
 fn query_func_coalesce() {
     let dir = TempDir::new().unwrap();
     let json = dir.path().join("data.json");
-    fs::write(&json, r#"[{"name":"Alice","email":null},{"name":"Bob","email":"bob@example.com"}]"#)
-        .unwrap();
+    fs::write(
+        &json,
+        r#"[{"name":"Alice","email":null},{"name":"Bob","email":"bob@example.com"}]"#,
+    )
+    .unwrap();
 
     dkit()
         .args([
@@ -896,13 +964,27 @@ fn parquet_roundtrip_via_csv() {
 
     // parquet → csv
     dkit()
-        .args(["convert", pq1.to_str().unwrap(), "-f", "csv", "-o", csv.to_str().unwrap()])
+        .args([
+            "convert",
+            pq1.to_str().unwrap(),
+            "-f",
+            "csv",
+            "-o",
+            csv.to_str().unwrap(),
+        ])
         .assert()
         .success();
 
     // csv → parquet
     dkit()
-        .args(["convert", csv.to_str().unwrap(), "-f", "parquet", "-o", pq2.to_str().unwrap()])
+        .args([
+            "convert",
+            csv.to_str().unwrap(),
+            "-f",
+            "parquet",
+            "-o",
+            pq2.to_str().unwrap(),
+        ])
         .assert()
         .success();
 
