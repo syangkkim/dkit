@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-24
+
+### Added
+
+- **Parquet Reader**: Read Apache Parquet files via `arrow` + `parquet` crates with column-to-row conversion, nested schema support (Struct, List, Map), and Row Group-based reading for memory efficiency. (#92)
+- **Parquet Writer**: Write `Value` arrays to Parquet files with automatic schema inference, compression options (`--compression snappy|gzip|zstd|none`), and configurable Row Group size. (#93)
+- **Query aggregate functions**: `count()`, `sum()`, `avg()`, `min()`, `max()`, `distinct()` for data summarization in query expressions. (#94)
+- **Query GROUP BY clause**: Group-by aggregation with multi-key support, HAVING clause for group filtering, and result sorting. (#95)
+- **Streaming chunk-based read/write**: Process large files without loading entirely into memory — line-based streaming for JSONL/CSV/TSV, Row Group streaming for Parquet, with `--chunk-size` and `--progress` options. (#96)
+- **Extended query functions**: String functions (`upper`, `lower`, `trim`, `length`, `substr`, `concat`, `replace`), math functions (`round`, `ceil`, `floor`, `abs`), date functions (`now`, `date`, `year`, `month`, `day`), and type conversion (`to_int`, `to_float`, `to_string`, `to_bool`) with nested call support. (#97)
+
+### Testing & Docs
+
+- **Comprehensive v0.7.0 integration tests**: End-to-end tests for Parquet read/write, aggregate functions, GROUP BY, streaming, and extended query functions. README updated. (#98)
+
 ## [0.6.0] - 2026-03-24
 
 ### Added
@@ -90,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
+[0.7.0]: https://github.com/syangkkim/dkit/releases/tag/v0.7.0
 [0.6.0]: https://github.com/syangkkim/dkit/releases/tag/v0.6.0
 [0.5.0]: https://github.com/syangkkim/dkit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/syangkkim/dkit/releases/tag/v0.4.0
