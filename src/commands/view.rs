@@ -5,7 +5,8 @@ use anyhow::{bail, Context as _, Result};
 
 use super::{
     list_sqlite_tables, list_xlsx_sheets, read_file_bytes, read_file_with_encoding,
-    read_sqlite_from_path, read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
+    read_parquet_from_bytes, read_sqlite_from_path, read_xlsx_from_bytes, EncodingOptions,
+    ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::CsvReader;
 use crate::format::csv::CsvWriter;
@@ -213,6 +214,17 @@ fn read_input_value(args: &ViewArgs, format: Format, options: &FormatOptions) ->
             bail!("SQLite files cannot be read from stdin; provide a file path");
         }
         read_sqlite_from_path(Path::new(args.input), &args.sqlite_opts)
+    } else if format == Format::Parquet {
+        if args.input == "-" {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .context("Failed to read from stdin")?;
+            read_parquet_from_bytes(&buf)
+        } else {
+            let bytes = read_file_bytes(Path::new(args.input))?;
+            read_parquet_from_bytes(&bytes)
+        }
     } else {
         let content = if args.input == "-" {
             read_stdin_with_encoding(&args.encoding_opts)?
@@ -238,6 +250,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Sqlite => {
             bail!("SQLite files must be read from a file path, not from text input")
         }
+        Format::Parquet => {
+            bail!("Parquet files must be read from a file path, not from text input")
+        }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),
@@ -255,6 +270,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
+        Format::Parquet => bail!("Parquet is an input-only format and cannot be used as output"),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => bail!("Table format is handled separately"),

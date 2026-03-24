@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use super::{
-    read_file_bytes, read_file_with_encoding, read_sqlite_from_path, read_xlsx_from_bytes,
-    EncodingOptions, ExcelOptions, SqliteOptions,
+    read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
+    read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use crate::format::csv::{CsvReader, CsvWriter};
 use crate::format::html::HtmlWriter;
@@ -26,7 +26,7 @@ use crate::value::Value;
 /// 지원되는 입력 파일 확장자 목록
 const SUPPORTED_EXTENSIONS: &[&str] = &[
     "json", "jsonl", "ndjson", "csv", "tsv", "yaml", "yml", "toml", "xml", "msgpack", "xlsx",
-    "xls", "xlsm", "xlsb", "ods", "db", "sqlite", "sqlite3",
+    "xls", "xlsm", "xlsb", "ods", "db", "sqlite", "sqlite3", "parquet", "pq",
 ];
 
 pub struct ConvertArgs<'a> {
@@ -95,6 +95,12 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
                 .read_to_end(&mut buf)
                 .context("Failed to read from stdin")?;
             MsgpackReader.read_from_bytes(&buf)?
+        } else if args.from == Some("parquet") || args.from == Some("pq") {
+            let mut buf = Vec::new();
+            io::stdin()
+                .read_to_end(&mut buf)
+                .context("Failed to read from stdin")?;
+            read_parquet_from_bytes(&buf)?
         } else {
             let buf = read_stdin_with_encoding(&args.encoding_opts)?;
             let (source_format, sniffed_delimiter) = match args.from {
@@ -373,6 +379,9 @@ fn read_value_from_path(
         read_xlsx_from_bytes(&bytes, excel_opts)
     } else if format == Format::Sqlite {
         read_sqlite_from_path(path, sqlite_opts)
+    } else if format == Format::Parquet {
+        let bytes = read_file_bytes(path)?;
+        read_parquet_from_bytes(&bytes)
     } else {
         let content = read_file_with_encoding(path, encoding_opts)?;
         read_value(&content, format, options)
@@ -393,6 +402,9 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         }
         Format::Sqlite => {
             bail!("SQLite files must be read from a file path, not from text input")
+        }
+        Format::Parquet => {
+            bail!("Parquet files must be read from a file path, not from text input")
         }
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
@@ -440,6 +452,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
+        Format::Parquet => bail!("Parquet is an input-only format and cannot be used as output\n  Hint: Parquet Writer will be available in a future version"),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => {
