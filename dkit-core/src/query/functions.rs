@@ -683,7 +683,10 @@ mod tests {
     fn test_round_with_decimals() {
         let row = obj(&[("price", Value::Float(3.14159))]);
         let result = eval(&row, &func("round", vec![field("price"), lit_int(2)])).unwrap();
-        assert_eq!(result, Value::Float(3.14));
+        match result {
+            Value::Float(v) => assert!((v - 3.14).abs() < 1e-10, "expected ~3.14, got {v}"),
+            other => panic!("expected Float, got {other:?}"),
+        }
     }
 
     #[test]
