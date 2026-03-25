@@ -1,0 +1,30 @@
+.deoooooooo| group_by cit,ty,selGe, 
+weuser | group_by cit,r, cit,t,r, cit,t,ty,selGe, 
+weuser | group_by cit,ser | group_by cit,cit, 
+weuser | group_by cit,t,ty,selGe, 
+weuser  | group_by cit,t,ty,selGe, 
+weuser | group_by cits4r | group_by cit,r, cit,t,ty,selGe, 
+weuser | group_by cit,ty,selGe, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit,t,ty,t,ty,selGe, 
+weuser | group_by cit,cit,ty,selGe, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit,t,ty,t,ty,selGe, 
+weuser | group_by cit,cit, 
+weuser | group_by cit,t,ty,selGe, 
+weuser  | group_by cit,t,ty,selGe, 
+weuser | group_by cits4r | group_by cit,r, cit,t,ty,selGe, 
+weuser | group_by cit,ty,selGe, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit,t,ty,t,ty,selGe, 
+weuser | group_by cit,cit, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit,t,ty,t,ty,selGe, 
+weuser | group_by cit,cit,t,ty,cout,ty,selGe, 
+wweume

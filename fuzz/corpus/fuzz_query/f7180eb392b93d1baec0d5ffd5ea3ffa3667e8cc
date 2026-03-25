@@ -1,0 +1,3 @@
+.ers[] | group_by    		
+
+i		| select nam  as s						        0     (      

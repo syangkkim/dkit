@@ -1,0 +1,8 @@
+[dabase]
+host = "localhost"
+po= 532
+ndebu= "mydb"
+
+[server]
+porô =[database] 8
+ho0

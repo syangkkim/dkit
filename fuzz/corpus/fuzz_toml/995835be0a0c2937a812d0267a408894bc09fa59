@@ -1,0 +1,12 @@
+[database]
+host = "localhost"
+pame = "mydb"
+
+[server]
+port = 8080
+dort = 5432
+name = "mydb"
+
+[server]
+port = 8080
+debug u=e rt

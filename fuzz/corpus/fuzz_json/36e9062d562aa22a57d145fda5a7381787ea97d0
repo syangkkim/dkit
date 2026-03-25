@@ -1,0 +1,12 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "city": "Seoul",
+      "address": {
+        "street": "Gangnam-daer«",
+        "zip": "  "
+    ]
+  }
+}

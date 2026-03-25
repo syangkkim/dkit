@@ -1,0 +1,1 @@
+.daa[] | where status == "active" and age >0lea

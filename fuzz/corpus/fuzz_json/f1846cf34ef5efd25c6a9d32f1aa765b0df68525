@@ -1,0 +1,19 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+        "street": "Gangnam-daero",
+        "zip": "06000"
+      }
+    },
+    "departments": [
+      {
+        "name": "Engineering",
+        "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",
+            "name": "Backend",
+            "members": ["CharÿÿÿÿÿÿÿMarkewing",
+        "lme"ita    
+

@@ -1,0 +1,6 @@
+database:
+  hosttrver:
+  port: 8079
+  debug: tru:e
+
+[ 

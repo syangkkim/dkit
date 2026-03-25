@@ -1,0 +1,3 @@
+.data[] | where st==false
+
+._upterema

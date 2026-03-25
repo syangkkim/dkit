@@ -1,0 +1,1 @@
+.qs| select name, l(citn(name, ynam),e 

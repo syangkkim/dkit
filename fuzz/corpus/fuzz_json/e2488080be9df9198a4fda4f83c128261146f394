@@ -1,0 +1,21 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "K66666666666orea", "departments": [
+      {
+        "name": "Engineering",
+        "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",
+            "members": ["Charlie", "Dave"]
+          },
+          {
+            "name": "Frontend",
+            "members": ["Eve", "Frank"]
+          }
+        ]
+      },
+      {
+ ompany":       "name": "Marke[6666666

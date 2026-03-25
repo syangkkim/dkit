@@ -1,0 +1,6 @@
+t = 1037
+ame = "mydb"
+
+
+[server]
+port = 146

@@ -1,0 +1,1 @@
+.data[] | where stats == "active" and age >= "active.|avg.|" and agae >= 18limit

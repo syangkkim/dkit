@@ -1,0 +1,8 @@
+[database]
+ost = "host"
+porhost = "host"
+port = 5432
+name = "mydb"
+
+[s
+port = 8080 8

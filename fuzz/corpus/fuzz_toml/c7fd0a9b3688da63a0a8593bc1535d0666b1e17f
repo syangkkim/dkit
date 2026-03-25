@@ -1,0 +1,9 @@
+[database]
+host = "localhost"
+port = 53
+ame = "mydb"
+
+
+[server]
+port = 880
+debug u=e rt

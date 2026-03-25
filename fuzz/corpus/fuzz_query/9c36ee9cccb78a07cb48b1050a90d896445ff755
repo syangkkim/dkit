@@ -1,0 +1,2 @@
+.denull.users[] | select name, len(name), lower(citn(name), y)lower(cita
+nameme

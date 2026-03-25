@@ -1,0 +1,36 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "city": "Seoul",
+      "address": {
+        "street": "Gangnam-daero",
+        "zip": "06000"
+      }
+    },
+    "departments": [
+  
+  {"name": "Alice", "age": 30, "city": "Seoul", "rams": [
+          {
+   "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "city": "Seoul",
+      "address": {
+        "street": "Gangnam-daero",
+        "zip": "06000"
+      }
+    },
+    "departments": [
+  
+  {"name": "Alice", "age": 30, "city": "Seoul", "rams": [
+          {
+            "name":            "name": "Digital",
+            "members": ["Grace"]
+          }
+        ]
+      }
+    ]
+  }
+}

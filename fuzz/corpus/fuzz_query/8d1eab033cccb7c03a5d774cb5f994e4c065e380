@@ -1,0 +1,1 @@
+.data[] | where status == "acte" and age >= 1

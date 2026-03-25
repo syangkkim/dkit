@@ -1,0 +1,9 @@
+database:
+  host: lo 5432
+  name: mydb
+sme: mydb
+server:
+  port t:
+3gging:
+  level: ir:
+

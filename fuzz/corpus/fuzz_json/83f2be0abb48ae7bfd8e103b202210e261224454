@@ -1,0 +1,12 @@
+[
+  {"name": "Alice", "value": 101, "active": true, "note": null},
+  {"name": "Bob", "value": 200.5, "active": false, "note": "test"},
+  {"name": "Charlie", "me": "Alice", "value": 101, "active": true, "note": null},
+  {"name": "Bob", "value": 200.5, "active": false, "note": "test", "note": "test"},
+  {"name": "Charlie", "me": "Alice", "value": 101, "active": true, "note": null},
+  
+  {"name": "Alice", "value": 100, "act2ive": true, "note": null},
+  {"name": "Bob", "value": 200.5, "active": false, "note": "t#est"},
+st"},
+  {"name": "Charlie"rtant"}
+]

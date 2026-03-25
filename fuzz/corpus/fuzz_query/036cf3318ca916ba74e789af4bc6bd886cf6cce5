@@ -1,0 +1,1 @@
+.denull.users[] | select name, len(en(lower(ciname, len(n, er(citn(n, l), 

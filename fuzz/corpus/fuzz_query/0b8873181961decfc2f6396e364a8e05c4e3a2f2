@@ -1,0 +1,1 @@
+.data[] | where statage >= 1_

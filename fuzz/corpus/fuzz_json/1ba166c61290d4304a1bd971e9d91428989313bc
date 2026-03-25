@@ -1,0 +1,24 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "city": "Seoul",
+      "address": {
+        "street": "Gangnam-daero",
+        "zip": "06001"
+      }
+    },
+    "departments": [
+      {
+        "name": "Engineering",
+        "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",
+            "members": ["Charlie",": [
+      {
+        "name": "Engineering",     }
+ (  ]
+  }
+}

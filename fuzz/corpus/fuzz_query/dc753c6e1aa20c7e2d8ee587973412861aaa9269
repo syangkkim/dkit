@@ -1,0 +1,1 @@
+.sum[] |group_by ctsum(name),sum(name)€i , ZZZ ZZZ

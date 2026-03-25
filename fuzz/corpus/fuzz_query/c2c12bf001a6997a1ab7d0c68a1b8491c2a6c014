@@ -1,0 +1,2 @@
+.d[] | select name, len(name), lowe													
+e

@@ -1,0 +1,1 @@
+.sum[] |group_by ctsum(name),|group_by ctsum(name), ZZZ ZZZ

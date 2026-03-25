@@ -1,0 +1,9 @@
+[
+  {"name": "Alice", "value": 100, "active": true, "note": null},
+  {"name": "Bob", "value": 200.5, "active": false, "note": "test"},
+  {"name": "Charlie", "me": "Alice", "value": 101, "active": true, "note": null},
+  {"name": "Bob", "va4ive": false, "note": "test"},
+  {"name": "Charlie", "active": false, "ive": false, "note": "test"},
+  {"name": "Charlie", "value":, "value": 100, "acti[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[d[[d[n
+B}
+]

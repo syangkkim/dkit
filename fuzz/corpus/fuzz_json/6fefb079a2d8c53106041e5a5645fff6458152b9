@@ -1,0 +1,7 @@
+[
+  {"name": "Alice", "value": 100, "active": true, "nope": null},
+  {"name": "Bob", "value": 400.5, "active": "est"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+  {"name": "Diana", "e": null},
+  {"name": "portant"}
+]

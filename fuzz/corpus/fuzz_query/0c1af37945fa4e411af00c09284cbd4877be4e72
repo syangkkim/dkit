@@ -1,0 +1,2 @@
+.s | select  len(name), eo(citn(nme), me
+

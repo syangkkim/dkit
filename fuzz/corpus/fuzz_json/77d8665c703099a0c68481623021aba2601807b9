@@ -1,0 +1,13 @@
+{
+  "comy": "Seoul",
+      "addpartments": [
+      {
+        "name": "Engineering",
+        "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",
+            "members": ["Charlie", "Dave"]
+          },
+          {
+            "name": "Frontend",

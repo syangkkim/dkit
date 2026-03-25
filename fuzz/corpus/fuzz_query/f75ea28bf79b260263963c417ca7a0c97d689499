@@ -1,0 +1,2 @@
+.s | select  en(name), eo(citn(nme), me
+

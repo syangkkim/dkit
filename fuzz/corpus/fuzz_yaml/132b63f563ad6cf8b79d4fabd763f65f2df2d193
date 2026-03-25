@@ -1,0 +1,7 @@
+database:
+  host: localhost
+  port: 5432
+  lame: mydb
+server:
+  port: 8079
+ort: 5g: trueJ

@@ -1,0 +1,4 @@
+database:
+  host: lo 5432
+  naee: mydb
+sdebug:dbrue

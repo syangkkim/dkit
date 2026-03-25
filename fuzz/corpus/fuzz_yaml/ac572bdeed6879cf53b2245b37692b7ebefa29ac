@@ -1,0 +1,7 @@
+dtsabaae:
+  host: 2localhost
+  port: 543,
+  2ame: mydb
+server:
+  rt: 80 0
+8 debug: true

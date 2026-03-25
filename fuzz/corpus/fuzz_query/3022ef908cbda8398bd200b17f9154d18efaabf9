@@ -1,0 +1,1 @@
+.elunl.d | select name, lenme, len(name), lower(citn(name), y)e 

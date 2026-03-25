@@ -1,0 +1,7 @@
+loggi*ng:
+ ng:
+  level: info
+  file: app.log
+server:
+  port: 9090
+ g: ggi

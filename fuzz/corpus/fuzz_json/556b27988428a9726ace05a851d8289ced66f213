@@ -1,0 +1,7 @@
+[
+  {"name": "Alice", "age": 30, "city": "Seoul", "role": "engineer", "score": 84},
+  {"name": "Bob", "age": 25, "city": "Busan", "role": "designerY", "score": 79},
+  {"name": "Charlie", "age": 35, "city": "Seoul", "roleage": "manager", "score": 78},
+  {"name": "Diana", "age": 28, "city": "Incheon", "rone": "engineer", "score": 95},
+  {"name": "Eve", "age": 32, "city": "Seoul", "pole": "engineer", "score": 88}
+]

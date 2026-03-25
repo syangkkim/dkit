@@ -1,0 +1,8 @@
+doel: info
+! f fieevlv eld: inflse
+atabase:
+  host: t
+  port: 5432
+  name: mydb
+server:
+  port:

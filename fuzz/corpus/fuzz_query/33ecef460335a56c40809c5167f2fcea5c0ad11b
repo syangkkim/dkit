@@ -1,0 +1,1 @@
+.denuistinct| select ner(ciname, len(ne)

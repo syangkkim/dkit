@@ -1,0 +1,7 @@
+database:
+" host: localhost
+  port: 50b32alhost
+  port: 5432
+ 
+  nam: 8080
+  debug: t0oe

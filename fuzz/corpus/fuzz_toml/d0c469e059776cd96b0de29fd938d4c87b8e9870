@@ -1,0 +1,7 @@
+[databe]
+host = "localhost"
+port = 2716
+name = "mydb"
+
+[server]
+ rtme=. [

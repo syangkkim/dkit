@@ -1,0 +1,1 @@
+.denull.us | select  len(name), ower(citn(nme), nameme

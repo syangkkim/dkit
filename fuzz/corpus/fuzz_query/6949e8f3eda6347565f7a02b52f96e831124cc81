@@ -1,0 +1,13 @@
+.deoooooooo| group_by cit,ty,selGe, 
+weuser | group_by cit,r, cit,t,ty,selGe, 
+weuser | group_by cit,selGe, 
+weuser | group_by cit,r, cit,t,ty,selGe, 
+weuser | group_by cit,ty,selGe, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit,t,ty,selGe, 
+weuser | group_by cit,ty,selGe, 
+weuser | group_by cit,t,ty,selGe, 
+weuser | group_by cits2r | group_by cit,r, cit,t,ty,selGe, 
+weuser | grouty,selGe, 
+weuser | g,r, cit,lÿÿÿÿÿÿÿÿÿÿÿÿGe, 
+weume

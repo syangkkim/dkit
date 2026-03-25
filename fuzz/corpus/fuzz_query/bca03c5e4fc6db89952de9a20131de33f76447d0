@@ -1,0 +1,1 @@
+.data[] | where stats == "active" and age >= "active" and age >= 18limit | na ema

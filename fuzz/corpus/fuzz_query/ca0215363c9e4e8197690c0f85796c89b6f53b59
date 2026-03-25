@@ -1,0 +1,1 @@
+.data[] | where s0tatus == "active" and e >= 1email)

@@ -1,0 +1,1 @@
+.denull[] | select name, len(en(name1, lower(ciname, len(n, lower(ci(tn(name), 

@@ -1,0 +1,2 @@
+.us | select name, a.*
+ge
