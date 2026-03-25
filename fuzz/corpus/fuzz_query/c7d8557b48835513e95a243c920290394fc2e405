@@ -1,0 +1,1 @@
+.ddsers[] | select name, len(name), lower(cinamame), lower(cie, len(name), lower(citn(name), 

@@ -1,0 +1,153 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "city": "Seoul",
+     " address": {
+        "street": "Gangnam-daero",
+        "zip": "06000"
+      }
+    },
+    "departments": [
+      {
+ "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",     "name": "Frontend" }
+        ]
+      },
+      {
+        "name": "Mark}eting",
+     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   "lead": "Bob",
+        "teams": [
+          {
+       ce"]
+          }
+        ]
+      }
+    ]} 
+} 
+

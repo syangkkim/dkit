@@ -1,0 +1,1 @@
+.l.users[] | select ner(cinaMe, len("`؂at`؂߈h߈heat`؂at`؂at`؂߈h߈hea"

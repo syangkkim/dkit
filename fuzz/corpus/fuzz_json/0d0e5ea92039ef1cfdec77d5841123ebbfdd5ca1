@@ -1,0 +1,9 @@
+[
+  {"name": "Alice", "value": 100, "active": true, "note": null},
+  {"name": "Bob", "value": 200.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": "Alice", "value": 100, "active": true, "note": null},
+  {"name": "Bob", "value": 200.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+  {"name": "Diana", "value": -50, "active": false, "no": 0, "active": true, "note": null},
+  {"name": "Diana", "value": -50, "active": false, "note": "important"}
+]

@@ -1,0 +1,30 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "city": "Seoul",
+      "address": {
+     
+    "departments": [
+      {
+        "name": "Engineering",
+        "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",
+            "members": ["Charlie", "Dave"]
+          },
+          {
+            "name": "Frontend",   "name": "Marketing",
+        "lead": "Bob",
+        "teams": [
+          {
+            "name": 'Digital",
+            "members": ["Grace"]
+   (      }
+        ]
+      }
+ (  ]
+  }
+}

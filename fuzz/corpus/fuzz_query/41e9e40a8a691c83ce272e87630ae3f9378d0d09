@@ -1,0 +1,1 @@
+.data | where oooatup ==2        | where status == 2         $   

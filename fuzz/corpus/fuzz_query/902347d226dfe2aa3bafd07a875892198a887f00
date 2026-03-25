@@ -1,0 +1,1 @@
+.users[] | group_by cit,ty,selGe,u | gro

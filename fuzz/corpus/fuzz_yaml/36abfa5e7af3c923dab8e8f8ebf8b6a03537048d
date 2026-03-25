@@ -1,0 +1,7 @@
+database:
+  host: localhost
+  port: 543,
+  2ame: mydb
+server:
+  pnrt: 80 0
+8 debug: trle

@@ -1,0 +1,17 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "counnts": [
+  
+  {"name": "Alice", "age": 30, "city": "Seoul", "rams": [
+          {
+            "name": "Digital",
+               "name": "Digital",
+            "members": ["Grace"]
+          }
+        ]
+      }
+    ]
+  }
+}

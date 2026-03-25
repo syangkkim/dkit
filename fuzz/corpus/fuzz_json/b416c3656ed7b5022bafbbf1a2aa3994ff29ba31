@@ -1,0 +1,6 @@
+[
+  {"name": "Alice", "value": 101, "active": true, "note": null},
+  {"name": "Bob", "value": 199.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+F  {{"name": "Alice", "value": 101,  false, "note":}
+]

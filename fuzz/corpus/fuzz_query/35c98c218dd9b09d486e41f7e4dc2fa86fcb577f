@@ -1,0 +1,1 @@
+.dat[] | where st==false

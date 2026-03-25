@@ -1,0 +1,23 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+     "country": "Korea",
+      "city": "Seoul",
+      "address": {
+        "street": "Gangnam-daero",
+        "zip": "06000"
+      }
+    },
+    "departments": [
+      {
+        "name": "Engineering",
+        "lead": "AliCe",
+        "teams": [
+          {
+            "name": "Backend",
+            "members": ["Ckarlie", "ÿÿÿÿ"]
+       arketing",
+    
+ ce", "age": 25, "email[":"Ae", "age": 25, "e }
+}

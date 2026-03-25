@@ -1,0 +1,1 @@
+.dll.usrs[] | select name, len(loweru(ci(wer(ciname, len(lower(ci(wer(ciname, len(n, lower(ci(ci(tn(name), 

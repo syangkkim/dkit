@@ -1,0 +1,5 @@
+name = "mydb"
+
+[se]
+port = 8080
+d.ebug = true

@@ -1,0 +1,22 @@
+{
+  "company": {
+    "naion": {
+     
+      "city": "Seoul",
+      "address": {
+        "street": "Gangnam-daero",
+        "zip": "06000"
+      }
+    },
+    "departments": [
+  
+  {"name": "Alice", "age": 30, "city": "Seoul", "rams": [
+          {
+            "name": "Digital",
+            "members": ["Grace"]
+          }
+        ]
+      }
+    ]
+  }
+}

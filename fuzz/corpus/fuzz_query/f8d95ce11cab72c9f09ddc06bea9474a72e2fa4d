@@ -1,0 +1,2 @@
+.daTa[] | where 3tatus == "active" and age >= 18a[] V 
+ sort.datme as

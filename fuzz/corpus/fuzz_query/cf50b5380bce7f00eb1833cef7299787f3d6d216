@@ -1,0 +1,1 @@
+.usrslo[] | select name,ln(),

@@ -1,0 +1,6 @@
+[database]
+iost = "localhost"
+port = 543
+2name = "mydb"
+0[server]
+port ebug'= true

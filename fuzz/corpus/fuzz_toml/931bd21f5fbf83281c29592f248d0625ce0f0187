@@ -1,0 +1,4 @@
+[dtabase]
+host = "lz"
+port = 5432
+name = "m"[

@@ -1,0 +1,1 @@
+.denusers[] | select name, len(name),(name), yme

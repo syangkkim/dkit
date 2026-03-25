@@ -1,0 +1,4 @@
+database:
+  host: locaydb
+  port: 8(80
+  debug: truehos

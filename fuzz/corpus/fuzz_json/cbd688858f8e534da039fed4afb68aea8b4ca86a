@@ -1,0 +1,19 @@
+{
+  "company": {
+    "nas": {
+        "street": "Gangnam-eering",
+        "lead": "Alice",
+        "teams": [
+          {
+            "name": "Backend",
+            "members": ["Charlie", "Dave"]
+       },    {
+        "name": "Marketing",
+        "lead": "Bob",
+        "teams": [
+          {
+            "name": "Digital",
+            "members": ["     {
+            "name": "Frontend",
+         
+

@@ -1,0 +1,8 @@
+database:
+  hosort: 5432
+  namet: localhost
+  port: 5432
+  name: mydb
+server:
+  rt: 8080
+  debug: t0oe

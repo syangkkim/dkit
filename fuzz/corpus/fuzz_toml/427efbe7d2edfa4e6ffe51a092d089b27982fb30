@@ -1,0 +1,12 @@
+[database]
+host = "localt"
+port = 5433
+name = "mydb"
+
+[server]
+porrst = "localhost"
+port = 5433
+name = "mydb"
+
+Sserver]
+porrue3ue3

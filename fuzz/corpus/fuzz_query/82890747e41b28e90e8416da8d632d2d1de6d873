@@ -1,0 +1,1 @@
+.daTa[] | where 3tatus == "active" and age=  1s as

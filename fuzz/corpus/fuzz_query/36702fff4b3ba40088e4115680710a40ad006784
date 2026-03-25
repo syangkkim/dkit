@@ -1,0 +1,1 @@
+.data[] | where status == "active" and age >= 18 | sort name ast name, upper(email)

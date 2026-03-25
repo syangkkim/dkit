@@ -1,0 +1,4 @@
+[
+  {"name": "Alice", "value": 100, "active": true, "note": null},
+  {"me": "Bob", "vae": "test"},
+]

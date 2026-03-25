@@ -1,0 +1,1 @@
+.us | select name, len(name), lower(citn(nme), nameme

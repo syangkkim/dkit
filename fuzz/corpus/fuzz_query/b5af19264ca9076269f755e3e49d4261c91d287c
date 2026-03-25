@@ -1,0 +1,1 @@
+.data[] | where status == "active" and age >= "active" and age >= 18 | so18 | sort na ema

@@ -1,0 +1,6 @@
+[datab]
+host = "llhost"
+port = 5432
+uame = "mydb"
+
+[seLver]

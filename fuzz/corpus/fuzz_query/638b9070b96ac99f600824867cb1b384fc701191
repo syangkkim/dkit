@@ -1,0 +1,2 @@
+.d[] | select name, lenA(name), lo					
+e

@@ -1,0 +1,8 @@
+database:
+  host: t
+  port: 5432
+  name: mydb
+server:
+  port: 4040
+  debu-™Å
+ß

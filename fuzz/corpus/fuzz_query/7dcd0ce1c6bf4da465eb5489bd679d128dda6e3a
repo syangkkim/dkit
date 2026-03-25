@@ -1,0 +1,1 @@
+.s | select  len(name), oweb(citn(nme), nameme

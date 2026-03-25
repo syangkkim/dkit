@@ -1,0 +1,14 @@
+[
+  {"?name": "b", "value": 400.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+  {"name": "Diana", "value": -50, "activ?name": "Alice", "value": 100, "active": true, "note": null},
+  {"name": "Bob", "value": 400.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+  {"name": "Diana", "value": false, "note": "importAlice", "value": 100, "active": true, "note": null},
+  {"name": "Bob", "value": 400.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+  {"name": "Diana", "value": -50, "activ?name": "Alice", "value": 100, "active": true, "note": null},
+  {"name": "Bob", "value": 400.5, "active": false, "note": "test"},
+  {"name": "Charlie", "value": 0, "active": true, "note": null},
+  {"name": "Diana", "value": false, "note": "important"}
+]

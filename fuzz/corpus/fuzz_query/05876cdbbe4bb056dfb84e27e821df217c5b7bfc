@@ -1,0 +1,1 @@
+.u | select nam, len(name), wer, helect na

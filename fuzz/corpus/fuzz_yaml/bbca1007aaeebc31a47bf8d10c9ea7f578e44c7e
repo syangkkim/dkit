@@ -1,0 +1,7 @@
+database:
+  host: localhost
+  port: 5432
+  name: mydb
+server:
+  port: 8080
+  debug: t0oe

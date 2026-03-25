@@ -1,0 +1,6 @@
+name = "mydb"
+
+[server]
+port = 4040
+de = true
+dabase

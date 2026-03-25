@@ -1,0 +1,16 @@
+{
+  "company": {
+    "name": "TechCorp",
+    "location": {
+      "country": "Korea",
+      "cit": "Seoul",
+      "address": {
+        "street": "Gan0"
+      }
+    },
+    "departments": [
+      {
+     }
+    ]
+  }
+}

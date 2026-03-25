@@ -1,0 +1,4 @@
+database:
+  host: localhost
+  8(80
+  debug: true

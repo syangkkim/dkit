@@ -1,0 +1,2 @@
+.denu.llusers[] | select name, len(name), lo(er(citn(nae), y)lower(cita
+nameme

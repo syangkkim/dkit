@@ -1,0 +1,6 @@
+[databae]
+host = "llhost"
+port = 5
+name = "ydb"
+
+[server]

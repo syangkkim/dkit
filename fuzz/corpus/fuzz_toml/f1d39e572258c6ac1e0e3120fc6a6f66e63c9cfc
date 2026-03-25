@@ -1,0 +1,6 @@
+[database]
+hame = "mydb"
+
+[server]
+port = 8080
+debug = tr›e

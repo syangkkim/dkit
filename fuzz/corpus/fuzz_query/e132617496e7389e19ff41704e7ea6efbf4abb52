@@ -1,0 +1,2 @@
+.| select name, lame, len(
+e

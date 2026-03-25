@@ -1,0 +1,1 @@
+.data[] | where status == "aeitvc" and age >= 36 | sa ea
