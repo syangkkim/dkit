@@ -236,10 +236,33 @@ pub struct DataFilterOptions {
     pub tail: Option<usize>,
     /// 필터 표현식 문자열
     pub filter: Option<String>,
+    /// 선택할 필드 목록 (쉼표 구분)
+    pub select: Option<String>,
+}
+
+/// 쉼표 구분 필드 목록을 SelectExpr 벡터로 파싱한다.
+fn parse_select_fields(fields: &str) -> anyhow::Result<Vec<dkit_core::query::parser::SelectExpr>> {
+    use dkit_core::query::parser::{Expr, SelectExpr};
+
+    let exprs: Vec<SelectExpr> = fields
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| SelectExpr {
+            expr: Expr::Field(s.to_string()),
+            alias: None,
+        })
+        .collect();
+
+    if exprs.is_empty() {
+        anyhow::bail!("--select requires at least one field name\n  Hint: use format like --select 'name, city, age'");
+    }
+
+    Ok(exprs)
 }
 
 /// 데이터 필터/정렬 옵션을 Value에 적용한다.
-/// 적용 순서: where → sort → head/tail
+/// 적용 순서: where → select → sort → head/tail
 pub fn apply_data_filters(
     value: dkit_core::value::Value,
     opts: &DataFilterOptions,
@@ -259,7 +282,13 @@ pub fn apply_data_filters(
         operations.push(Operation::Where(condition));
     }
 
-    // 2. sort
+    // 2. select (컬럼 선택)
+    if let Some(ref fields) = opts.select {
+        let select_exprs = parse_select_fields(fields)?;
+        operations.push(Operation::Select(select_exprs));
+    }
+
+    // 3. sort
     if let Some(ref field) = opts.sort_by {
         operations.push(Operation::Sort {
             field: field.clone(),
@@ -267,7 +296,7 @@ pub fn apply_data_filters(
         });
     }
 
-    // 3. head (= limit)
+    // 4. head (= limit)
     if let Some(n) = opts.head {
         operations.push(Operation::Limit(n));
     }
@@ -284,7 +313,7 @@ pub fn apply_data_filters(
         apply_operations(value, &operations)?
     };
 
-    // 4. tail: 배열의 마지막 N개 요소 추출
+    // 5. tail: 배열의 마지막 N개 요소 추출
     if let Some(n) = opts.tail {
         if let dkit_core::value::Value::Array(ref arr) = result {
             let start = arr.len().saturating_sub(n);
@@ -574,5 +603,81 @@ mod tests {
         let opts = DataFilterOptions::default();
         let result = apply_data_filters(data, &opts).unwrap();
         assert_eq!(result, Value::Integer(42));
+    }
+
+    #[test]
+    fn test_data_filter_select() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            select: Some("name".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 5);
+        // Each record should only have "name" field
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 1);
+            assert!(obj.contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn test_data_filter_select_multiple_fields() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            select: Some("name, age".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 5);
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 2);
+            assert!(obj.contains_key("name"));
+            assert!(obj.contains_key("age"));
+        }
+    }
+
+    #[test]
+    fn test_data_filter_select_with_filter() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            filter: Some("age > 27".to_string()),
+            select: Some("name".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3); // Alice(30), Charlie(35), Diana(28)
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert_eq!(obj.len(), 1);
+            assert!(obj.contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn test_data_filter_select_with_sort() {
+        let data = sample_data();
+        let opts = DataFilterOptions {
+            select: Some("name, age".to_string()),
+            sort_by: Some("age".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0].as_object().unwrap()["name"].as_str().unwrap(), "Eve");
+        assert_eq!(
+            arr[4].as_object().unwrap()["name"].as_str().unwrap(),
+            "Charlie"
+        );
+    }
+
+    #[test]
+    fn test_parse_select_fields_empty() {
+        assert!(parse_select_fields("").is_err());
     }
 }
