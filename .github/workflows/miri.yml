@@ -1,0 +1,43 @@
+name: Miri
+
+on:
+  schedule:
+    # Run weekly on Monday at 00:00 UTC
+    - cron: "0 0 * * 1"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dkit-core/**"
+      - "dkit-cli/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  miri:
+    name: Miri Safety Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: miri
+
+      - name: Run Miri (default features)
+        run: cargo +nightly miri test -p dkit-core
+        env:
+          MIRIFLAGS: "-Zmiri-disable-isolation"
+
+      - name: Run Miri (all features)
+        run: cargo +nightly miri test -p dkit-core --features all
+        env:
+          MIRIFLAGS: "-Zmiri-disable-isolation"
