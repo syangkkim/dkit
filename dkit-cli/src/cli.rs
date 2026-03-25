@@ -139,6 +139,10 @@ pub enum Commands {
         #[arg(long, value_name = "EXPR", alias = "where")]
         filter: Option<String>,
 
+        /// Select specific fields (comma-separated, e.g. 'name, city, age')
+        #[arg(long, value_name = "FIELDS")]
+        select: Option<String>,
+
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
         compression: String,
@@ -322,6 +326,10 @@ pub enum Commands {
         /// Filter expression (e.g. 'age > 30 and city == "Seoul"')
         #[arg(long, value_name = "EXPR", alias = "where")]
         filter: Option<String>,
+
+        /// Select specific fields (comma-separated, e.g. 'name, city, age')
+        #[arg(long, value_name = "FIELDS")]
+        select: Option<String>,
 
         /// Watch input file for changes and auto re-run
         #[arg(long)]
