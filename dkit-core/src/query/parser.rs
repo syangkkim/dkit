@@ -380,7 +380,7 @@ impl Parser {
             _ => Err(DkitError::QueryError(format!(
                 "unknown operation '{}' at position {}",
                 keyword,
-                self.pos - keyword.len()
+                self.pos - keyword.chars().count()
             ))),
         }
     }
