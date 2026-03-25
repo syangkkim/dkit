@@ -1,0 +1,44 @@
+[package]
+name = "dkit-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.dkit-core]
+path = "../dkit-core"
+
+[[bin]]
+name = "fuzz_json"
+path = "fuzz_targets/fuzz_json.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_csv"
+path = "fuzz_targets/fuzz_csv.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_yaml"
+path = "fuzz_targets/fuzz_yaml.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_toml"
+path = "fuzz_targets/fuzz_toml.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_jsonl"
+path = "fuzz_targets/fuzz_jsonl.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_query"
+path = "fuzz_targets/fuzz_query.rs"
+doc = false

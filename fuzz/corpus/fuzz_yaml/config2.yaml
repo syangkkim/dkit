@@ -1,0 +1,6 @@
+logging:
+  level: info
+  file: app.log
+server:
+  port: 9090
+  debug: false

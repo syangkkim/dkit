@@ -1,0 +1,1 @@
+.users[] | select name, len(name), lower(city)

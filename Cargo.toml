@@ -1,5 +1,6 @@
 [workspace]
 members = ["dkit-core", "dkit-cli"]
+exclude = ["fuzz"]
 resolver = "2"
 
 [profile.release]
