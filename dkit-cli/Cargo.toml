@@ -28,7 +28,7 @@ parquet = ["dkit-core/parquet", "dep:arrow", "dep:parquet-impl", "dep:bytes"]
 all = ["xml", "msgpack", "excel", "sqlite", "parquet"]
 
 [dependencies]
-dkit-core = { path = "../dkit-core" }
+dkit-core = { version = "1.0.0", path = "../dkit-core" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
