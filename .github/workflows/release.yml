@@ -121,7 +121,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Publish dkit-core
-        run: cargo publish -p dkit-core
+        run: |
+          OUTPUT=$(cargo publish -p dkit-core 2>&1) && exit 0
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q 'already exists'; then
+            echo "dkit-core version already published, skipping."
+          else
+            exit 1
+          fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -129,6 +136,13 @@ jobs:
         run: sleep 30
 
       - name: Publish dkit
-        run: cargo publish -p dkit
+        run: |
+          OUTPUT=$(cargo publish -p dkit 2>&1) && exit 0
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q 'already exists'; then
+            echo "dkit version already published, skipping."
+          else
+            exit 1
+          fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
