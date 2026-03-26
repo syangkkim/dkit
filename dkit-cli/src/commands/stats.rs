@@ -38,6 +38,7 @@ pub struct StatsArgs<'a> {
 enum OutputFormat {
     Text,
     Json,
+    Yaml,
     Markdown,
 }
 
@@ -46,9 +47,10 @@ impl OutputFormat {
         match s {
             None | Some("text") | Some("table") => Ok(Self::Text),
             Some("json") => Ok(Self::Json),
+            Some("yaml") | Some("yml") => Ok(Self::Yaml),
             Some("md") | Some("markdown") => Ok(Self::Markdown),
             Some(other) => bail!(
-                "Unsupported stats output format: '{}'. Use json, table, or md",
+                "Unsupported stats output format: '{}'. Use json, yaml, table, or md",
                 other
             ),
         }
@@ -135,6 +137,10 @@ fn run_overall_stats(value: &Value, output_format: &OutputFormat, histogram: boo
                     let json = build_overall_json(rows, &col_stats);
                     println!("{}", serde_json::to_string_pretty(&json)?);
                 }
+                OutputFormat::Yaml => {
+                    let json = build_overall_json(rows, &col_stats);
+                    print!("{}", serde_yaml::to_string(&json)?);
+                }
                 OutputFormat::Markdown => {
                     println!("# Statistics");
                     println!();
@@ -183,6 +189,24 @@ fn run_overall_stats(value: &Value, output_format: &OutputFormat, histogram: boo
                     serde_json::to_string_pretty(&serde_json::Value::Object(map))?
                 );
             }
+            OutputFormat::Yaml => {
+                let mut map = serde_json::Map::new();
+                map.insert("rows".to_string(), serde_json::Value::Number(1.into()));
+                let columns: Vec<&String> = obj.keys().collect();
+                map.insert(
+                    "columns".to_string(),
+                    serde_json::Value::Array(
+                        columns
+                            .iter()
+                            .map(|c| serde_json::Value::String(c.to_string()))
+                            .collect(),
+                    ),
+                );
+                print!(
+                    "{}",
+                    serde_yaml::to_string(&serde_json::Value::Object(map))?
+                );
+            }
             OutputFormat::Markdown => {
                 println!("# Statistics");
                 println!();
@@ -217,6 +241,21 @@ fn run_overall_stats(value: &Value, output_format: &OutputFormat, histogram: boo
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&serde_json::Value::Object(map))?
+                );
+            }
+            OutputFormat::Yaml => {
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "type".to_string(),
+                    serde_json::Value::String(value_type_name(value).to_string()),
+                );
+                map.insert(
+                    "value".to_string(),
+                    serde_json::Value::String(format!("{}", value)),
+                );
+                print!(
+                    "{}",
+                    serde_yaml::to_string(&serde_json::Value::Object(map))?
                 );
             }
             OutputFormat::Markdown => {
@@ -256,6 +295,10 @@ fn run_column_stats(
         OutputFormat::Json => {
             let json = build_column_json(&cs);
             println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        OutputFormat::Yaml => {
+            let json = build_column_json(&cs);
+            print!("{}", serde_yaml::to_string(&json)?);
         }
         OutputFormat::Markdown => {
             println!("## {}", cs.name);

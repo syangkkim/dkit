@@ -23,9 +23,31 @@ use dkit_core::value::Value;
 pub struct SchemaArgs<'a> {
     pub input: &'a str,
     pub from: Option<&'a str>,
+    pub output_format: Option<&'a str>,
     pub encoding_opts: EncodingOptions,
     pub excel_opts: ExcelOptions,
     pub sqlite_opts: SqliteOptions,
+}
+
+/// 스키마 출력 포맷
+enum SchemaOutputFormat {
+    Tree,
+    Json,
+    Yaml,
+}
+
+impl SchemaOutputFormat {
+    fn from_str_opt(s: Option<&str>) -> anyhow::Result<Self> {
+        match s {
+            None | Some("tree") | Some("table") | Some("text") => Ok(Self::Tree),
+            Some("json") => Ok(Self::Json),
+            Some("yaml") | Some("yml") => Ok(Self::Yaml),
+            Some(other) => bail!(
+                "Unsupported schema output format: '{}'. Use json, yaml, or table",
+                other
+            ),
+        }
+    }
 }
 
 pub fn run(args: &SchemaArgs) -> Result<()> {
@@ -77,11 +99,74 @@ pub fn run(args: &SchemaArgs) -> Result<()> {
         }
     };
 
-    let mut output = String::new();
-    format_schema(&value, "", true, &mut output);
-    print!("{output}");
+    let output_format = SchemaOutputFormat::from_str_opt(args.output_format)?;
+
+    match output_format {
+        SchemaOutputFormat::Tree => {
+            let mut output = String::new();
+            format_schema(&value, "", true, &mut output);
+            print!("{output}");
+        }
+        SchemaOutputFormat::Json => {
+            let json = build_schema_json(&value);
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        SchemaOutputFormat::Yaml => {
+            let json = build_schema_json(&value);
+            print!("{}", serde_yaml::to_string(&json)?);
+        }
+    }
 
     Ok(())
+}
+
+/// Value를 JSON Schema 형식의 serde_json::Value로 변환
+fn build_schema_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Null => serde_json::json!({"type": "null"}),
+        Value::Bool(_) => serde_json::json!({"type": "boolean"}),
+        Value::Integer(_) => serde_json::json!({"type": "integer"}),
+        Value::Float(_) => serde_json::json!({"type": "float"}),
+        Value::String(_) => serde_json::json!({"type": "string"}),
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                serde_json::json!({"type": "array", "items": "empty"})
+            } else {
+                let elem_type = array_element_type(arr);
+                let has_objects = arr.iter().any(|v| matches!(v, Value::Object(_)));
+                if has_objects {
+                    let merged = merge_object_schemas(arr);
+                    let properties = build_object_properties_json(&merged);
+                    serde_json::json!({
+                        "type": "array",
+                        "items": {
+                            "type": elem_type,
+                            "properties": properties,
+                        }
+                    })
+                } else {
+                    serde_json::json!({"type": "array", "items": elem_type})
+                }
+            }
+        }
+        Value::Object(obj) => {
+            let properties = build_object_properties_json(obj);
+            serde_json::json!({
+                "type": "object",
+                "properties": properties,
+            })
+        }
+        _ => serde_json::json!({"type": "unknown"}),
+    }
+}
+
+/// Object 필드들을 JSON 프로퍼티로 변환
+fn build_object_properties_json(obj: &indexmap::IndexMap<String, Value>) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for (key, val) in obj {
+        map.insert(key.clone(), build_schema_json(val));
+    }
+    serde_json::Value::Object(map)
 }
 
 /// Schema 타입 이름 반환
@@ -400,6 +485,80 @@ mod tests {
              └─ users: array[object]\n   \
                 ├─ name: string\n   \
                 └─ email: string\n"
+        );
+    }
+
+    #[test]
+    fn test_schema_output_format_parse() {
+        assert!(matches!(
+            SchemaOutputFormat::from_str_opt(None).unwrap(),
+            SchemaOutputFormat::Tree
+        ));
+        assert!(matches!(
+            SchemaOutputFormat::from_str_opt(Some("json")).unwrap(),
+            SchemaOutputFormat::Json
+        ));
+        assert!(matches!(
+            SchemaOutputFormat::from_str_opt(Some("yaml")).unwrap(),
+            SchemaOutputFormat::Yaml
+        ));
+        assert!(matches!(
+            SchemaOutputFormat::from_str_opt(Some("yml")).unwrap(),
+            SchemaOutputFormat::Yaml
+        ));
+        assert!(matches!(
+            SchemaOutputFormat::from_str_opt(Some("table")).unwrap(),
+            SchemaOutputFormat::Tree
+        ));
+        assert!(SchemaOutputFormat::from_str_opt(Some("invalid")).is_err());
+    }
+
+    #[test]
+    fn test_build_schema_json_simple_object() {
+        let value = make_object(vec![
+            ("host", Value::String("localhost".into())),
+            ("port", Value::Integer(5432)),
+        ]);
+        let json = build_schema_json(&value);
+        assert_eq!(json["type"], "object");
+        assert_eq!(json["properties"]["host"]["type"], "string");
+        assert_eq!(json["properties"]["port"]["type"], "integer");
+    }
+
+    #[test]
+    fn test_build_schema_json_nested_object() {
+        let inner = make_object(vec![("host", Value::String("localhost".into()))]);
+        let value = make_object(vec![("database", inner)]);
+        let json = build_schema_json(&value);
+        assert_eq!(json["type"], "object");
+        assert_eq!(json["properties"]["database"]["type"], "object");
+        assert_eq!(
+            json["properties"]["database"]["properties"]["host"]["type"],
+            "string"
+        );
+    }
+
+    #[test]
+    fn test_build_schema_json_array_of_objects() {
+        let value = Value::Array(vec![
+            make_object(vec![("name", Value::String("Alice".into()))]),
+            make_object(vec![("name", Value::String("Bob".into()))]),
+        ]);
+        let json = build_schema_json(&value);
+        assert_eq!(json["type"], "array");
+        assert_eq!(json["items"]["type"], "object");
+        assert_eq!(json["items"]["properties"]["name"]["type"], "string");
+    }
+
+    #[test]
+    fn test_build_schema_json_primitive() {
+        assert_eq!(build_schema_json(&Value::Null)["type"], "null");
+        assert_eq!(build_schema_json(&Value::Bool(true))["type"], "boolean");
+        assert_eq!(build_schema_json(&Value::Integer(42))["type"], "integer");
+        assert_eq!(build_schema_json(&Value::Float(3.14))["type"], "float");
+        assert_eq!(
+            build_schema_json(&Value::String("hi".into()))["type"],
+            "string"
         );
     }
 }

@@ -498,7 +498,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         Commands::Stats {
             input,
             from,
-            format,
+            output_format,
             path,
             column,
             field,
@@ -516,7 +516,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             commands::stats::run(&commands::stats::StatsArgs {
                 input: &input,
                 from: from.as_deref(),
-                format: format.as_deref(),
+                format: output_format.as_deref(),
                 path: path.as_deref(),
                 column: effective_column.as_deref(),
                 histogram,
@@ -566,6 +566,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
         Commands::Schema {
             input,
             from,
+            output_format,
             encoding,
             detect_encoding,
             sheet,
@@ -576,6 +577,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             commands::schema::run(&commands::schema::SchemaArgs {
                 input: &input,
                 from: from.as_deref(),
+                output_format: output_format.as_deref(),
                 encoding_opts: EncodingOptions {
                     encoding,
                     detect_encoding,

@@ -377,9 +377,15 @@ pub enum Commands {
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
 
-        /// Output format (json, table, md)
-        #[arg(short = 'f', long, value_name = "FORMAT")]
-        format: Option<String>,
+        /// Output format (json, yaml, table, md)
+        #[arg(
+            short = 'O',
+            long = "output-format",
+            alias = "format",
+            short_alias = 'f',
+            value_name = "FORMAT"
+        )]
+        output_format: Option<String>,
 
         /// Navigate to nested data path (e.g. '.users')
         #[arg(long, value_name = "QUERY")]
@@ -504,6 +510,10 @@ pub enum Commands {
         /// Input format (required for stdin)
         #[arg(long, value_name = "FORMAT")]
         from: Option<String>,
+
+        /// Output format (json, yaml, table)
+        #[arg(short = 'O', long = "output-format", value_name = "FORMAT")]
+        output_format: Option<String>,
 
         /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
         #[arg(long, value_name = "ENCODING")]
