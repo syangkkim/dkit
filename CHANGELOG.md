@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-26
+
+### Added
+
+- **`--select` flag for convert/view**: Select specific columns without query syntax — `dkit convert data.json -f json --select 'name, city, age'`. (#184)
+- **`--group-by` + `--agg` flags for convert/view**: CLI-based data aggregation — `dkit convert sales.csv -f table --group-by category --agg 'count(), sum(amount)'`. (#185)
+- **`.env` format Reader/Writer**: Read and write `.env` files with support for comments, quoted values, export prefix, and variable expansion. Enables `.env` ↔ JSON/YAML/TOML conversion. (#186)
+- **`--dry-run` flag for convert**: Preview conversion results without writing output files, with configurable preview limit (`--dry-run-limit`). (#206)
+- **`--output-format` flag for stats/schema**: Output stats and schema results as JSON or YAML for programmatic consumption — `dkit stats data.csv --output-format json`. (#207)
+
+### Testing & Docs
+
+- **Comprehensive v1.1.0 integration tests**: End-to-end tests for `--select`, `--group-by`/`--agg`, `.env` format, `--dry-run`, and `--output-format`. README and docs updated. (#198)
+
 ## [1.0.0] - 2026-03-25
 
 ### Added
@@ -143,7 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
-[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/syangkkim/dkit/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/syangkkim/dkit/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/syangkkim/dkit/releases/tag/v0.9.0
 [0.8.0]: https://github.com/syangkkim/dkit/releases/tag/v0.8.0
