@@ -1,5 +1,7 @@
 /// CSV/TSV reader and writer.
 pub mod csv;
+/// .env file reader and writer.
+pub mod env;
 /// HTML table writer.
 pub mod html;
 /// JSON reader, writer, and value conversion utilities.
@@ -288,6 +290,8 @@ pub enum Format {
     Html,
     /// Terminal table (write-only, used by `dkit view`)
     Table,
+    /// .env file format (`*.env`, `.env.*`)
+    Env,
 }
 
 impl Format {
@@ -307,6 +311,7 @@ impl Format {
             "md" | "markdown" => Ok(Format::Markdown),
             "html" => Ok(Format::Html),
             "table" => Ok(Format::Table),
+            "env" | "dotenv" => Ok(Format::Env),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -354,6 +359,7 @@ impl Format {
             ));
         }
 
+        formats.push(("env", "Environment variables (.env) format"));
         formats.push(("md", "Markdown table"));
         formats.push(("html", "HTML table"));
         formats.push(("table", "Terminal table (default for view)"));
@@ -378,12 +384,20 @@ impl std::fmt::Display for Format {
             Format::Markdown => write!(f, "Markdown"),
             Format::Html => write!(f, "HTML"),
             Format::Table => write!(f, "Table"),
+            Format::Env => write!(f, "ENV"),
         }
     }
 }
 
 /// 파일 확장자로 포맷을 자동 감지
 pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
+    // .env 파일 감지: .env, .env.local, .env.development 등
+    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+        if name == ".env" || name.starts_with(".env.") {
+            return Ok(Format::Env);
+        }
+    }
+
     match path.extension().and_then(|e| e.to_str()) {
         Some("json") => Ok(Format::Json),
         Some("jsonl" | "ndjson") => Ok(Format::Jsonl),
@@ -397,6 +411,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("parquet" | "pq") => Ok(Format::Parquet),
         Some("md") => Ok(Format::Markdown),
         Some("html") => Ok(Format::Html),
+        Some("env") => Ok(Format::Env),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
@@ -477,9 +492,46 @@ pub fn detect_format_from_content(content: &str) -> Result<(Format, Option<char>
         }
     }
 
-    // TOML: key = value 패턴 (섹션 헤더는 위에서 처리됨)
+    // ENV: KEY=VALUE 패턴 (대문자 키, = 주변에 공백 없음)
+    // TOML과 구별: TOML은 " = " (공백 포함), ENV는 "KEY=value" (공백 없음, 대문자)
     let first_line = trimmed.lines().next().unwrap_or("");
     let ft = first_line.trim();
+    let env_line = ft.strip_prefix("export ").unwrap_or(ft);
+    if let Some(eq_pos) = env_line.find('=') {
+        let key_part = env_line[..eq_pos].trim();
+        if !key_part.is_empty()
+            && !key_part.contains(' ')
+            && key_part
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        {
+            // 여러 줄이 모두 ENV 패턴인지 확인
+            let env_lines = trimmed
+                .lines()
+                .filter(|l| {
+                    let t = l.trim();
+                    !t.is_empty() && !t.starts_with('#')
+                })
+                .take(5);
+            let all_env = env_lines.clone().all(|l| {
+                let l = l.trim().strip_prefix("export ").unwrap_or(l.trim());
+                if let Some(p) = l.find('=') {
+                    let k = l[..p].trim();
+                    !k.is_empty()
+                        && !k.contains(' ')
+                        && k.chars()
+                            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                } else {
+                    false
+                }
+            });
+            if all_env {
+                return Ok((Format::Env, None));
+            }
+        }
+    }
+
+    // TOML: key = value 패턴 (섹션 헤더는 위에서 처리됨)
     if ft.contains(" = ") {
         return Ok((Format::Toml, None));
     }
