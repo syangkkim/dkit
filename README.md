@@ -1,6 +1,6 @@
 # dkit
 
-**Swiss army knife for data format conversion and querying.**
+**A unified CLI to convert, query, and explore data across formats.**
 
 Convert between JSON, CSV, YAML, TOML, XML, Parquet, and more with a single CLI. Query nested data, compare files, preview as tables, and pipe everything together.
 

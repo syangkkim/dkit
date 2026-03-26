@@ -1,13 +1,13 @@
 [package]
 name = "dkit-core"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.75.0"
 description = "Core library for dkit — data format conversion and querying engine"
 license = "MIT"
 repository = "https://github.com/syangkkim/dkit"
 homepage = "https://github.com/syangkkim/dkit"
-keywords = ["json", "csv", "yaml", "toml", "data"]
+keywords = ["data-format", "converter", "query", "serialization", "json"]
 categories = ["encoding", "parser-implementations"]
 
 [features]

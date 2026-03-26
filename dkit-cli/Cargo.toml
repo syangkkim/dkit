@@ -1,13 +1,13 @@
 [package]
 name = "dkit"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.75.0"
-description = "Swiss army knife for data format conversion and querying"
+description = "A unified CLI to convert, query, and explore data across formats"
 license = "MIT"
 repository = "https://github.com/syangkkim/dkit"
 homepage = "https://github.com/syangkkim/dkit"
-keywords = ["cli", "json", "csv", "yaml", "toml"]
+keywords = ["cli", "data-format", "converter", "query", "json"]
 categories = ["command-line-utilities", "encoding"]
 
 [package.metadata.binstall]
@@ -28,7 +28,7 @@ parquet = ["dkit-core/parquet", "dep:arrow", "dep:parquet-impl", "dep:bytes"]
 all = ["xml", "msgpack", "excel", "sqlite", "parquet"]
 
 [dependencies]
-dkit-core = { version = "1.0.0", path = "../dkit-core" }
+dkit-core = { version = "1.0.1", path = "../dkit-core" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
