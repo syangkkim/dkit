@@ -174,6 +174,14 @@ pub enum Commands {
         /// Additional paths to watch for changes
         #[arg(long = "watch-path", value_name = "PATH")]
         watch_paths: Vec<std::path::PathBuf>,
+
+        /// Preview conversion result without writing output file (prints first N records to stdout)
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Number of records to show in dry-run preview (default: 10)
+        #[arg(long, value_name = "N", default_value = "10")]
+        dry_run_limit: usize,
     },
 
     /// Query data using path expressions
