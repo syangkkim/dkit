@@ -333,7 +333,10 @@ fn convert_dry_run_does_not_create_output_file() {
         .success()
         .stdout(predicate::str::contains("Alice"));
 
-    assert!(!out.exists(), "output file should not be created in dry-run mode");
+    assert!(
+        !out.exists(),
+        "output file should not be created in dry-run mode"
+    );
 }
 
 #[test]
@@ -341,11 +344,7 @@ fn convert_dry_run_limit_truncates_records() {
     // Create a file with 5 records
     let tmp = TempDir::new().unwrap();
     let input = tmp.path().join("data.json");
-    fs::write(
-        &input,
-        r#"[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]"#,
-    )
-    .unwrap();
+    fs::write(&input, r#"[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]"#).unwrap();
 
     dkit()
         .args(&[
@@ -383,15 +382,7 @@ fn convert_dry_run_with_filter() {
 #[test]
 fn convert_dry_run_stdin() {
     dkit()
-        .args(&[
-            "convert",
-            "-",
-            "-f",
-            "csv",
-            "--from",
-            "json",
-            "--dry-run",
-        ])
+        .args(&["convert", "-", "-f", "csv", "--from", "json", "--dry-run"])
         .write_stdin(r#"[{"a":1},{"a":2},{"a":3}]"#)
         .assert()
         .success()
