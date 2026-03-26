@@ -246,6 +246,8 @@ pub struct DataFilterOptions {
     pub unique: bool,
     /// 특정 필드 기준 중복 제거
     pub unique_by: Option<String>,
+    /// 계산 필드 추가 표현식 목록 (예: "total = amount * quantity")
+    pub add_field: Vec<String>,
 }
 
 /// --agg 문자열을 GroupAggregate 벡터로 파싱한다.
@@ -380,7 +382,17 @@ pub fn apply_data_filters(
         operations.push(Operation::Where(condition));
     }
 
-    // 2. unique / unique-by (중복 제거)
+    // 2. add-field (계산 필드 추가)
+    for expr_str in &opts.add_field {
+        let (name, expr) = dkit_core::query::parser::parse_add_field_expr(expr_str).map_err(|e| {
+            anyhow::anyhow!(
+                "Invalid --add-field expression: {e}\n  Hint: use format like 'total = amount * quantity'"
+            )
+        })?;
+        operations.push(Operation::AddField { name, expr });
+    }
+
+    // 3. unique / unique-by (중복 제거)
     if opts.unique {
         operations.push(Operation::Unique);
     }
@@ -390,7 +402,7 @@ pub fn apply_data_filters(
         });
     }
 
-    // 3. group_by + agg (집계)
+    // 4. group_by + agg (집계)
     if let Some(ref group_fields) = opts.group_by {
         let fields: Vec<String> = group_fields
             .split(',')
@@ -416,13 +428,13 @@ pub fn apply_data_filters(
         anyhow::bail!("--agg requires --group-by\n  Hint: use --group-by 'field' --agg 'count(), sum(amount)'");
     }
 
-    // 4. select (컬럼 선택)
+    // 5. select (컬럼 선택)
     if let Some(ref fields) = opts.select {
         let select_exprs = parse_select_fields(fields)?;
         operations.push(Operation::Select(select_exprs));
     }
 
-    // 5. sort
+    // 6. sort
     if let Some(ref field) = opts.sort_by {
         operations.push(Operation::Sort {
             field: field.clone(),
@@ -430,7 +442,7 @@ pub fn apply_data_filters(
         });
     }
 
-    // 6. head (= limit)
+    // 7. head (= limit)
     if let Some(n) = opts.head {
         operations.push(Operation::Limit(n));
     }

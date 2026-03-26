@@ -1,5 +1,5 @@
 use crate::error::DkitError;
-use crate::query::parser::{Expr, LiteralValue};
+use crate::query::parser::{ArithmeticOp, Expr, LiteralValue};
 use crate::value::Value;
 
 /// 표현식을 주어진 레코드(행)에 대해 평가하여 Value를 반환
@@ -18,6 +18,97 @@ pub fn evaluate_expr(row: &Value, expr: &Expr) -> Result<Value, DkitError> {
                 args.iter().map(|a| evaluate_expr(row, a)).collect();
             call_function(name, evaluated?)
         }
+        Expr::BinaryOp { op, left, right } => {
+            let lv = evaluate_expr(row, left)?;
+            let rv = evaluate_expr(row, right)?;
+            evaluate_binary_op(op, &lv, &rv)
+        }
+    }
+}
+
+/// 이항 산술 연산 평가
+fn evaluate_binary_op(op: &ArithmeticOp, left: &Value, right: &Value) -> Result<Value, DkitError> {
+    // String concatenation with +
+    if matches!(op, ArithmeticOp::Add) {
+        if let (Value::String(a), Value::String(b)) = (left, right) {
+            return Ok(Value::String(format!("{}{}", a, b)));
+        }
+        // String + non-string or non-string + String → string concat
+        if matches!(left, Value::String(_)) || matches!(right, Value::String(_)) {
+            let a = value_to_display_string(left);
+            let b = value_to_display_string(right);
+            return Ok(Value::String(format!("{}{}", a, b)));
+        }
+    }
+
+    // Null propagation
+    if matches!(left, Value::Null) || matches!(right, Value::Null) {
+        return Ok(Value::Null);
+    }
+
+    // Numeric operations
+    let (lf, li) = to_numeric(left)?;
+    let (rf, ri) = to_numeric(right)?;
+
+    // Both integers → integer result (except division)
+    if let (Some(a), Some(b)) = (li, ri) {
+        return match op {
+            ArithmeticOp::Add => Ok(Value::Integer(a.wrapping_add(b))),
+            ArithmeticOp::Sub => Ok(Value::Integer(a.wrapping_sub(b))),
+            ArithmeticOp::Mul => Ok(Value::Integer(a.wrapping_mul(b))),
+            ArithmeticOp::Div => {
+                if b == 0 {
+                    return Err(DkitError::QueryError("division by zero".to_string()));
+                }
+                // Use float division if not evenly divisible
+                if a % b == 0 {
+                    Ok(Value::Integer(a / b))
+                } else {
+                    Ok(Value::Float(lf / rf))
+                }
+            }
+        };
+    }
+
+    // At least one float → float result
+    match op {
+        ArithmeticOp::Add => Ok(Value::Float(lf + rf)),
+        ArithmeticOp::Sub => Ok(Value::Float(lf - rf)),
+        ArithmeticOp::Mul => Ok(Value::Float(lf * rf)),
+        ArithmeticOp::Div => {
+            if rf == 0.0 {
+                return Err(DkitError::QueryError("division by zero".to_string()));
+            }
+            Ok(Value::Float(lf / rf))
+        }
+    }
+}
+
+/// Value를 (f64, Option<i64>) 로 변환. i64로 표현 가능하면 Some(i64).
+fn to_numeric(v: &Value) -> Result<(f64, Option<i64>), DkitError> {
+    match v {
+        Value::Integer(n) => Ok((*n as f64, Some(*n))),
+        Value::Float(f) => Ok((*f, None)),
+        Value::Bool(b) => {
+            let n = if *b { 1 } else { 0 };
+            Ok((n as f64, Some(n)))
+        }
+        _ => Err(DkitError::QueryError(format!(
+            "cannot perform arithmetic on {} value",
+            value_type_name(v)
+        ))),
+    }
+}
+
+/// Value를 문자열로 변환 (string concat용)
+fn value_to_display_string(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Integer(n) => n.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "null".to_string(),
+        _ => format!("{}", v),
     }
 }
 
@@ -33,6 +124,7 @@ pub fn expr_default_key(expr: &Expr) -> String {
                 name.clone()
             }
         }
+        Expr::BinaryOp { left, .. } => expr_default_key(left),
     }
 }
 
@@ -819,5 +911,122 @@ mod tests {
             }],
         };
         assert_eq!(expr_default_key(&expr), "upper_trim_name");
+    }
+
+    // --- BinaryOp evaluate tests ---
+
+    #[test]
+    fn test_binary_add_integers() {
+        let row = Value::Object(indexmap::IndexMap::from([
+            ("a".to_string(), Value::Integer(10)),
+            ("b".to_string(), Value::Integer(20)),
+        ]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Add,
+            left: Box::new(Expr::Field("a".to_string())),
+            right: Box::new(Expr::Field("b".to_string())),
+        };
+        assert_eq!(evaluate_expr(&row, &expr).unwrap(), Value::Integer(30));
+    }
+
+    #[test]
+    fn test_binary_mul_float() {
+        let row = Value::Object(indexmap::IndexMap::from([(
+            "price".to_string(),
+            Value::Float(100.0),
+        )]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Mul,
+            left: Box::new(Expr::Field("price".to_string())),
+            right: Box::new(Expr::Literal(LiteralValue::Float(0.1))),
+        };
+        let result = evaluate_expr(&row, &expr).unwrap();
+        if let Value::Float(f) = result {
+            assert!((f - 10.0).abs() < 0.001);
+        } else {
+            panic!("expected float");
+        }
+    }
+
+    #[test]
+    fn test_binary_string_concat() {
+        let row = Value::Object(indexmap::IndexMap::from([
+            ("first".to_string(), Value::String("Hello".to_string())),
+            ("last".to_string(), Value::String("World".to_string())),
+        ]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Add,
+            left: Box::new(Expr::Field("first".to_string())),
+            right: Box::new(Expr::BinaryOp {
+                op: ArithmeticOp::Add,
+                left: Box::new(Expr::Literal(LiteralValue::String(" ".to_string()))),
+                right: Box::new(Expr::Field("last".to_string())),
+            }),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("Hello World".to_string())
+        );
+    }
+
+    #[test]
+    fn test_binary_div_by_zero() {
+        let row = Value::Object(indexmap::IndexMap::from([
+            ("a".to_string(), Value::Integer(10)),
+            ("b".to_string(), Value::Integer(0)),
+        ]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Div,
+            left: Box::new(Expr::Field("a".to_string())),
+            right: Box::new(Expr::Field("b".to_string())),
+        };
+        assert!(evaluate_expr(&row, &expr).is_err());
+    }
+
+    #[test]
+    fn test_binary_null_propagation() {
+        let row = Value::Object(indexmap::IndexMap::from([
+            ("a".to_string(), Value::Integer(10)),
+            ("b".to_string(), Value::Null),
+        ]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Add,
+            left: Box::new(Expr::Field("a".to_string())),
+            right: Box::new(Expr::Field("b".to_string())),
+        };
+        assert_eq!(evaluate_expr(&row, &expr).unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn test_binary_int_div_non_exact() {
+        let row = Value::Object(indexmap::IndexMap::from([
+            ("a".to_string(), Value::Integer(10)),
+            ("b".to_string(), Value::Integer(3)),
+        ]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Div,
+            left: Box::new(Expr::Field("a".to_string())),
+            right: Box::new(Expr::Field("b".to_string())),
+        };
+        // 10 / 3 is not exact, should return float
+        let result = evaluate_expr(&row, &expr).unwrap();
+        assert!(matches!(result, Value::Float(_)));
+    }
+
+    #[test]
+    fn test_binary_mixed_string_number_concat() {
+        let row = Value::Object(indexmap::IndexMap::from([
+            ("name".to_string(), Value::String("Item".to_string())),
+            ("id".to_string(), Value::Integer(42)),
+        ]));
+        let expr = Expr::BinaryOp {
+            op: ArithmeticOp::Add,
+            left: Box::new(Expr::Field("name".to_string())),
+            right: Box::new(Expr::Field("id".to_string())),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("Item42".to_string())
+        );
     }
 }

@@ -62,6 +62,8 @@ pub enum Operation {
     Unique,
     /// 특정 필드 기준 중복 제거 (첫 번째 등장 레코드 유지)
     UniqueBy { field: String },
+    /// 새 필드 추가 (computed column): `--add-field 'total = amount * quantity'`
+    AddField { name: String, expr: Expr },
 }
 
 /// GROUP BY 집계 연산 정의
@@ -129,6 +131,15 @@ pub enum LiteralValue {
     Null,
 }
 
+/// Arithmetic binary operator.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ArithmeticOp {
+    Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
+}
+
 /// Expression used in `select` clauses and function arguments.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -139,6 +150,12 @@ pub enum Expr {
     Literal(LiteralValue),
     /// 함수 호출: `upper(name)`, `round(price, 2)`, `upper(trim(name))`
     FuncCall { name: String, args: Vec<Expr> },
+    /// 이항 산술 연산: `amount * quantity`, `first_name + " " + last_name`
+    BinaryOp {
+        op: ArithmeticOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
 }
 
 /// SELECT 절의 컬럼 표현식
@@ -511,9 +528,97 @@ impl Parser {
         Ok(SelectExpr { expr, alias })
     }
 
-    /// 표현식 파싱: 필드 참조, 리터럴, 함수 호출
+    /// 표현식 파싱: 산술 연산자 포함 (우선순위: +- < */)
     fn parse_expr(&mut self) -> Result<Expr, DkitError> {
+        self.parse_additive_expr()
+    }
+
+    /// 덧셈/뺄셈 수준 표현식: `term (('+' | '-') term)*`
+    fn parse_additive_expr(&mut self) -> Result<Expr, DkitError> {
+        let mut left = self.parse_multiplicative_expr()?;
+
+        loop {
+            self.skip_whitespace();
+            match self.peek() {
+                Some('+') => {
+                    self.advance();
+                    self.skip_whitespace();
+                    let right = self.parse_multiplicative_expr()?;
+                    left = Expr::BinaryOp {
+                        op: ArithmeticOp::Add,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    };
+                }
+                Some('-') => {
+                    // Distinguish subtraction from negative number literal at end of expression
+                    // Only treat as subtraction if we've already parsed a left operand
+                    self.advance();
+                    self.skip_whitespace();
+                    let right = self.parse_multiplicative_expr()?;
+                    left = Expr::BinaryOp {
+                        op: ArithmeticOp::Sub,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// 곱셈/나눗셈 수준 표현식: `atom (('*' | '/') atom)*`
+    fn parse_multiplicative_expr(&mut self) -> Result<Expr, DkitError> {
+        let mut left = self.parse_atom_expr()?;
+
+        loop {
+            self.skip_whitespace();
+            match self.peek() {
+                Some('*') => {
+                    self.advance();
+                    self.skip_whitespace();
+                    let right = self.parse_atom_expr()?;
+                    left = Expr::BinaryOp {
+                        op: ArithmeticOp::Mul,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    };
+                }
+                Some('/') => {
+                    self.advance();
+                    self.skip_whitespace();
+                    let right = self.parse_atom_expr()?;
+                    left = Expr::BinaryOp {
+                        op: ArithmeticOp::Div,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// 원자 표현식: 리터럴, 필드 참조, 함수 호출, 괄호
+    fn parse_atom_expr(&mut self) -> Result<Expr, DkitError> {
         match self.peek() {
+            Some('(') => {
+                self.advance(); // consume '('
+                self.skip_whitespace();
+                let expr = self.parse_expr()?;
+                self.skip_whitespace();
+                if !self.consume_char(')') {
+                    return Err(DkitError::QueryError(format!(
+                        "expected ')' at position {}",
+                        self.pos
+                    )));
+                }
+                Ok(expr)
+            }
             Some('"') => {
                 let lit = self.parse_string_literal()?;
                 Ok(Expr::Literal(lit))
@@ -926,6 +1031,34 @@ impl Parser {
 /// 편의 함수: 쿼리 문자열 → Query
 pub fn parse_query(input: &str) -> Result<Query, DkitError> {
     Parser::new(input).parse()
+}
+
+/// `--add-field` 표현식 파싱: `"name = expression"`
+/// 예: "total = amount * quantity", "full_name = first_name + \" \" + last_name"
+pub fn parse_add_field_expr(input: &str) -> Result<(String, Expr), DkitError> {
+    let mut parser = Parser::new(input);
+    parser.skip_whitespace();
+    let name = parser.parse_identifier().map_err(|_| {
+        DkitError::QueryError(format!(
+            "expected field name in --add-field expression: '{input}'"
+        ))
+    })?;
+    parser.skip_whitespace();
+    if !parser.consume_char('=') {
+        return Err(DkitError::QueryError(format!(
+            "expected '=' after field name in --add-field expression: '{input}'"
+        )));
+    }
+    parser.skip_whitespace();
+    let expr = parser.parse_expr()?;
+    parser.skip_whitespace();
+    if parser.pos != parser.input.len() {
+        return Err(DkitError::QueryError(format!(
+            "unexpected character '{}' at position {} in --add-field expression",
+            parser.input[parser.pos], parser.pos
+        )));
+    }
+    Ok((name, expr))
 }
 
 /// where 절의 조건식만 파싱하는 편의 함수
@@ -1812,5 +1945,114 @@ mod tests {
             }
         ));
         assert_eq!(q.operations[2], Operation::Limit(5));
+    }
+
+    // --- parse_add_field_expr tests ---
+
+    #[test]
+    fn test_add_field_simple_arithmetic() {
+        let (name, expr) = parse_add_field_expr("total = amount * quantity").unwrap();
+        assert_eq!(name, "total");
+        assert!(matches!(
+            expr,
+            Expr::BinaryOp {
+                op: ArithmeticOp::Mul,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_add_field_string_concat() {
+        let (name, expr) =
+            parse_add_field_expr("full_name = first_name + \" \" + last_name").unwrap();
+        assert_eq!(name, "full_name");
+        // Should be (first_name + " ") + last_name
+        assert!(matches!(
+            expr,
+            Expr::BinaryOp {
+                op: ArithmeticOp::Add,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_add_field_with_literal() {
+        let (name, expr) = parse_add_field_expr("tax = price * 0.1").unwrap();
+        assert_eq!(name, "tax");
+        assert!(matches!(
+            expr,
+            Expr::BinaryOp {
+                op: ArithmeticOp::Mul,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_add_field_complex_expr() {
+        let (name, expr) = parse_add_field_expr("total = price + price * 0.1").unwrap();
+        assert_eq!(name, "total");
+        // price + (price * 0.1) due to precedence
+        if let Expr::BinaryOp { op, left, right } = &expr {
+            assert_eq!(*op, ArithmeticOp::Add);
+            assert!(matches!(left.as_ref(), Expr::Field(f) if f == "price"));
+            assert!(matches!(
+                right.as_ref(),
+                Expr::BinaryOp {
+                    op: ArithmeticOp::Mul,
+                    ..
+                }
+            ));
+        } else {
+            panic!("expected BinaryOp");
+        }
+    }
+
+    #[test]
+    fn test_add_field_with_parens() {
+        let (name, expr) = parse_add_field_expr("total = (price + tax) * quantity").unwrap();
+        assert_eq!(name, "total");
+        if let Expr::BinaryOp { op, left, right } = &expr {
+            assert_eq!(*op, ArithmeticOp::Mul);
+            assert!(matches!(
+                left.as_ref(),
+                Expr::BinaryOp {
+                    op: ArithmeticOp::Add,
+                    ..
+                }
+            ));
+            assert!(matches!(right.as_ref(), Expr::Field(f) if f == "quantity"));
+        } else {
+            panic!("expected BinaryOp");
+        }
+    }
+
+    #[test]
+    fn test_add_field_with_function() {
+        let (name, expr) = parse_add_field_expr("name_upper = upper(name)").unwrap();
+        assert_eq!(name, "name_upper");
+        assert!(matches!(expr, Expr::FuncCall { .. }));
+    }
+
+    #[test]
+    fn test_add_field_missing_equals() {
+        let result = parse_add_field_expr("total amount * quantity");
+        assert!(result.is_err());
+    }
+
+    // --- Expr arithmetic tests ---
+
+    #[test]
+    fn test_expr_division() {
+        let q = parse_query(".items[] | select total / count as avg").unwrap();
+        assert_eq!(q.operations.len(), 1);
+    }
+
+    #[test]
+    fn test_expr_subtraction() {
+        let q = parse_query(".items[] | select price - discount as net").unwrap();
+        assert_eq!(q.operations.len(), 1);
     }
 }

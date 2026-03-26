@@ -319,6 +319,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             agg,
             unique,
             unique_by,
+            add_field,
             compression,
             row_group_size,
             chunk_size,
@@ -368,6 +369,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                         agg: agg.clone(),
                         unique,
                         unique_by: unique_by.clone(),
+                        add_field: add_field.clone(),
                     },
                     parquet_opts: ParquetWriteOptions {
                         compression: compression.clone(),
@@ -448,6 +450,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             agg,
             unique,
             unique_by,
+            add_field,
             watch,
             watch_paths,
         } => {
@@ -491,6 +494,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                         agg: agg.clone(),
                         unique,
                         unique_by: unique_by.clone(),
+                        add_field: add_field.clone(),
                     },
                 })
             };
