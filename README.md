@@ -82,6 +82,7 @@ dkit completions powershell > dkit.ps1 && . ./dkit.ps1
 | Parquet     | `.parquet`             |  ✓   |   ✓   | Snappy / Gzip / Zstd compression |
 | Excel       | `.xlsx`                |  ✓   |   —   | Sheet selection, input-only    |
 | SQLite      | `.db`, `.sqlite`       |  ✓   |   —   | Custom SQL queries, input-only |
+| .env        | `.env`                 |  ✓   |   ✓   | Environment variable files     |
 | Markdown    | `.md`                  |  —   |   ✓   | GFM table, output-only         |
 | HTML        | `.html`                |  —   |   ✓   | Styled tables, output-only     |
 
@@ -140,6 +141,19 @@ dkit convert data.csv --to json --detect-encoding
 
 # Streaming for large files
 dkit convert large.jsonl --from jsonl -f csv --chunk-size 1000 -o out.csv
+
+# Column selection and aggregation
+dkit convert data.json --to csv --select 'name, email'
+dkit convert sales.csv --to json --group-by category --agg 'count(), sum(amount)'
+dkit convert data.json --to csv --select 'name, age' --filter 'age > 30' --sort-by age
+
+# Dry-run (preview without writing)
+dkit convert huge.json --to csv -o output.csv --dry-run
+
+# .env format
+dkit convert .env --to json                         # .env → JSON
+dkit convert config.json --to env -o .env            # JSON → .env
+dkit diff .env.dev .env.prod                         # Compare environments
 
 # Watch mode (re-convert on file change)
 dkit convert data.json --to csv --watch
@@ -210,6 +224,8 @@ dkit view users.csv
 dkit view data.json --path '.users' --limit 20
 dkit view data.csv --columns name,email --border rounded --color
 dkit view data.json --row-numbers --max-width 30
+dkit view data.json --select 'name, email'         # Select specific columns
+dkit view sales.csv --group-by status --agg 'count()'  # Aggregation table
 dkit view data.json --format md                   # Output as Markdown table
 dkit view data.xlsx --list-sheets                 # List Excel sheets
 dkit view data.db --list-tables                   # List SQLite tables
@@ -223,6 +239,7 @@ dkit stats data.csv                               # Overall statistics
 dkit stats data.csv --column revenue               # Per-field details
 dkit stats data.csv --column age --histogram       # Text histogram
 dkit stats data.json --path .users --format json   # JSON output
+dkit stats data.csv --output-format json            # Structured JSON for scripting
 ```
 
 ### `schema` — Structure inspection
@@ -316,6 +333,7 @@ dkit y2j config.yaml                # YAML → JSON
 | Parquet | ✓ | — | — | — |
 | Excel (.xlsx) input | ✓ | — | — | — |
 | SQLite input | ✓ | — | — | — |
+| .env files | ✓ | — | — | — |
 | Cross-format convert | ✓ | — | Partial | Partial |
 | Query (where/select/sort) | ✓ | ✓ | ✓ | ✓ |
 | Aggregate / GROUP BY | ✓ | Partial | ✓ | — |
