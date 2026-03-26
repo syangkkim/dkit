@@ -143,6 +143,14 @@ pub enum Commands {
         #[arg(long, value_name = "FIELDS")]
         select: Option<String>,
 
+        /// Group by field(s) for aggregation (comma-separated, e.g. 'category' or 'category, region')
+        #[arg(long, value_name = "FIELDS")]
+        group_by: Option<String>,
+
+        /// Aggregation functions (e.g. 'count(), sum(amount), avg(price)')
+        #[arg(long, value_name = "EXPR")]
+        agg: Option<String>,
+
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
         compression: String,
@@ -330,6 +338,14 @@ pub enum Commands {
         /// Select specific fields (comma-separated, e.g. 'name, city, age')
         #[arg(long, value_name = "FIELDS")]
         select: Option<String>,
+
+        /// Group by field(s) for aggregation (comma-separated, e.g. 'category' or 'category, region')
+        #[arg(long, value_name = "FIELDS")]
+        group_by: Option<String>,
+
+        /// Aggregation functions (e.g. 'count(), sum(amount), avg(price)')
+        #[arg(long, value_name = "EXPR")]
+        agg: Option<String>,
 
         /// Watch input file for changes and auto re-run
         #[arg(long)]

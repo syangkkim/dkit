@@ -315,6 +315,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             tail,
             filter,
             select,
+            group_by,
+            agg,
             compression,
             row_group_size,
             chunk_size,
@@ -358,6 +360,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                         tail,
                         filter: filter.clone(),
                         select: select.clone(),
+                        group_by: group_by.clone(),
+                        agg: agg.clone(),
                     },
                     parquet_opts: ParquetWriteOptions {
                         compression: compression.clone(),
@@ -432,6 +436,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             tail,
             filter,
             select,
+            group_by,
+            agg,
             watch,
             watch_paths,
         } => {
@@ -471,6 +477,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                         tail,
                         filter: filter.clone(),
                         select: select.clone(),
+                        group_by: group_by.clone(),
+                        agg: agg.clone(),
                     },
                 })
             };

@@ -238,6 +238,100 @@ pub struct DataFilterOptions {
     pub filter: Option<String>,
     /// 선택할 필드 목록 (쉼표 구분)
     pub select: Option<String>,
+    /// 그룹핑 기준 필드 목록 (쉼표 구분)
+    pub group_by: Option<String>,
+    /// 집계 함수 목록 (예: "count(), sum(amount), avg(price)")
+    pub agg: Option<String>,
+}
+
+/// --agg 문자열을 GroupAggregate 벡터로 파싱한다.
+/// 예: "count(), sum(amount), avg(price)" → [GroupAggregate { func: Count, field: None, alias: "count" }, ...]
+fn parse_agg_expr(agg_str: &str) -> anyhow::Result<Vec<dkit_core::query::parser::GroupAggregate>> {
+    use dkit_core::query::parser::{AggregateFunc, GroupAggregate};
+
+    let mut aggregates = Vec::new();
+
+    // Split by commas, but respect parentheses
+    let mut depth = 0;
+    let mut current = String::new();
+    let mut parts = Vec::new();
+
+    for ch in agg_str.chars() {
+        match ch {
+            '(' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                parts.push(current.trim().to_string());
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    let last = current.trim().to_string();
+    if !last.is_empty() {
+        parts.push(last);
+    }
+
+    for part in &parts {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+
+        // Parse "func(field)" or "func()"
+        let open = part.find('(').ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid --agg expression: '{part}'\n  Hint: use format like 'count()', 'sum(field)', 'avg(field)'"
+            )
+        })?;
+        let close = part.rfind(')').ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid --agg expression: '{part}'\n  Hint: missing closing parenthesis"
+            )
+        })?;
+
+        let func_name = part[..open].trim().to_lowercase();
+        let field_str = part[open + 1..close].trim();
+
+        let func = match func_name.as_str() {
+            "count" => AggregateFunc::Count,
+            "sum" => AggregateFunc::Sum,
+            "avg" => AggregateFunc::Avg,
+            "min" => AggregateFunc::Min,
+            "max" => AggregateFunc::Max,
+            _ => {
+                anyhow::bail!(
+                    "Unknown aggregate function: '{func_name}'\n  Hint: supported functions are count(), sum(), avg(), min(), max()"
+                );
+            }
+        };
+
+        let field = if field_str.is_empty() {
+            None
+        } else {
+            Some(field_str.to_string())
+        };
+
+        // Generate default alias: "count" / "sum_amount" / "avg_price" etc.
+        let alias = match &field {
+            None => func_name.clone(),
+            Some(f) => format!("{}_{}", func_name, f),
+        };
+
+        aggregates.push(GroupAggregate { func, field, alias });
+    }
+
+    if aggregates.is_empty() {
+        anyhow::bail!("--agg requires at least one aggregate function\n  Hint: use format like --agg 'count(), sum(amount)'");
+    }
+
+    Ok(aggregates)
 }
 
 /// 쉼표 구분 필드 목록을 SelectExpr 벡터로 파싱한다.
@@ -282,13 +376,39 @@ pub fn apply_data_filters(
         operations.push(Operation::Where(condition));
     }
 
-    // 2. select (컬럼 선택)
+    // 2. group_by + agg (집계)
+    if let Some(ref group_fields) = opts.group_by {
+        let fields: Vec<String> = group_fields
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if fields.is_empty() {
+            anyhow::bail!("--group-by requires at least one field name\n  Hint: use format like --group-by 'category' or --group-by 'category, region'");
+        }
+
+        let aggregates = if let Some(ref agg_str) = opts.agg {
+            parse_agg_expr(agg_str)?
+        } else {
+            Vec::new() // default: count only
+        };
+
+        operations.push(Operation::GroupBy {
+            fields,
+            having: None,
+            aggregates,
+        });
+    } else if opts.agg.is_some() {
+        anyhow::bail!("--agg requires --group-by\n  Hint: use --group-by 'field' --agg 'count(), sum(amount)'");
+    }
+
+    // 3. select (컬럼 선택)
     if let Some(ref fields) = opts.select {
         let select_exprs = parse_select_fields(fields)?;
         operations.push(Operation::Select(select_exprs));
     }
 
-    // 3. sort
+    // 4. sort
     if let Some(ref field) = opts.sort_by {
         operations.push(Operation::Sort {
             field: field.clone(),
@@ -296,7 +416,7 @@ pub fn apply_data_filters(
         });
     }
 
-    // 4. head (= limit)
+    // 5. head (= limit)
     if let Some(n) = opts.head {
         operations.push(Operation::Limit(n));
     }
@@ -679,5 +799,141 @@ mod tests {
     #[test]
     fn test_parse_select_fields_empty() {
         assert!(parse_select_fields("").is_err());
+    }
+
+    // --- group_by + agg tests ---
+
+    fn make_sales_record(category: &str, amount: i64) -> Value {
+        let mut m = IndexMap::new();
+        m.insert("category".to_string(), Value::String(category.to_string()));
+        m.insert("amount".to_string(), Value::Integer(amount));
+        Value::Object(m)
+    }
+
+    fn sales_data() -> Value {
+        Value::Array(vec![
+            make_sales_record("A", 100),
+            make_sales_record("B", 200),
+            make_sales_record("A", 150),
+            make_sales_record("B", 50),
+        ])
+    }
+
+    #[test]
+    fn test_parse_agg_expr_basic() {
+        let aggs = parse_agg_expr("count(), sum(amount), avg(amount)").unwrap();
+        assert_eq!(aggs.len(), 3);
+        assert_eq!(aggs[0].alias, "count");
+        assert!(aggs[0].field.is_none());
+        assert_eq!(aggs[1].alias, "sum_amount");
+        assert_eq!(aggs[1].field.as_deref(), Some("amount"));
+        assert_eq!(aggs[2].alias, "avg_amount");
+    }
+
+    #[test]
+    fn test_parse_agg_expr_min_max() {
+        let aggs = parse_agg_expr("min(price), max(price)").unwrap();
+        assert_eq!(aggs.len(), 2);
+        assert_eq!(aggs[0].alias, "min_price");
+        assert_eq!(aggs[1].alias, "max_price");
+    }
+
+    #[test]
+    fn test_parse_agg_expr_invalid_func() {
+        assert!(parse_agg_expr("median(x)").is_err());
+    }
+
+    #[test]
+    fn test_parse_agg_expr_empty() {
+        assert!(parse_agg_expr("").is_err());
+    }
+
+    #[test]
+    fn test_data_filter_group_by_default_count() {
+        let data = sales_data();
+        let opts = DataFilterOptions {
+            group_by: Some("category".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        // Group A: 2 items, Group B: 2 items
+        let a = &arr[0].as_object().unwrap();
+        assert_eq!(a["category"].as_str().unwrap(), "A");
+        assert_eq!(a["count"].as_i64().unwrap(), 2);
+        let b = &arr[1].as_object().unwrap();
+        assert_eq!(b["category"].as_str().unwrap(), "B");
+        assert_eq!(b["count"].as_i64().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_data_filter_group_by_with_agg() {
+        let data = sales_data();
+        let opts = DataFilterOptions {
+            group_by: Some("category".to_string()),
+            agg: Some("count(), sum(amount), avg(amount)".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+
+        let a = &arr[0].as_object().unwrap();
+        assert_eq!(a["category"].as_str().unwrap(), "A");
+        assert_eq!(a["count"].as_i64().unwrap(), 2);
+        assert_eq!(a["sum_amount"].as_i64().unwrap(), 250);
+
+        let b = &arr[1].as_object().unwrap();
+        assert_eq!(b["category"].as_str().unwrap(), "B");
+        assert_eq!(b["count"].as_i64().unwrap(), 2);
+        assert_eq!(b["sum_amount"].as_i64().unwrap(), 250);
+    }
+
+    #[test]
+    fn test_data_filter_group_by_with_filter() {
+        let data = sales_data();
+        let opts = DataFilterOptions {
+            filter: Some("amount > 80".to_string()),
+            group_by: Some("category".to_string()),
+            agg: Some("count(), sum(amount)".to_string()),
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        // After filter: A(100), B(200), A(150) → A: count=2, sum=250; B: count=1, sum=200
+        assert_eq!(arr.len(), 2);
+        let a = &arr[0].as_object().unwrap();
+        assert_eq!(a["count"].as_i64().unwrap(), 2);
+        assert_eq!(a["sum_amount"].as_i64().unwrap(), 250);
+        let b = &arr[1].as_object().unwrap();
+        assert_eq!(b["count"].as_i64().unwrap(), 1);
+        assert_eq!(b["sum_amount"].as_i64().unwrap(), 200);
+    }
+
+    #[test]
+    fn test_data_filter_agg_without_group_by_errors() {
+        let data = sales_data();
+        let opts = DataFilterOptions {
+            agg: Some("count()".to_string()),
+            ..Default::default()
+        };
+        assert!(apply_data_filters(data, &opts).is_err());
+    }
+
+    #[test]
+    fn test_data_filter_group_by_with_sort() {
+        let data = sales_data();
+        let opts = DataFilterOptions {
+            group_by: Some("category".to_string()),
+            agg: Some("sum(amount)".to_string()),
+            sort_by: Some("sum_amount".to_string()),
+            descending: true,
+            ..Default::default()
+        };
+        let result = apply_data_filters(data, &opts).unwrap();
+        let arr = result.as_array().unwrap();
+        // Both groups have sum=250, so order may not change, but sort should not error
+        assert_eq!(arr.len(), 2);
     }
 }
