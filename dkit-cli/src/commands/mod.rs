@@ -805,10 +805,7 @@ mod tests {
 
     fn make_sales_record(category: &str, amount: i64) -> Value {
         let mut m = IndexMap::new();
-        m.insert(
-            "category".to_string(),
-            Value::String(category.to_string()),
-        );
+        m.insert("category".to_string(), Value::String(category.to_string()));
         m.insert("amount".to_string(), Value::Integer(amount));
         Value::Object(m)
     }
