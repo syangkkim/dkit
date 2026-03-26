@@ -159,6 +159,10 @@ pub enum Commands {
         #[arg(long, value_name = "FIELD")]
         unique_by: Option<String>,
 
+        /// Add a computed field (e.g. 'total = amount * quantity'). Can be used multiple times
+        #[arg(long = "add-field", value_name = "EXPR")]
+        add_field: Vec<String>,
+
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
         compression: String,
@@ -370,6 +374,10 @@ pub enum Commands {
         /// Remove duplicate records based on a specific field (keeps first occurrence)
         #[arg(long, value_name = "FIELD")]
         unique_by: Option<String>,
+
+        /// Add a computed field (e.g. 'total = amount * quantity'). Can be used multiple times
+        #[arg(long = "add-field", value_name = "EXPR")]
+        add_field: Vec<String>,
 
         /// Watch input file for changes and auto re-run
         #[arg(long)]

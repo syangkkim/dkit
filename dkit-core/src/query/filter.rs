@@ -1,7 +1,7 @@
 use crate::error::DkitError;
 use crate::query::functions::{evaluate_expr, expr_default_key};
 use crate::query::parser::{
-    AggregateFunc, CompareOp, Comparison, Condition, GroupAggregate, LiteralValue, Operation,
+    AggregateFunc, CompareOp, Comparison, Condition, Expr, GroupAggregate, LiteralValue, Operation,
     SelectExpr,
 };
 use crate::value::Value;
@@ -36,6 +36,7 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         } => apply_group_by(value, fields, having.as_ref(), aggregates),
         Operation::Unique => apply_unique(value),
         Operation::UniqueBy { field } => apply_unique_by(value, field),
+        Operation::AddField { name, expr } => apply_add_field(value, name, expr),
     }
 }
 
@@ -439,6 +440,37 @@ fn apply_unique_by(value: Value, field: &str) -> Result<Value, DkitError> {
         }
         _ => Err(DkitError::QueryError(
             "unique-by requires an array input".to_string(),
+        )),
+    }
+}
+
+/// add_field: 각 레코드에 새 필드를 추가 (computed column)
+fn apply_add_field(value: Value, name: &str, expr: &Expr) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut result = Vec::with_capacity(arr.len());
+            for item in arr {
+                match item {
+                    Value::Object(mut map) => {
+                        let computed = evaluate_expr(&Value::Object(map.clone()), expr)?;
+                        map.insert(name.to_string(), computed);
+                        result.push(Value::Object(map));
+                    }
+                    other => {
+                        // Non-object items are passed through unchanged
+                        result.push(other);
+                    }
+                }
+            }
+            Ok(Value::Array(result))
+        }
+        Value::Object(mut map) => {
+            let computed = evaluate_expr(&Value::Object(map.clone()), expr)?;
+            map.insert(name.to_string(), computed);
+            Ok(Value::Object(map))
+        }
+        _ => Err(DkitError::QueryError(
+            "add-field requires an array or object input".to_string(),
         )),
     }
 }
@@ -2204,5 +2236,136 @@ mod tests {
     fn test_unique_by_non_object_elements_error() {
         let data = Value::Array(vec![Value::Integer(1), Value::Integer(2)]);
         assert!(apply_unique_by(data, "field").is_err());
+    }
+
+    // --- add_field tests ---
+
+    #[test]
+    fn test_add_field_arithmetic() {
+        use crate::query::parser::parse_add_field_expr;
+
+        let data = Value::Array(vec![
+            Value::Object(IndexMap::from([
+                ("amount".to_string(), Value::Integer(10)),
+                ("quantity".to_string(), Value::Integer(3)),
+            ])),
+            Value::Object(IndexMap::from([
+                ("amount".to_string(), Value::Integer(20)),
+                ("quantity".to_string(), Value::Integer(5)),
+            ])),
+        ]);
+
+        let (name, expr) = parse_add_field_expr("total = amount * quantity").unwrap();
+        let result = apply_add_field(data, &name, &expr).unwrap();
+
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 2);
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(map.get("total"), Some(&Value::Integer(30)));
+            } else {
+                panic!("expected object");
+            }
+            if let Value::Object(map) = &arr[1] {
+                assert_eq!(map.get("total"), Some(&Value::Integer(100)));
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_add_field_string_concat() {
+        use crate::query::parser::parse_add_field_expr;
+
+        let data = Value::Array(vec![Value::Object(IndexMap::from([
+            ("first".to_string(), Value::String("John".to_string())),
+            ("last".to_string(), Value::String("Doe".to_string())),
+        ]))]);
+
+        let (name, expr) = parse_add_field_expr("full = first + \" \" + last").unwrap();
+        let result = apply_add_field(data, &name, &expr).unwrap();
+
+        if let Value::Array(arr) = result {
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(
+                    map.get("full"),
+                    Some(&Value::String("John Doe".to_string()))
+                );
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_add_field_with_function() {
+        use crate::query::parser::parse_add_field_expr;
+
+        let data = Value::Array(vec![Value::Object(IndexMap::from([(
+            "name".to_string(),
+            Value::String("hello".to_string()),
+        )]))]);
+
+        let (name, expr) = parse_add_field_expr("upper_name = upper(name)").unwrap();
+        let result = apply_add_field(data, &name, &expr).unwrap();
+
+        if let Value::Array(arr) = result {
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(
+                    map.get("upper_name"),
+                    Some(&Value::String("HELLO".to_string()))
+                );
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
+    }
+
+    #[test]
+    fn test_add_field_on_single_object() {
+        use crate::query::parser::parse_add_field_expr;
+
+        let data = Value::Object(IndexMap::from([("price".to_string(), Value::Float(100.0))]));
+
+        let (name, expr) = parse_add_field_expr("tax = price * 0.1").unwrap();
+        let result = apply_add_field(data, &name, &expr).unwrap();
+
+        if let Value::Object(map) = result {
+            assert_eq!(map.get("tax"), Some(&Value::Float(10.0)));
+        } else {
+            panic!("expected object");
+        }
+    }
+
+    #[test]
+    fn test_add_field_preserves_existing_fields() {
+        use crate::query::parser::parse_add_field_expr;
+
+        let data = Value::Array(vec![Value::Object(IndexMap::from([
+            ("a".to_string(), Value::Integer(1)),
+            ("b".to_string(), Value::Integer(2)),
+        ]))]);
+
+        let (name, expr) = parse_add_field_expr("c = a + b").unwrap();
+        let result = apply_add_field(data, &name, &expr).unwrap();
+
+        if let Value::Array(arr) = result {
+            if let Value::Object(map) = &arr[0] {
+                assert_eq!(map.len(), 3);
+                assert_eq!(map.get("a"), Some(&Value::Integer(1)));
+                assert_eq!(map.get("b"), Some(&Value::Integer(2)));
+                assert_eq!(map.get("c"), Some(&Value::Integer(3)));
+            } else {
+                panic!("expected object");
+            }
+        } else {
+            panic!("expected array");
+        }
     }
 }
