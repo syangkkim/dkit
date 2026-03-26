@@ -53,6 +53,8 @@ pub struct ConvertArgs<'a> {
     pub data_filter: super::DataFilterOptions,
     pub parquet_opts: ParquetWriteOptions,
     pub streaming_opts: Option<super::streaming::StreamingOptions>,
+    pub dry_run: bool,
+    pub dry_run_limit: usize,
 }
 
 /// convert 서브커맨드 실행
@@ -92,6 +94,11 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     // stdin mode: no input files or explicit "-"
     let is_stdin =
         args.input.is_empty() || (args.input.len() == 1 && args.input[0] == Path::new("-"));
+
+    // --dry-run with streaming is not supported
+    if args.dry_run && args.streaming_opts.is_some() {
+        bail!("--dry-run cannot be used with --chunk-size (streaming mode)");
+    }
 
     // 스트리밍 모드: --chunk-size가 지정된 경우 스트리밍 파이프라인 시도
     if let Some(ref streaming_opts) = args.streaming_opts {
@@ -190,6 +197,19 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         };
 
         let value = super::apply_data_filters(value, &args.data_filter)?;
+
+        if args.dry_run {
+            let preview = truncate_for_preview(value, args.dry_run_limit);
+            write_output(
+                &preview,
+                target_format,
+                &write_options,
+                None,
+                &args.parquet_opts,
+            )?;
+            return Ok(());
+        }
+
         write_output(
             &value,
             target_format,
@@ -205,6 +225,11 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
 
     if resolved_files.is_empty() {
         bail!("No matching files found");
+    }
+
+    // --dry-run with batch mode is not supported
+    if args.dry_run && resolved_files.len() > 1 {
+        bail!("--dry-run cannot be used with multiple input files (batch mode)");
     }
 
     // Multiple files with --outdir (batch mode)
@@ -284,6 +309,18 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     )?;
     let value = super::apply_data_filters(value, &args.data_filter)?;
 
+    if args.dry_run {
+        let preview = truncate_for_preview(value, args.dry_run_limit);
+        write_output(
+            &preview,
+            target_format,
+            &write_options,
+            None,
+            &args.parquet_opts,
+        )?;
+        return Ok(());
+    }
+
     let outdir_path = args.outdir.map(|d| {
         let name = make_output_name(path, args.to, args.rename);
         d.join(name)
@@ -348,6 +385,29 @@ fn convert_single_file(
         Some(&out_path),
         &args.parquet_opts,
     )
+}
+
+/// dry-run 미리보기를 위해 Value를 최대 limit개 레코드로 자른다.
+fn truncate_for_preview(value: Value, limit: usize) -> Value {
+    match value {
+        Value::Array(arr) => {
+            let total = arr.len();
+            let truncated: Vec<Value> = arr.into_iter().take(limit).collect();
+            let shown = truncated.len();
+            if total > shown {
+                eprintln!(
+                    "[dry-run] Showing {shown} of {total} records (use --dry-run-limit to adjust)"
+                );
+            } else {
+                eprintln!("[dry-run] Showing all {total} records");
+            }
+            Value::Array(truncated)
+        }
+        other => {
+            eprintln!("[dry-run] Showing result (non-array data)");
+            other
+        }
+    }
 }
 
 /// 입력 경로를 확장한다: 글롭 패턴, 디렉토리, 일반 파일을 처리

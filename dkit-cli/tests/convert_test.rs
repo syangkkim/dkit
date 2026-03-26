@@ -296,6 +296,99 @@ fn convert_stdin_without_from() {
         .stdout(predicate::str::contains("name: test"));
 }
 
+// --- dry-run tests ---
+
+#[test]
+fn convert_dry_run_outputs_to_stdout() {
+    dkit()
+        .args(&[
+            "convert",
+            "tests/fixtures/users.json",
+            "-f",
+            "csv",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"))
+        .stderr(predicate::str::contains("[dry-run]"));
+}
+
+#[test]
+fn convert_dry_run_does_not_create_output_file() {
+    let tmp = TempDir::new().unwrap();
+    let out = tmp.path().join("output.csv");
+
+    dkit()
+        .args(&[
+            "convert",
+            "tests/fixtures/users.json",
+            "-f",
+            "csv",
+            "-o",
+            out.to_str().unwrap(),
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"));
+
+    assert!(
+        !out.exists(),
+        "output file should not be created in dry-run mode"
+    );
+}
+
+#[test]
+fn convert_dry_run_limit_truncates_records() {
+    // Create a file with 5 records
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("data.json");
+    fs::write(&input, r#"[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]"#).unwrap();
+
+    dkit()
+        .args(&[
+            "convert",
+            input.to_str().unwrap(),
+            "-f",
+            "json",
+            "--dry-run",
+            "--dry-run-limit",
+            "2",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Showing 2 of 5 records"));
+}
+
+#[test]
+fn convert_dry_run_with_filter() {
+    dkit()
+        .args(&[
+            "convert",
+            "tests/fixtures/users.json",
+            "-f",
+            "csv",
+            "--filter",
+            "age > 28",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Alice"))
+        .stdout(predicate::str::contains("Bob").not());
+}
+
+#[test]
+fn convert_dry_run_stdin() {
+    dkit()
+        .args(&["convert", "-", "-f", "csv", "--from", "json", "--dry-run"])
+        .write_stdin(r#"[{"a":1},{"a":2},{"a":3}]"#)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[dry-run]"));
+}
+
 #[test]
 fn convert_multiple_files_without_outdir() {
     dkit()

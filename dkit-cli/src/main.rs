@@ -323,6 +323,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             progress,
             watch,
             watch_paths,
+            dry_run,
+            dry_run_limit,
         } => {
             let run = || {
                 commands::convert::run(&commands::convert::ConvertArgs {
@@ -371,6 +373,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                         chunk_size: cs,
                         progress,
                     }),
+                    dry_run,
+                    dry_run_limit,
                 })
             };
 
