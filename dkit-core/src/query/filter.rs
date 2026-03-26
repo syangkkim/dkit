@@ -34,6 +34,8 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
             having,
             aggregates,
         } => apply_group_by(value, fields, having.as_ref(), aggregates),
+        Operation::Unique => apply_unique(value),
+        Operation::UniqueBy { field } => apply_unique_by(value, field),
     }
 }
 
@@ -389,6 +391,54 @@ fn apply_distinct(value: Value, field: &str) -> Result<Value, DkitError> {
         }
         _ => Err(DkitError::QueryError(
             "distinct requires an array input".to_string(),
+        )),
+    }
+}
+
+/// unique: 전체 레코드 동일성 기준으로 중복 제거 (첫 번째 등장 유지)
+fn apply_unique(value: Value) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut seen: Vec<Value> = Vec::new();
+            let mut result = Vec::new();
+            for item in arr {
+                if !seen.contains(&item) {
+                    seen.push(item.clone());
+                    result.push(item);
+                }
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err(DkitError::QueryError(
+            "unique requires an array input".to_string(),
+        )),
+    }
+}
+
+/// unique_by: 특정 필드 기준으로 중복 제거 (첫 번째 등장 레코드 유지)
+fn apply_unique_by(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut seen: Vec<Value> = Vec::new();
+            let mut result = Vec::new();
+            for item in arr {
+                let key = match &item {
+                    Value::Object(map) => map.get(field).cloned().unwrap_or(Value::Null),
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "unique-by requires an array of objects".to_string(),
+                        ));
+                    }
+                };
+                if !seen.contains(&key) {
+                    seen.push(key);
+                    result.push(item);
+                }
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err(DkitError::QueryError(
+            "unique-by requires an array input".to_string(),
         )),
     }
 }
@@ -2028,5 +2078,131 @@ mod tests {
         } else {
             panic!("expected array");
         }
+    }
+
+    // --- unique 테스트 ---
+
+    #[test]
+    fn test_unique_removes_exact_duplicates() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                m.insert("city".to_string(), Value::String("Seoul".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Bob".to_string()));
+                m.insert("city".to_string(), Value::String("Tokyo".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                m.insert("city".to_string(), Value::String("Seoul".to_string()));
+                Value::Object(m)
+            },
+        ]);
+        let result = apply_unique(data).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_unique_no_duplicates() {
+        let data = sample_users();
+        let result = apply_unique(data).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+    }
+
+    #[test]
+    fn test_unique_with_primitives() {
+        let data = Value::Array(vec![
+            Value::Integer(1),
+            Value::Integer(2),
+            Value::Integer(1),
+            Value::Integer(3),
+            Value::Integer(2),
+        ]);
+        let result = apply_unique(data).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0], Value::Integer(1));
+        assert_eq!(arr[1], Value::Integer(2));
+        assert_eq!(arr[2], Value::Integer(3));
+    }
+
+    #[test]
+    fn test_unique_non_array_error() {
+        let data = Value::String("hello".to_string());
+        assert!(apply_unique(data).is_err());
+    }
+
+    // --- unique_by 테스트 ---
+
+    #[test]
+    fn test_unique_by_field() {
+        let data = sample_users(); // Alice(Seoul), Bob(Busan), Charlie(Seoul)
+        let result = apply_unique_by(data, "city").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Alice(Seoul), Bob(Busan) — Charlie dropped
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_unique_by_all_different() {
+        let data = sample_users();
+        let result = apply_unique_by(data, "name").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3); // all unique names
+    }
+
+    #[test]
+    fn test_unique_by_missing_field() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Bob".to_string()));
+                Value::Object(m)
+            },
+        ]);
+        let result = apply_unique_by(data, "nonexistent").unwrap();
+        let arr = result.as_array().unwrap();
+        // Both have Null for the key, so only the first is kept
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn test_unique_by_non_array_error() {
+        let data = Value::String("hello".to_string());
+        assert!(apply_unique_by(data, "field").is_err());
+    }
+
+    #[test]
+    fn test_unique_by_non_object_elements_error() {
+        let data = Value::Array(vec![Value::Integer(1), Value::Integer(2)]);
+        assert!(apply_unique_by(data, "field").is_err());
     }
 }

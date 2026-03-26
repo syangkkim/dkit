@@ -151,6 +151,14 @@ pub enum Commands {
         #[arg(long, value_name = "EXPR")]
         agg: Option<String>,
 
+        /// Remove duplicate records (based on entire record equality)
+        #[arg(long)]
+        unique: bool,
+
+        /// Remove duplicate records based on a specific field (keeps first occurrence)
+        #[arg(long, value_name = "FIELD")]
+        unique_by: Option<String>,
+
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
         compression: String,
@@ -354,6 +362,14 @@ pub enum Commands {
         /// Aggregation functions (e.g. 'count(), sum(amount), avg(price)')
         #[arg(long, value_name = "EXPR")]
         agg: Option<String>,
+
+        /// Remove duplicate records (based on entire record equality)
+        #[arg(long)]
+        unique: bool,
+
+        /// Remove duplicate records based on a specific field (keeps first occurrence)
+        #[arg(long, value_name = "FIELD")]
+        unique_by: Option<String>,
 
         /// Watch input file for changes and auto re-run
         #[arg(long)]

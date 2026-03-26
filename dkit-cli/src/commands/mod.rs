@@ -242,6 +242,10 @@ pub struct DataFilterOptions {
     pub group_by: Option<String>,
     /// 집계 함수 목록 (예: "count(), sum(amount), avg(price)")
     pub agg: Option<String>,
+    /// 전체 레코드 기준 중복 제거
+    pub unique: bool,
+    /// 특정 필드 기준 중복 제거
+    pub unique_by: Option<String>,
 }
 
 /// --agg 문자열을 GroupAggregate 벡터로 파싱한다.
@@ -376,7 +380,17 @@ pub fn apply_data_filters(
         operations.push(Operation::Where(condition));
     }
 
-    // 2. group_by + agg (집계)
+    // 2. unique / unique-by (중복 제거)
+    if opts.unique {
+        operations.push(Operation::Unique);
+    }
+    if let Some(ref field) = opts.unique_by {
+        operations.push(Operation::UniqueBy {
+            field: field.clone(),
+        });
+    }
+
+    // 3. group_by + agg (집계)
     if let Some(ref group_fields) = opts.group_by {
         let fields: Vec<String> = group_fields
             .split(',')
@@ -402,13 +416,13 @@ pub fn apply_data_filters(
         anyhow::bail!("--agg requires --group-by\n  Hint: use --group-by 'field' --agg 'count(), sum(amount)'");
     }
 
-    // 3. select (컬럼 선택)
+    // 4. select (컬럼 선택)
     if let Some(ref fields) = opts.select {
         let select_exprs = parse_select_fields(fields)?;
         operations.push(Operation::Select(select_exprs));
     }
 
-    // 4. sort
+    // 5. sort
     if let Some(ref field) = opts.sort_by {
         operations.push(Operation::Sort {
             field: field.clone(),
@@ -416,7 +430,7 @@ pub fn apply_data_filters(
         });
     }
 
-    // 5. head (= limit)
+    // 6. head (= limit)
     if let Some(n) = opts.head {
         operations.push(Operation::Limit(n));
     }
