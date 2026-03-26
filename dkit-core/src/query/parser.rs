@@ -58,6 +58,10 @@ pub enum Operation {
         having: Option<Condition>,
         aggregates: Vec<GroupAggregate>,
     },
+    /// 전체 레코드 동일성 기준 중복 제거
+    Unique,
+    /// 특정 필드 기준 중복 제거 (첫 번째 등장 레코드 유지)
+    UniqueBy { field: String },
 }
 
 /// GROUP BY 집계 연산 정의
