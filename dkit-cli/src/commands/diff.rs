@@ -8,6 +8,7 @@ use super::{
     read_xlsx_from_bytes, EncodingOptions, ExcelOptions, SqliteOptions,
 };
 use dkit_core::format::csv::CsvReader;
+use dkit_core::format::env::EnvReader;
 use dkit_core::format::json::JsonReader;
 use dkit_core::format::jsonl::JsonlReader;
 use dkit_core::format::msgpack::MsgpackReader;
@@ -212,6 +213,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Yaml => YamlReader.read(content),
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
+        Format::Env => EnvReader.read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
