@@ -207,6 +207,24 @@ pub struct FormatOptions {
 - `list_tables()`: 테이블 이름 목록 반환
 - **제한**: 입력 전용 (쓰기 불가)
 
+### .env ↔ Value
+
+- `KEY=VALUE` 라인 기반 포맷 (환경 변수 설정 파일)
+- 주석: `#` 으로 시작하는 줄 (무시)
+- 빈 줄 무시
+- `export` 접두사 자동 제거 (`export KEY=VALUE` → `KEY=VALUE`)
+- 큰따옴표/작은따옴표 값 지원 (`KEY="value with spaces"`, `KEY='literal'`)
+- 큰따옴표 내 이스케이프 시퀀스: `\n`, `\r`, `\t`, `\"`, `\\`
+- 인라인 주석 지원 (따옴표 밖 `#` 이후)
+- 데이터 모델: flat `Value::Object` (중첩 구조 없음)
+- 읽기: 항상 `Value::Object(IndexMap<String, Value>)` 반환 (값은 `Value::String`)
+- 쓰기: 특수문자 포함 값은 자동으로 큰따옴표 감싸기
+- 빈 값: `KEY=` → `Value::String("")`
+- Null 값: `KEY=` 로 출력
+- 배열/객체 값: JSON 직렬화 후 작은따옴표로 감싸기
+- 포맷 자동 감지: `.env` 확장자
+- **제한**: 변수 확장 (`$VAR`, `${VAR}`) 미지원
+
 ### HTML → Value (출력 전용)
 
 - HTML 테이블 생성 (Array<Object>, Single Object, Array<Primitive>)

@@ -52,6 +52,16 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 | `--outdir <DIR>` | | 일괄 변환 시 출력 디렉토리 | |
 | `--rename <PATTERN>` | | 일괄 변환 시 파일명 패턴 (`{name}`, `{ext}`) | |
 | `--continue-on-error` | | 일괄 변환 시 에러 발생해도 계속 진행 | false |
+| `--select <FIELDS>` | | 선택할 필드 목록 (쉼표 구분) | 전체 |
+| `--group-by <FIELDS>` | | 그룹핑 기준 필드 (쉼표 구분) | |
+| `--agg <EXPR>` | | 집계 함수 (`count()`, `sum(field)`, `avg(field)`, `min(field)`, `max(field)`) | |
+| `--filter <EXPR>` | | 필터 표현식 | |
+| `--sort-by <FIELD>` | | 정렬 기준 필드 | |
+| `--sort-order <ORDER>` | | 정렬 방향 (`asc`, `desc`) | `asc` |
+| `--head <N>` | | 처음 N개 레코드만 출력 | |
+| `--tail <N>` | | 마지막 N개 레코드만 출력 | |
+| `--dry-run` | | 미리보기 모드 (파일 생성 없이 stdout으로 출력) | false |
+| `--dry-run-limit <N>` | | 미리보기 시 출력 레코드 수 | 10 |
 
 ### Examples
 
@@ -119,6 +129,27 @@ dkit convert data.csv --to json --encoding euc-kr        # EUC-KR 입력
 dkit convert data.csv --to json --encoding shift_jis     # Shift-JIS 입력
 dkit convert data.csv --to json --encoding latin1        # Latin1 입력
 dkit convert data.csv --to json --detect-encoding        # 인코딩 자동 감지
+
+# 컬럼 선택 (--select)
+dkit convert data.json --to csv --select 'name, email'   # name, email 컬럼만 출력
+dkit convert data.csv --to json --select 'id, status'    # 특정 필드만 선택
+
+# 그룹핑 및 집계 (--group-by + --agg)
+dkit convert sales.csv --to json --group-by category --agg 'count(), sum(amount)'
+dkit convert data.json --to csv --group-by status --agg 'count(), avg(score), min(score), max(score)'
+
+# 필터 + 선택 + 정렬 조합
+dkit convert data.json --to csv --select 'name, age' --filter 'age > 30' --sort-by age
+dkit convert data.csv --to json --filter 'status == "active"' --head 10
+
+# 미리보기 (--dry-run)
+dkit convert huge.json --to csv -o output.csv --dry-run         # 파일 생성 없이 미리보기
+dkit convert data.json --to csv --dry-run --dry-run-limit 5     # 처음 5개 레코드만 미리보기
+
+# .env 포맷 변환
+dkit convert .env --to json                              # .env → JSON
+dkit convert config.json --to env -o .env                # JSON → .env
+dkit convert .env --to yaml                              # .env → YAML
 ```
 
 ## query
@@ -214,6 +245,11 @@ dkit view <INPUT> [OPTIONS]
 | `--list-sheets` | Excel 시트 목록 출력 | |
 | `--table <TABLE>` | SQLite 테이블 이름 | 첫 번째 테이블 |
 | `--list-tables` | SQLite 테이블 목록 출력 | |
+| `--select <FIELDS>` | 선택할 필드 목록 (쉼표 구분) | 전체 |
+| `--group-by <FIELDS>` | 그룹핑 기준 필드 (쉼표 구분) | |
+| `--agg <EXPR>` | 집계 함수 | |
+| `--filter <EXPR>` | 필터 표현식 | |
+| `--sort-by <FIELD>` | 정렬 기준 필드 | |
 
 ### Examples
 
@@ -244,6 +280,14 @@ dkit view data.xlsx --list-sheets                # 시트 목록
 dkit view data.db                                # SQLite 테이블 미리보기
 dkit view data.db --table users                  # 특정 테이블 보기
 dkit view data.db --list-tables                  # 테이블 목록
+
+# 컬럼 선택 및 집계
+dkit view data.json --select 'name, email'       # 특정 필드만 표시
+dkit view sales.csv --group-by category --agg 'count(), sum(amount)'  # 집계 테이블
+dkit view data.csv --select 'name, score' --filter 'score > 80' --sort-by score
+
+# .env 파일 보기
+dkit view .env                                   # .env 파일 테이블로 보기
 ```
 
 ## stats
@@ -264,6 +308,7 @@ dkit stats <INPUT> [OPTIONS]
 | `--column <NAME>` | 특정 컬럼 통계 |
 | `--field <NAME>` | 특정 필드 상세 분석 (`--column` 별칭) |
 | `-f, --format <FORMAT>` | 출력 포맷 (`json`, `table`, `md`) |
+| `--output-format <FORMAT>` / `-O` | 출력 포맷 (`table`, `json`, `yaml`) — 기본값: `table` |
 | `--histogram` | 숫자 필드에 텍스트 히스토그램 출력 |
 
 ### Output
@@ -321,6 +366,11 @@ dkit stats data.csv --column revenue
 dkit stats data.csv --field revenue --format json
 dkit stats data.csv --format md
 dkit stats data.csv --column age --histogram
+
+# JSON/YAML 출력 (프로그래밍적 활용)
+dkit stats data.csv --output-format json         # JSON 구조화 출력
+dkit stats data.csv --output-format yaml         # YAML 출력
+dkit stats data.csv --output-format json | dkit query - '.columns[].name'  # 파이프라인
 ```
 
 ## schema
@@ -330,8 +380,14 @@ dkit stats data.csv --column age --histogram
 ### Usage
 
 ```bash
-dkit schema <INPUT>
+dkit schema <INPUT> [OPTIONS]
 ```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--output-format <FORMAT>` / `-O` | 출력 포맷 (`tree`, `json`, `yaml`) — 기본값: `tree` |
 
 ### Output
 
@@ -347,6 +403,16 @@ root: object
 └─ users: array[object]
    ├─ name: string
    └─ email: string
+```
+
+### Examples
+
+```bash
+dkit schema config.yaml
+dkit schema data.json
+dkit schema data.json --output-format json       # JSON Schema 형태로 출력
+dkit schema data.json --output-format yaml       # YAML 출력
+cat data.json | dkit schema - --from json
 ```
 
 ## merge
