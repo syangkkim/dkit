@@ -175,6 +175,10 @@ pub enum Commands {
         #[arg(long = "map", value_name = "EXPR")]
         map_field: Vec<String>,
 
+        /// Explode (unnest) an array field into individual rows. Can be used multiple times
+        #[arg(long, value_name = "FIELD")]
+        explode: Vec<String>,
+
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
         compression: String,
@@ -394,6 +398,10 @@ pub enum Commands {
         /// Transform an existing field's value (e.g. 'name = upper(name)'). Can be used multiple times
         #[arg(long = "map", value_name = "EXPR")]
         map_field: Vec<String>,
+
+        /// Explode (unnest) an array field into individual rows. Can be used multiple times
+        #[arg(long, value_name = "FIELD")]
+        explode: Vec<String>,
 
         /// Watch input file for changes and auto re-run
         #[arg(long)]

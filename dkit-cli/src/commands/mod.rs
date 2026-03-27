@@ -250,6 +250,8 @@ pub struct DataFilterOptions {
     pub add_field: Vec<String>,
     /// 기존 필드 값 변환 표현식 목록 (예: "name = upper(name)")
     pub map_field: Vec<String>,
+    /// 배열 필드를 개별 행으로 펼침 (unnest/flatten)
+    pub explode: Vec<String>,
 }
 
 /// --agg 문자열을 GroupAggregate 벡터로 파싱한다.
@@ -382,6 +384,13 @@ pub fn apply_data_filters(
             )
         })?;
         operations.push(Operation::Where(condition));
+    }
+
+    // 1b. explode (배열 필드 펼침)
+    for field in &opts.explode {
+        operations.push(Operation::Explode {
+            field: field.clone(),
+        });
     }
 
     // 2. add-field (계산 필드 추가)
