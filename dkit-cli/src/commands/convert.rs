@@ -12,6 +12,7 @@ use super::{
 use dkit_core::format::csv::{CsvReader, CsvWriter};
 use dkit_core::format::env::{EnvReader, EnvWriter};
 use dkit_core::format::html::HtmlWriter;
+use dkit_core::format::ini::{IniReader, IniWriter};
 use dkit_core::format::json::{JsonReader, JsonWriter};
 use dkit_core::format::jsonl::{JsonlReader, JsonlWriter};
 use dkit_core::format::markdown::MarkdownWriter;
@@ -27,8 +28,8 @@ use dkit_core::value::Value;
 
 /// 지원되는 입력 파일 확장자 목록
 const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "json", "jsonl", "ndjson", "csv", "tsv", "yaml", "yml", "toml", "env", "xml", "msgpack",
-    "xlsx", "xls", "xlsm", "xlsb", "ods", "db", "sqlite", "sqlite3", "parquet", "pq",
+    "json", "jsonl", "ndjson", "csv", "tsv", "yaml", "yml", "toml", "env", "ini", "cfg", "xml",
+    "msgpack", "xlsx", "xls", "xlsm", "xlsb", "ods", "db", "sqlite", "sqlite3", "parquet", "pq",
 ];
 
 pub struct ConvertArgs<'a> {
@@ -552,6 +553,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Toml => TomlReader.read(content),
         Format::Xml => XmlReader::default().read(content),
         Format::Env => EnvReader.read(content),
+        Format::Ini => IniReader.read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
@@ -618,6 +620,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Toml => TomlWriter::new(options.clone()).write(value),
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Env => EnvWriter.write(value),
+        Format::Ini => IniWriter.write(value),
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
