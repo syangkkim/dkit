@@ -37,6 +37,7 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         Operation::Unique => apply_unique(value),
         Operation::UniqueBy { field } => apply_unique_by(value, field),
         Operation::AddField { name, expr } => apply_add_field(value, name, expr),
+        Operation::MapField { name, expr } => apply_map_field(value, name, expr),
     }
 }
 
@@ -471,6 +472,36 @@ fn apply_add_field(value: Value, name: &str, expr: &Expr) -> Result<Value, DkitE
         }
         _ => Err(DkitError::QueryError(
             "add-field requires an array or object input".to_string(),
+        )),
+    }
+}
+
+/// map_field: 기존 필드의 값을 표현식 결과로 변환 (값 덮어쓰기)
+fn apply_map_field(value: Value, name: &str, expr: &Expr) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut result = Vec::with_capacity(arr.len());
+            for item in arr {
+                match item {
+                    Value::Object(mut map) => {
+                        let computed = evaluate_expr(&Value::Object(map.clone()), expr)?;
+                        map.insert(name.to_string(), computed);
+                        result.push(Value::Object(map));
+                    }
+                    other => {
+                        result.push(other);
+                    }
+                }
+            }
+            Ok(Value::Array(result))
+        }
+        Value::Object(mut map) => {
+            let computed = evaluate_expr(&Value::Object(map.clone()), expr)?;
+            map.insert(name.to_string(), computed);
+            Ok(Value::Object(map))
+        }
+        _ => Err(DkitError::QueryError(
+            "map requires an array or object input".to_string(),
         )),
     }
 }
