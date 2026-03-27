@@ -25,6 +25,14 @@ pub enum Segment {
     Index(i64),
     /// 배열 이터레이션 (`[]`)
     Iterate,
+    /// 배열 슬라이싱 (`[0:3]`, `[-2:]`, `[::2]`)
+    Slice {
+        start: Option<i64>,
+        end: Option<i64>,
+        step: Option<i64>,
+    },
+    /// 배열 와일드카드 (`[*]`) — Iterate와 동일 의미
+    Wildcard,
 }
 
 /// Pipeline operation applied after path navigation (e.g., `| where ...`, `| sort ...`).
@@ -274,7 +282,7 @@ impl Parser {
         Ok(Segment::Field(name))
     }
 
-    /// `[...]` 파싱: 인덱스 또는 이터레이션
+    /// `[...]` 파싱: 인덱스, 이터레이션, 슬라이스, 와일드카드
     fn parse_bracket(&mut self) -> Result<Segment, DkitError> {
         if !self.consume_char('[') {
             return Err(DkitError::QueryError(format!(
@@ -291,7 +299,25 @@ impl Parser {
             return Ok(Segment::Iterate);
         }
 
-        // `[N]` or `[-N]` — 인덱스
+        // `[*]` — 와일드카드
+        if self.peek() == Some('*') {
+            self.advance();
+            self.skip_whitespace();
+            if !self.consume_char(']') {
+                return Err(DkitError::QueryError(format!(
+                    "expected ']' after '*' at position {}",
+                    self.pos
+                )));
+            }
+            return Ok(Segment::Wildcard);
+        }
+
+        // `[:]` — 슬라이스 (콜론으로 시작)
+        if self.peek() == Some(':') {
+            return self.parse_slice(None);
+        }
+
+        // 숫자 파싱 (인덱스 또는 슬라이스의 start)
         let negative = self.consume_char('-');
         let start = self.pos;
         while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
@@ -305,9 +331,62 @@ impl Parser {
         }
 
         let num_str: String = self.input[start..self.pos].iter().collect();
-        let index: i64 = num_str.parse().map_err(|_| {
+        let num: i64 = num_str.parse().map_err(|_| {
             DkitError::QueryError(format!("invalid index '{}' at position {}", num_str, start))
         })?;
+        let num = if negative { -num } else { num };
+
+        self.skip_whitespace();
+
+        // `:` 이 나오면 슬라이스
+        if self.peek() == Some(':') {
+            return self.parse_slice(Some(num));
+        }
+
+        // `]` 이면 단일 인덱스
+        if !self.consume_char(']') {
+            return Err(DkitError::QueryError(format!(
+                "expected ']' or ':' at position {}",
+                self.pos
+            )));
+        }
+
+        Ok(Segment::Index(num))
+    }
+
+    /// 슬라이스 나머지 파싱: start는 이미 파싱됨, `:` 부터 시작
+    fn parse_slice(&mut self, start: Option<i64>) -> Result<Segment, DkitError> {
+        // consume first ':'
+        if !self.consume_char(':') {
+            return Err(DkitError::QueryError(format!(
+                "expected ':' at position {}",
+                self.pos
+            )));
+        }
+
+        self.skip_whitespace();
+
+        // end 파싱
+        let end = if self.peek() == Some(']') || self.peek() == Some(':') {
+            None
+        } else {
+            Some(self.parse_signed_integer()?)
+        };
+
+        self.skip_whitespace();
+
+        // step 파싱 (optional second ':')
+        let step = if self.peek() == Some(':') {
+            self.advance();
+            self.skip_whitespace();
+            if self.peek() == Some(']') {
+                None
+            } else {
+                Some(self.parse_signed_integer()?)
+            }
+        } else {
+            None
+        };
 
         self.skip_whitespace();
         if !self.consume_char(']') {
@@ -317,7 +396,30 @@ impl Parser {
             )));
         }
 
-        Ok(Segment::Index(if negative { -index } else { index }))
+        Ok(Segment::Slice { start, end, step })
+    }
+
+    /// 부호 있는 정수 파싱
+    fn parse_signed_integer(&mut self) -> Result<i64, DkitError> {
+        let negative = self.consume_char('-');
+        let start = self.pos;
+        while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
+            self.pos += 1;
+        }
+        if self.pos == start {
+            return Err(DkitError::QueryError(format!(
+                "expected integer at position {}",
+                self.pos
+            )));
+        }
+        let num_str: String = self.input[start..self.pos].iter().collect();
+        let num: i64 = num_str.parse().map_err(|_| {
+            DkitError::QueryError(format!(
+                "invalid integer '{}' at position {}",
+                num_str, start
+            ))
+        })?;
+        Ok(if negative { -num } else { num })
     }
 
     // --- 파이프라인 연산 파싱 ---
@@ -1194,6 +1296,137 @@ mod tests {
                 Segment::Iterate,
                 Segment::Field("name".to_string()),
             ]
+        );
+    }
+
+    // --- 배열 와일드카드 ---
+
+    #[test]
+    fn test_array_wildcard() {
+        let q = parse_query(".[*]").unwrap();
+        assert_eq!(q.path.segments, vec![Segment::Wildcard]);
+    }
+
+    #[test]
+    fn test_array_wildcard_with_field() {
+        let q = parse_query(".users[*].name").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![
+                Segment::Field("users".to_string()),
+                Segment::Wildcard,
+                Segment::Field("name".to_string()),
+            ]
+        );
+    }
+
+    // --- 배열 슬라이싱 ---
+
+    #[test]
+    fn test_array_slice_basic() {
+        let q = parse_query(".[0:3]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: Some(0),
+                end: Some(3),
+                step: None
+            }]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_open_end() {
+        let q = parse_query(".[1:]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: Some(1),
+                end: None,
+                step: None
+            }]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_open_start() {
+        let q = parse_query(".[:3]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: None,
+                end: Some(3),
+                step: None
+            }]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_negative() {
+        let q = parse_query(".[-2:]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: Some(-2),
+                end: None,
+                step: None
+            }]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_with_step() {
+        let q = parse_query(".[1:5:2]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: Some(1),
+                end: Some(5),
+                step: Some(2)
+            }]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_full_open() {
+        let q = parse_query(".[:]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: None,
+                end: None,
+                step: None
+            }]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_with_field() {
+        let q = parse_query(".users[0:3].name").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![
+                Segment::Field("users".to_string()),
+                Segment::Slice {
+                    start: Some(0),
+                    end: Some(3),
+                    step: None
+                },
+                Segment::Field("name".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_array_slice_reverse_step() {
+        let q = parse_query(".[::-1]").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::Slice {
+                start: None,
+                end: None,
+                step: Some(-1)
+            }]
         );
     }
 
