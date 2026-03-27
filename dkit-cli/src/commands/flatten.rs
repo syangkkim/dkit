@@ -11,6 +11,7 @@ use super::{
 };
 use dkit_core::format::csv::{CsvReader, CsvWriter};
 use dkit_core::format::env::{EnvReader, EnvWriter};
+use dkit_core::format::hcl::{HclReader, HclWriter};
 use dkit_core::format::html::HtmlWriter;
 use dkit_core::format::ini::{IniReader, IniWriter};
 use dkit_core::format::json::{JsonReader, JsonWriter};
@@ -482,6 +483,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Env => EnvReader.read(content),
         Format::Ini => IniReader.read(content),
         Format::Properties => PropertiesReader.read(content),
+        Format::Hcl => HclReader.read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
@@ -552,6 +554,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Env => EnvWriter.write(value),
         Format::Ini => IniWriter.write(value),
         Format::Properties => PropertiesWriter.write(value),
+        Format::Hcl => HclWriter.write(value),
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),

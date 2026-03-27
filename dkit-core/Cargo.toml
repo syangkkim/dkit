@@ -17,7 +17,8 @@ msgpack = ["dep:rmp-serde"]
 excel = ["dep:calamine"]
 sqlite = ["dep:rusqlite"]
 parquet = ["dep:arrow", "dep:parquet-impl", "dep:bytes"]
-all = ["xml", "msgpack", "excel", "sqlite", "parquet"]
+hcl = ["dep:hcl-rs"]
+all = ["xml", "msgpack", "excel", "sqlite", "parquet", "hcl"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -35,6 +36,7 @@ rusqlite = { version = "0.31", features = ["bundled"], optional = true }
 arrow = { version = "53", default-features = false, features = ["prettyprint"], optional = true }
 parquet-impl = { package = "parquet", version = "53", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
 bytes = { version = "1", optional = true }
+hcl-rs = { version = "0.19", optional = true }
 jsonschema = { version = "0.17", default-features = false }
 rand = "0.8"
 regex = "1"
