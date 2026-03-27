@@ -26,7 +26,8 @@ excel = ["dkit-core/excel"]
 sqlite = ["dkit-core/sqlite"]
 parquet = ["dkit-core/parquet", "dep:arrow", "dep:parquet-impl", "dep:bytes"]
 hcl = ["dkit-core/hcl"]
-all = ["xml", "msgpack", "excel", "sqlite", "parquet", "hcl"]
+plist = ["dkit-core/plist"]
+all = ["xml", "msgpack", "excel", "sqlite", "parquet", "hcl", "plist"]
 
 [dependencies]
 dkit-core = { version = "1.2.0", path = "../dkit-core" }

@@ -239,6 +239,38 @@ pub mod hcl {
     }
 }
 
+/// macOS Property List (plist) reader and writer.
+#[cfg(feature = "plist")]
+pub mod plist;
+#[cfg(not(feature = "plist"))]
+pub mod plist {
+    //! Stub module — plist feature not enabled.
+    use super::{FormatReader, FormatWriter};
+    use crate::value::Value;
+    use std::io::{Read, Write};
+
+    const MSG: &str = "Plist support requires the 'plist' feature.\n  Install with: cargo install dkit --features plist";
+
+    pub struct PlistReader;
+    impl FormatReader for PlistReader {
+        fn read(&self, _: &str) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        fn read_from_reader(&self, _: impl Read) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+    }
+    pub struct PlistWriter;
+    impl FormatWriter for PlistWriter {
+        fn write(&self, _: &Value) -> anyhow::Result<String> {
+            anyhow::bail!(MSG)
+        }
+        fn write_to_writer(&self, _: &Value, _: impl Write) -> anyhow::Result<()> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
+
 /// XML reader and writer.
 #[cfg(feature = "xml")]
 pub mod xml;
@@ -334,6 +366,8 @@ pub enum Format {
     Properties,
     /// HCL (HashiCorp Configuration Language) (`*.hcl`, `*.tf`, `*.tfvars`)
     Hcl,
+    /// macOS Property List (`*.plist`)
+    Plist,
 }
 
 impl Format {
@@ -357,6 +391,7 @@ impl Format {
             "ini" | "cfg" | "conf" | "config" => Ok(Format::Ini),
             "properties" => Ok(Format::Properties),
             "hcl" | "tf" | "tfvars" => Ok(Format::Hcl),
+            "plist" => Ok(Format::Plist),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -413,6 +448,15 @@ impl Format {
             ));
         }
 
+        if cfg!(feature = "plist") {
+            formats.push(("plist", "macOS Property List format"));
+        } else {
+            formats.push((
+                "plist",
+                "macOS Property List format (requires --features plist)",
+            ));
+        }
+
         formats.push(("env", "Environment variables (.env) format"));
         formats.push(("ini", "INI/CFG configuration file format"));
         formats.push(("properties", "Java .properties file format"));
@@ -444,6 +488,7 @@ impl std::fmt::Display for Format {
             Format::Ini => write!(f, "INI"),
             Format::Properties => write!(f, "Properties"),
             Format::Hcl => write!(f, "HCL"),
+            Format::Plist => write!(f, "Plist"),
         }
     }
 }
@@ -474,6 +519,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("ini" | "cfg") => Ok(Format::Ini),
         Some("properties") => Ok(Format::Properties),
         Some("hcl" | "tf" | "tfvars") => Ok(Format::Hcl),
+        Some("plist") => Ok(Format::Plist),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
@@ -497,8 +543,11 @@ pub fn detect_format_from_content(content: &str) -> Result<(Format, Option<char>
         ));
     }
 
-    // XML: <?xml 또는 루트 태그로 시작
+    // Plist: <?xml followed by <!DOCTYPE plist or <plist
     if trimmed.starts_with("<?xml") || trimmed.starts_with("<!DOCTYPE") {
+        if trimmed.contains("<!DOCTYPE plist") || trimmed.contains("<plist") {
+            return Ok((Format::Plist, None));
+        }
         return Ok((Format::Xml, None));
     }
 
