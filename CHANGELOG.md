@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-27
+
+### Added
+
+- **`--unique` / `--unique-by` flags**: Deduplicate records by full equality or by a specific field — `dkit convert data.json -f json --unique-by city`. (#187)
+- **`--add-field` flag (computed columns)**: Add derived fields using expressions — `dkit convert sales.csv -f csv --add-field 'total = amount * quantity'`. Supports arithmetic and string concatenation. (#188)
+- **`--map` flag (value transformation)**: Transform existing field values in-place — `dkit convert data.json -f json --map 'name = upper(name)'`. Reuses the query engine's function library. (#189)
+- **Array slicing & wildcard in query**: Python-style array slicing (`.[0:3]`, `.[-2:]`) and wildcard (`.[*].name`) in query path expressions. (#190)
+- **`.ini` / `.cfg` format Reader/Writer**: Read and write INI/CFG configuration files with section-based structure. Supports `=`/`:` delimiters, `#`/`;` comments, and `.cfg` extension. (#191)
+- **`.properties` format Reader/Writer**: Read and write Java `.properties` files with support for `=`/`:`/space delimiters, `#`/`!` comments, `\` line continuation, and Unicode escapes. (#192)
+- **`IN` / `NOT IN` operator**: Filter query results with set membership — `select * where status in ("active", "pending")`. (#208)
+- **`matches` regex operator**: Pattern matching in where clauses — `select * where email matches ".*@gmail\\.com$"`. Supports `NOT MATCHES`. (#209)
+- **`--indent`, `--sort-keys`, `--compact` JSON output options**: Control JSON formatting — custom indent width, alphabetical key sorting, and minified output. (#210)
+- **Additional string functions**: `index_of`, `rindex_of`, `starts_with`, `ends_with`, `reverse`, `repeat`, `pad_left`, `pad_right` for query expressions. (#211)
+
+### Testing & Docs
+
+- **Comprehensive v1.2.0 integration tests**: End-to-end tests for all new features, updated README and docs. (#200)
+
 ## [1.1.0] - 2026-03-26
 
 ### Added
@@ -157,7 +176,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
-[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/syangkkim/dkit/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/syangkkim/dkit/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/syangkkim/dkit/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/syangkkim/dkit/releases/tag/v0.9.0
