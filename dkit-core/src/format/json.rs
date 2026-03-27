@@ -1,9 +1,27 @@
 use std::io::{Read, Write};
 
 use indexmap::IndexMap;
+use serde::Serialize;
 
 use crate::format::{FormatOptions, FormatReader, FormatWriter};
 use crate::value::Value;
+
+/// Recursively sort all object keys alphabetically
+fn sort_value_keys(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut sorted: IndexMap<String, Value> = IndexMap::new();
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            for key in keys {
+                sorted.insert(key.clone(), sort_value_keys(&map[key]));
+            }
+            Value::Object(sorted)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(sort_value_keys).collect()),
+        other => other.clone(),
+    }
+}
 
 /// serde_json::Value → 내부 Value 변환
 pub fn from_json_value(v: serde_json::Value) -> Value {
@@ -102,35 +120,99 @@ impl JsonWriter {
     }
 }
 
-impl FormatWriter for JsonWriter {
-    fn write(&self, value: &Value) -> anyhow::Result<String> {
-        let json_val = to_json_value(value);
-        let output = if self.options.compact {
-            serde_json::to_string(&json_val)
-        } else if self.options.pretty {
-            serde_json::to_string_pretty(&json_val)
-        } else {
-            serde_json::to_string(&json_val)
-        };
-        output.map_err(|e| {
+impl JsonWriter {
+    /// Serialize a serde_json::Value with custom indent string
+    fn serialize_with_indent(json_val: &serde_json::Value, indent: &str) -> anyhow::Result<String> {
+        let mut buf = Vec::new();
+        let formatter = serde_json::ser::PrettyFormatter::with_indent(indent.as_bytes());
+        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+        serde_json::Value::serialize(json_val, &mut ser).map_err(|e| {
             crate::error::DkitError::WriteError {
                 format: "JSON".to_string(),
                 source: Box::new(e),
             }
-            .into()
+        })?;
+        Ok(String::from_utf8(buf)?)
+    }
+
+    fn serialize_with_indent_to_writer(
+        json_val: &serde_json::Value,
+        indent: &str,
+        writer: impl Write,
+    ) -> anyhow::Result<()> {
+        let formatter = serde_json::ser::PrettyFormatter::with_indent(indent.as_bytes());
+        let mut ser = serde_json::Serializer::with_formatter(writer, formatter);
+        serde_json::Value::serialize(json_val, &mut ser).map_err(|e| {
+            crate::error::DkitError::WriteError {
+                format: "JSON".to_string(),
+                source: Box::new(e),
+            }
+        })?;
+        Ok(())
+    }
+
+    /// Resolve the indent string from options
+    fn resolve_indent(&self) -> Option<String> {
+        self.options.indent.as_ref().map(|v| {
+            if v.eq_ignore_ascii_case("tab") {
+                "\t".to_string()
+            } else if let Ok(n) = v.parse::<usize>() {
+                " ".repeat(n)
+            } else {
+                // fallback: default 2 spaces
+                "  ".to_string()
+            }
         })
     }
 
+    fn prepare_value(&self, value: &Value) -> serde_json::Value {
+        let value = if self.options.sort_keys {
+            sort_value_keys(value)
+        } else {
+            value.clone()
+        };
+        to_json_value(&value)
+    }
+}
+
+impl FormatWriter for JsonWriter {
+    fn write(&self, value: &Value) -> anyhow::Result<String> {
+        let json_val = self.prepare_value(value);
+        let output = if self.options.compact {
+            serde_json::to_string(&json_val).map_err(|e| crate::error::DkitError::WriteError {
+                format: "JSON".to_string(),
+                source: Box::new(e),
+            })?
+        } else if let Some(indent) = self.resolve_indent() {
+            Self::serialize_with_indent(&json_val, &indent)?
+        } else if self.options.pretty {
+            serde_json::to_string_pretty(&json_val).map_err(|e| {
+                crate::error::DkitError::WriteError {
+                    format: "JSON".to_string(),
+                    source: Box::new(e),
+                }
+            })?
+        } else {
+            serde_json::to_string(&json_val).map_err(|e| crate::error::DkitError::WriteError {
+                format: "JSON".to_string(),
+                source: Box::new(e),
+            })?
+        };
+        Ok(output)
+    }
+
     fn write_to_writer(&self, value: &Value, mut writer: impl Write) -> anyhow::Result<()> {
-        let json_val = to_json_value(value);
-        let result = if self.options.compact {
+        let json_val = self.prepare_value(value);
+        if self.options.compact {
             serde_json::to_writer(&mut writer, &json_val)
+        } else if let Some(indent) = self.resolve_indent() {
+            return Self::serialize_with_indent_to_writer(&json_val, &indent, &mut writer);
         } else if self.options.pretty {
             serde_json::to_writer_pretty(&mut writer, &json_val)
         } else {
             serde_json::to_writer(&mut writer, &json_val)
-        };
-        result.map_err(|e| crate::error::DkitError::WriteError {
+        }
+        .map_err(|e| crate::error::DkitError::WriteError {
             format: "JSON".to_string(),
             source: Box::new(e),
         })?;
@@ -419,5 +501,172 @@ mod tests {
             .get("d")
             .unwrap();
         assert_eq!(d, &Value::Integer(1));
+    }
+
+    // --- --indent, --sort-keys, --compact 테스트 ---
+
+    #[test]
+    fn test_writer_indent_2_spaces() {
+        let writer = JsonWriter::new(FormatOptions {
+            indent: Some("2".to_string()),
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("a".to_string(), Value::Integer(1));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        assert!(output.contains("\n  \"a\""));
+        assert!(!output.contains("    \"a\"")); // not 4 spaces
+    }
+
+    #[test]
+    fn test_writer_indent_4_spaces() {
+        let writer = JsonWriter::new(FormatOptions {
+            indent: Some("4".to_string()),
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("x".to_string(), Value::Integer(42));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        assert!(output.contains("\n    \"x\""));
+    }
+
+    #[test]
+    fn test_writer_indent_tab() {
+        let writer = JsonWriter::new(FormatOptions {
+            indent: Some("tab".to_string()),
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("a".to_string(), Value::Integer(1));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        assert!(output.contains("\n\t\"a\""));
+    }
+
+    #[test]
+    fn test_writer_sort_keys() {
+        let writer = JsonWriter::new(FormatOptions {
+            compact: true,
+            sort_keys: true,
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("zebra".to_string(), Value::Integer(1));
+            m.insert("apple".to_string(), Value::Integer(2));
+            m.insert("mango".to_string(), Value::Integer(3));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        assert_eq!(output, r#"{"apple":2,"mango":3,"zebra":1}"#);
+    }
+
+    #[test]
+    fn test_writer_sort_keys_nested() {
+        let writer = JsonWriter::new(FormatOptions {
+            compact: true,
+            sort_keys: true,
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert(
+                "z".to_string(),
+                Value::Object({
+                    let mut inner = IndexMap::new();
+                    inner.insert("b".to_string(), Value::Integer(2));
+                    inner.insert("a".to_string(), Value::Integer(1));
+                    inner
+                }),
+            );
+            m.insert("a".to_string(), Value::Integer(0));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        assert_eq!(output, r#"{"a":0,"z":{"a":1,"b":2}}"#);
+    }
+
+    #[test]
+    fn test_writer_indent_and_sort_keys() {
+        let writer = JsonWriter::new(FormatOptions {
+            indent: Some("2".to_string()),
+            sort_keys: true,
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("c".to_string(), Value::Integer(3));
+            m.insert("a".to_string(), Value::Integer(1));
+            m.insert("b".to_string(), Value::Integer(2));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        // Keys should be sorted and indent should be 2 spaces
+        assert!(output.contains("\"a\": 1"));
+        let keys_pos_a = output.find("\"a\"").unwrap();
+        let keys_pos_b = output.find("\"b\"").unwrap();
+        let keys_pos_c = output.find("\"c\"").unwrap();
+        assert!(keys_pos_a < keys_pos_b);
+        assert!(keys_pos_b < keys_pos_c);
+    }
+
+    #[test]
+    fn test_writer_compact_overrides_indent() {
+        let writer = JsonWriter::new(FormatOptions {
+            compact: true,
+            indent: Some("4".to_string()),
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("a".to_string(), Value::Integer(1));
+            m
+        });
+        let output = writer.write(&v).unwrap();
+        assert_eq!(output, r#"{"a":1}"#);
+    }
+
+    #[test]
+    fn test_writer_to_writer_with_indent() {
+        let writer = JsonWriter::new(FormatOptions {
+            indent: Some("2".to_string()),
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("key".to_string(), Value::String("val".to_string()));
+            m
+        });
+        let mut buf = Vec::new();
+        writer.write_to_writer(&v, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("\n  \"key\""));
+    }
+
+    #[test]
+    fn test_writer_to_writer_with_sort_keys() {
+        let writer = JsonWriter::new(FormatOptions {
+            compact: true,
+            sort_keys: true,
+            ..Default::default()
+        });
+        let v = Value::Object({
+            let mut m = IndexMap::new();
+            m.insert("z".to_string(), Value::Integer(1));
+            m.insert("a".to_string(), Value::Integer(2));
+            m
+        });
+        let mut buf = Vec::new();
+        writer.write_to_writer(&v, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert_eq!(output, r#"{"a":2,"z":1}"#);
     }
 }

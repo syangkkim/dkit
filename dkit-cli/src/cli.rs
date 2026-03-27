@@ -67,6 +67,14 @@ pub enum Commands {
         #[arg(long, conflicts_with = "pretty")]
         compact: bool,
 
+        /// JSON indentation (number of spaces or "tab")
+        #[arg(long, value_name = "INDENT")]
+        indent: Option<String>,
+
+        /// Sort JSON object keys alphabetically
+        #[arg(long)]
+        sort_keys: bool,
+
         /// Treat CSV as having no header row
         #[arg(long)]
         no_header: bool,

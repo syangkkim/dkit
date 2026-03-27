@@ -605,6 +605,10 @@ pub struct FormatOptions {
     pub styled: bool,
     /// HTML 완전한 문서 출력
     pub full_html: bool,
+    /// JSON 들여쓰기 설정 (숫자: 스페이스 수, "tab": 탭 문자)
+    pub indent: Option<String>,
+    /// JSON 오브젝트 키를 알파벳순으로 정렬
+    pub sort_keys: bool,
 }
 
 impl Default for FormatOptions {
@@ -618,6 +622,8 @@ impl Default for FormatOptions {
             root_element: None,
             styled: false,
             full_html: false,
+            indent: None,
+            sort_keys: false,
         }
     }
 }

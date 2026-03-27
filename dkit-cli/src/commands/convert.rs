@@ -42,6 +42,8 @@ pub struct ConvertArgs<'a> {
     pub delimiter: Option<char>,
     pub pretty: bool,
     pub compact: bool,
+    pub indent: Option<String>,
+    pub sort_keys: bool,
     pub no_header: bool,
     pub flow: bool,
     pub root_element: Option<String>,
@@ -69,7 +71,8 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
 
     // Auto-detect pretty vs compact: if neither --pretty nor --compact is set,
     // use pretty when writing to a terminal, compact when piped.
-    let (effective_pretty, effective_compact) = if args.pretty {
+    // --indent implies pretty mode (overrides auto-compact).
+    let (effective_pretty, effective_compact) = if args.pretty || args.indent.is_some() {
         (true, false)
     } else if args.compact {
         (false, true)
@@ -91,6 +94,8 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         root_element: args.root_element.clone(),
         styled: args.styled,
         full_html: args.full_html,
+        indent: args.indent.clone(),
+        sort_keys: args.sort_keys,
     };
 
     // stdin mode: no input files or explicit "-"
