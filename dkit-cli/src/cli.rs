@@ -558,6 +558,76 @@ pub enum Commands {
         log_error: String,
     },
 
+    /// Profile data: show field types, null%, cardinality, top values, and patterns
+    #[command(
+        after_help = "Examples:\n  dkit profile data.csv\n  dkit profile data.csv --output-format json\n  dkit profile data.csv --detailed\n  dkit profile data.json --from json\n  cat data.csv | dkit profile - --from csv"
+    )]
+    Profile {
+        /// Input file path (use '-' for stdin)
+        #[arg(value_name = "INPUT")]
+        input: String,
+
+        /// Input format (required for stdin)
+        #[arg(long, value_name = "FORMAT")]
+        from: Option<String>,
+
+        /// Output format (json, yaml, table, md)
+        #[arg(
+            short = 'O',
+            long = "output-format",
+            alias = "format",
+            short_alias = 'f',
+            value_name = "FORMAT"
+        )]
+        output_format: Option<String>,
+
+        /// Show detailed profiling (histograms, outliers, top values per field)
+        #[arg(long)]
+        detailed: bool,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+
+        /// Parse input as log file using a predefined or custom format.
+        /// Predefined: apache, apache-combined, apache-common, nginx, syslog.
+        /// Custom: use {field} placeholders, e.g. '{timestamp} [{level}] {message}'
+        #[arg(long, value_name = "FORMAT")]
+        log_format: Option<String>,
+
+        /// How to handle log lines that fail to parse: 'skip' (default) or 'raw'
+        #[arg(long, value_name = "MODE", default_value = "skip")]
+        log_error: String,
+    },
+
     /// Merge multiple data files into one
     #[command(
         after_help = "Examples:\n  dkit merge a.json b.json --format json\n  dkit merge users1.csv users2.csv --format json -o merged.json\n  dkit merge config1.yaml config2.yaml --format yaml"

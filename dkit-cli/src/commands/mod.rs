@@ -3,6 +3,7 @@ pub mod diff;
 pub mod flatten;
 pub mod join;
 pub mod merge;
+pub mod profile;
 pub mod query;
 pub mod sample;
 pub mod schema;

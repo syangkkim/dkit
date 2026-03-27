@@ -604,6 +604,39 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 log_error: parse_log_error_mode(&log_error),
             })?;
         }
+        Commands::Profile {
+            input,
+            from,
+            output_format,
+            detailed,
+            delimiter,
+            no_header,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+            log_format,
+            log_error,
+        } => {
+            commands::profile::run(&commands::profile::ProfileArgs {
+                input: &input,
+                from: from.as_deref(),
+                output_format: output_format.as_deref(),
+                detailed,
+                delimiter,
+                no_header,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+                log_format: log_format.as_deref(),
+                log_error: parse_log_error_mode(&log_error),
+            })?;
+        }
         Commands::Merge {
             input,
             format,
