@@ -258,6 +258,35 @@ pub struct FormatOptions {
 - `--full-html`: 완전한 HTML 문서 (DOCTYPE, charset, 선택적 style 블록)
 - HTML 엔티티 이스케이프 (`&`, `<`, `>`, `"`, `'`)
 
+### HCL (HashiCorp Configuration Language) ↔ Value
+
+- `hcl-rs` 크레이트 사용
+- HCL v2 문법 지원 (Terraform 0.12+)
+- 블록 구조 → 중첩 Object로 매핑
+- 읽기: HCL 파싱 후 `Value::Object` 트리로 변환
+- 쓰기: `Value::Object` → HCL 블록/속성 형식 출력
+- 포맷 자동 감지: `.hcl`, `.tf`, `.tfvars` 확장자
+- feature flag: `hcl` (선택적 의존성)
+- **참고**: HCL은 블록 기반 언어로, 단순 key=value가 아닌 복잡한 구조 지원
+
+### plist (macOS Property List) ↔ Value
+
+- `plist` 크레이트 사용
+- XML plist 형식 지원
+- 데이터 타입 매핑:
+  - `dict` → `Value::Object`
+  - `array` → `Value::Array`
+  - `string` → `Value::String`
+  - `integer` → `Value::Integer`
+  - `real` → `Value::Float`
+  - `true`/`false` → `Value::Bool`
+  - `date` → `Value::String` (ISO 8601)
+  - `data` → `Value::String` (Base64 인코딩)
+- 읽기: XML plist 파싱 후 `Value` 트리로 변환
+- 쓰기: `Value` → XML plist 형식 출력
+- 포맷 자동 감지: `.plist` 확장자
+- feature flag: `plist` (선택적 의존성)
+
 ## Encoding Support
 
 ### 인코딩 감지 우선순위
@@ -291,27 +320,42 @@ pub struct EncodingOptions {
 
 ```
 query       = path ("|" operation)*
-path        = "." segment*
+path        = "." segment* | ".." identifier      (* recursive descent *)
 segment     = field | index | iterate | wildcard | slice
+            | ".." identifier                      (* recursive descent mid-path *)
 field       = identifier
 index       = "[" integer "]"
 iterate     = "[]"
 wildcard    = "[" "*" "]"
 slice       = "[" [integer] ":" [integer] [":" integer] "]"
 operation   = where | select | sort | limit
+            | count | sum | avg | min | max | distinct
+            | median | percentile | stddev | variance | mode | group_concat
+            | group_by
 where       = "where" condition
 condition   = expr compare_op expr (logic_op expr compare_op expr)*
             | expr "in" "(" value_list ")"
             | expr "not" "in" "(" value_list ")"
             | expr "matches" string_literal
             | expr "not" "matches" string_literal
-select      = "select" field ("," field)*
+select      = "select" select_expr ("," select_expr)*
+select_expr = expr ["as" identifier]
 sort        = "sort" field ["desc"]
 limit       = "limit" integer
+median      = "median" identifier
+percentile  = "percentile" identifier number_literal
+stddev      = "stddev" identifier
+variance    = "variance" identifier
+mode        = "mode" identifier
+group_concat = "group_concat" identifier string_literal
 compare_op  = "==" | "!=" | ">" | "<" | ">=" | "<="
 logic_op    = "and" | "or"
 value_list  = value ("," value)*
 expr        = path | string_literal | number_literal
+            | func_call | if_expr | case_expr
+func_call   = identifier "(" [expr ("," expr)*] ")"
+if_expr     = "if" "(" condition "," expr "," expr ")"
+case_expr   = "case" ("when" condition "then" expr)+ ["else" expr] "end"
 ```
 
 ### Parser Implementation
