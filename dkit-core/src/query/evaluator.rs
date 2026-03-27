@@ -61,6 +61,9 @@ pub fn evaluate_path(value: &Value, path: &Path) -> Result<Value, DkitError> {
                         ));
                     }
                 },
+                Segment::RecursiveDescent(name) => {
+                    recursive_collect(val, name, &mut next_results);
+                }
             }
         }
 
@@ -71,7 +74,10 @@ pub fn evaluate_path(value: &Value, path: &Path) -> Result<Value, DkitError> {
     let has_iterate = path.segments.iter().any(|s| {
         matches!(
             s,
-            Segment::Iterate | Segment::Wildcard | Segment::Slice { .. }
+            Segment::Iterate
+                | Segment::Wildcard
+                | Segment::Slice { .. }
+                | Segment::RecursiveDescent(_)
         )
     });
     if has_iterate {
@@ -159,6 +165,26 @@ fn apply_slice(
     }
 
     Ok(result)
+}
+
+/// 재귀적으로 Value 트리를 DFS 순회하며 지정된 키를 가진 값을 수집
+fn recursive_collect(value: &Value, key: &str, results: &mut Vec<Value>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(v) = map.get(key) {
+                results.push(v.clone());
+            }
+            for (_, v) in map {
+                recursive_collect(v, key, results);
+            }
+        }
+        Value::Array(arr) => {
+            for item in arr {
+                recursive_collect(item, key, results);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// 음수 인덱스를 양수로 변환
@@ -708,5 +734,95 @@ mod tests {
         ]);
         let result = eval(&data, ".[:]").unwrap();
         assert_eq!(result, data);
+    }
+
+    // --- 재귀 하강 (recursive descent `..`) ---
+
+    #[test]
+    fn test_recursive_descent_simple() {
+        let data = sample_data();
+        // .name is "dkit", .users[*].name are "Alice", "Bob", "Charlie"
+        let result = eval(&data, "..name").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::String("dkit".to_string()),
+                Value::String("Alice".to_string()),
+                Value::String("Bob".to_string()),
+                Value::String("Charlie".to_string()),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_recursive_descent_nested() {
+        let data = sample_data();
+        // .config.database.host = "localhost"
+        let result = eval(&data, "..host").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::String("localhost".to_string())])
+        );
+    }
+
+    #[test]
+    fn test_recursive_descent_no_match() {
+        let data = sample_data();
+        let result = eval(&data, "..nonexistent").unwrap();
+        assert_eq!(result, Value::Array(vec![]));
+    }
+
+    #[test]
+    fn test_recursive_descent_with_prefix_path() {
+        let data = sample_data();
+        // .config..host should find "localhost" within config subtree
+        let result = eval(&data, ".config..host").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::String("localhost".to_string())])
+        );
+    }
+
+    #[test]
+    fn test_recursive_descent_deeply_nested() {
+        // Build a deeply nested structure
+        let mut inner = IndexMap::new();
+        inner.insert("id".to_string(), Value::Integer(42));
+
+        let mut mid = IndexMap::new();
+        mid.insert("nested".to_string(), Value::Object(inner));
+        mid.insert("id".to_string(), Value::Integer(1));
+
+        let mut outer = IndexMap::new();
+        outer.insert("data".to_string(), Value::Object(mid));
+
+        let data = Value::Object(outer);
+        let result = eval(&data, "..id").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::Integer(1), Value::Integer(42)])
+        );
+    }
+
+    #[test]
+    fn test_recursive_descent_in_array() {
+        // Array of objects at root
+        let arr = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("x".to_string(), Value::Integer(1));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("x".to_string(), Value::Integer(2));
+                Value::Object(m)
+            },
+        ]);
+        let result = eval(&arr, "..x").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::Integer(1), Value::Integer(2)])
+        );
     }
 }

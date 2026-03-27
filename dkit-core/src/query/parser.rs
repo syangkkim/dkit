@@ -33,6 +33,8 @@ pub enum Segment {
     },
     /// 배열 와일드카드 (`[*]`) — Iterate와 동일 의미
     Wildcard,
+    /// 재귀 하강 (`..key`) — 모든 깊이에서 key 필드를 재귀적으로 수집
+    RecursiveDescent(String),
 }
 
 /// Pipeline operation applied after path navigation (e.g., `| where ...`, `| sort ...`).
@@ -259,7 +261,18 @@ impl Parser {
             return Ok(Path { segments });
         }
 
+        // `..key` — 재귀 하강 (루트 경로 바로 뒤)
+        if self.peek() == Some('.') {
+            self.advance(); // consume the second '.'
+            let field = self.parse_field()?;
+            if let Segment::Field(name) = field {
+                segments.push(Segment::RecursiveDescent(name));
+            }
+            return Ok(Path { segments });
+        }
+
         // 첫 번째 세그먼트: `[` 이면 인덱스/이터레이터, 아니면 필드
+        // Note: at this point, peek is NOT '.', so it must be '[' or identifier
         if self.peek() == Some('[') {
             segments.push(self.parse_bracket()?);
         } else if self.peek_is_identifier_start() {
@@ -270,11 +283,21 @@ impl Parser {
         while !self.is_at_end() {
             self.skip_whitespace();
             if self.peek() == Some('.') {
-                self.advance(); // consume '.'
-                if self.peek() == Some('[') {
-                    segments.push(self.parse_bracket()?);
+                // Check for `..` (recursive descent)
+                if self.pos + 1 < self.input.len() && self.input[self.pos + 1] == '.' {
+                    self.advance(); // consume first '.'
+                    self.advance(); // consume second '.'
+                    let field = self.parse_field()?;
+                    if let Segment::Field(name) = field {
+                        segments.push(Segment::RecursiveDescent(name));
+                    }
                 } else {
-                    segments.push(self.parse_field()?);
+                    self.advance(); // consume '.'
+                    if self.peek() == Some('[') {
+                        segments.push(self.parse_bracket()?);
+                    } else {
+                        segments.push(self.parse_field()?);
+                    }
                 }
             } else if self.peek() == Some('[') {
                 segments.push(self.parse_bracket()?);
@@ -2427,6 +2450,40 @@ mod tests {
     #[test]
     fn test_expr_subtraction() {
         let q = parse_query(".items[] | select price - discount as net").unwrap();
+        assert_eq!(q.operations.len(), 1);
+    }
+
+    // --- Recursive descent (`..`) tests ---
+
+    #[test]
+    fn test_recursive_descent_root() {
+        let q = parse_query("..name").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::RecursiveDescent("name".to_string())]
+        );
+        assert!(q.operations.is_empty());
+    }
+
+    #[test]
+    fn test_recursive_descent_after_field() {
+        let q = parse_query(".config..host").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![
+                Segment::Field("config".to_string()),
+                Segment::RecursiveDescent("host".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_recursive_descent_with_pipeline() {
+        let q = parse_query("..name | where name == \"Alice\"").unwrap();
+        assert_eq!(
+            q.path.segments,
+            vec![Segment::RecursiveDescent("name".to_string())]
+        );
         assert_eq!(q.operations.len(), 1);
     }
 }
