@@ -76,6 +76,26 @@ pub enum Operation {
     MapField { name: String, expr: Expr },
     /// 배열 필드를 개별 행으로 펼침 (unnest/flatten): `--explode tags`
     Explode { field: String },
+    /// Unpivot (wide → long): 지정 컬럼들을 key-value 쌍으로 변환
+    /// 예: [{name:"a", jan:100, feb:200}] → [{name:"a", variable:"jan", value:100}, {name:"a", variable:"feb", value:200}]
+    Unpivot {
+        /// 피벗 해제할 컬럼명 목록
+        value_columns: Vec<String>,
+        /// 결과에서 컬럼명이 저장될 필드명 (기본: "variable")
+        key_name: String,
+        /// 결과에서 값이 저장될 필드명 (기본: "value")
+        value_name: String,
+    },
+    /// Pivot (long → wide): key-value 쌍을 컬럼으로 변환
+    /// 예: [{name:"a", month:"jan", sales:100}, ...] → [{name:"a", jan:100, feb:200}]
+    Pivot {
+        /// 유지할 인덱스 컬럼명 목록
+        index_fields: Vec<String>,
+        /// 값이 새 컬럼명이 되는 필드
+        columns_field: String,
+        /// 새 컬럼에 채울 값이 있는 필드
+        values_field: String,
+    },
 }
 
 /// GROUP BY 집계 연산 정의

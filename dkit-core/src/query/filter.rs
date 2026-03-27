@@ -39,6 +39,16 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         Operation::AddField { name, expr } => apply_add_field(value, name, expr),
         Operation::MapField { name, expr } => apply_map_field(value, name, expr),
         Operation::Explode { field } => apply_explode(value, field),
+        Operation::Unpivot {
+            value_columns,
+            key_name,
+            value_name,
+        } => apply_unpivot(value, value_columns, key_name, value_name),
+        Operation::Pivot {
+            index_fields,
+            columns_field,
+            values_field,
+        } => apply_pivot(value, index_fields, columns_field, values_field),
     }
 }
 
@@ -548,6 +558,125 @@ fn apply_explode(value: Value, field: &str) -> Result<Value, DkitError> {
         }
         _ => Err(DkitError::QueryError(
             "explode requires an array input".to_string(),
+        )),
+    }
+}
+
+/// unpivot (wide → long): 지정 컬럼들을 key-value 쌍으로 변환
+/// 예: [{name:"a", jan:100, feb:200}] → [{name:"a", variable:"jan", value:100}, {name:"a", variable:"feb", value:200}]
+fn apply_unpivot(
+    value: Value,
+    value_columns: &[String],
+    key_name: &str,
+    value_name: &str,
+) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut result = Vec::new();
+            for item in arr {
+                match item {
+                    Value::Object(ref map) => {
+                        for col in value_columns {
+                            let mut new_map = IndexMap::new();
+                            // 먼저 unpivot 대상이 아닌 필드(id 변수)를 복사
+                            for (k, v) in map {
+                                if !value_columns.contains(k) {
+                                    new_map.insert(k.clone(), v.clone());
+                                }
+                            }
+                            // key 컬럼에 원래 컬럼명 저장
+                            new_map.insert(key_name.to_string(), Value::String(col.clone()));
+                            // value 컬럼에 해당 값 저장 (없으면 Null)
+                            let val = map.get(col).cloned().unwrap_or(Value::Null);
+                            new_map.insert(value_name.to_string(), val);
+                            result.push(Value::Object(new_map));
+                        }
+                    }
+                    other => {
+                        result.push(other);
+                    }
+                }
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err(DkitError::QueryError(
+            "unpivot requires an array input".to_string(),
+        )),
+    }
+}
+
+/// pivot (long → wide): key-value 쌍을 컬럼으로 변환
+/// 예: [{name:"a", month:"jan", sales:100}, {name:"a", month:"feb", sales:200}]
+///   → [{name:"a", jan:100, feb:200}]
+fn apply_pivot(
+    value: Value,
+    index_fields: &[String],
+    columns_field: &str,
+    values_field: &str,
+) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            // 1단계: index 키별로 그룹화
+            let mut groups: IndexMap<String, IndexMap<String, Value>> = IndexMap::new();
+            // 모든 pivot 컬럼명 수집 (출력 순서 보존)
+            let mut all_pivot_cols: Vec<String> = Vec::new();
+
+            for item in &arr {
+                if let Value::Object(map) = item {
+                    // index 키 생성
+                    let index_key = index_fields
+                        .iter()
+                        .map(|f| map.get(f).map(|v| format!("{v}")).unwrap_or_default())
+                        .collect::<Vec<_>>()
+                        .join("\x1f");
+
+                    // 새 컬럼명 (columns_field의 값)
+                    let col_name = match map.get(columns_field) {
+                        Some(v) => match v {
+                            Value::String(s) => s.clone(),
+                            other => format!("{other}"),
+                        },
+                        None => continue,
+                    };
+
+                    // 새 컬럼에 채울 값
+                    let col_value = map.get(values_field).cloned().unwrap_or(Value::Null);
+
+                    // 그룹 엔트리 가져오기 또는 생성
+                    let entry = groups.entry(index_key.clone()).or_insert_with(|| {
+                        let mut base = IndexMap::new();
+                        for f in index_fields {
+                            if let Some(v) = map.get(f) {
+                                base.insert(f.clone(), v.clone());
+                            }
+                        }
+                        base
+                    });
+
+                    if !all_pivot_cols.contains(&col_name) {
+                        all_pivot_cols.push(col_name.clone());
+                    }
+
+                    entry.insert(col_name, col_value);
+                }
+            }
+
+            // 2단계: 그룹을 결과 배열로 변환
+            // 빈 pivot 컬럼은 Null로 채움
+            let result: Vec<Value> = groups
+                .into_values()
+                .map(|mut map| {
+                    for col in &all_pivot_cols {
+                        map.entry(col.clone()).or_insert(Value::Null);
+                    }
+                    Value::Object(map)
+                })
+                .collect();
+
+            Ok(Value::Array(result))
+        }
+        _ => Err(DkitError::QueryError(
+            "pivot requires an array input".to_string(),
         )),
     }
 }
@@ -2781,5 +2910,174 @@ mod tests {
         let value = Value::String("not an array".to_string());
         let result = apply_explode(value, "tags");
         assert!(result.is_err());
+    }
+
+    // --- unpivot tests ---
+
+    #[test]
+    fn test_unpivot_basic() {
+        let data = Value::Array(vec![
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Alice".to_string())),
+                ("jan".to_string(), Value::Integer(100)),
+                ("feb".to_string(), Value::Integer(200)),
+                ("mar".to_string(), Value::Integer(300)),
+            ])),
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Bob".to_string())),
+                ("jan".to_string(), Value::Integer(150)),
+                ("feb".to_string(), Value::Integer(250)),
+                ("mar".to_string(), Value::Integer(350)),
+            ])),
+        ]);
+
+        let cols = vec!["jan".to_string(), "feb".to_string(), "mar".to_string()];
+        let result = apply_unpivot(data, &cols, "month", "sales").unwrap();
+        let arr = result.as_array().unwrap();
+
+        // 2 rows × 3 columns = 6 rows
+        assert_eq!(arr.len(), 6);
+
+        // First row: Alice, jan, 100
+        let first = arr[0].as_object().unwrap();
+        assert_eq!(first["name"], Value::String("Alice".to_string()));
+        assert_eq!(first["month"], Value::String("jan".to_string()));
+        assert_eq!(first["sales"], Value::Integer(100));
+
+        // Fourth row: Bob, jan, 150
+        let fourth = arr[3].as_object().unwrap();
+        assert_eq!(fourth["name"], Value::String("Bob".to_string()));
+        assert_eq!(fourth["month"], Value::String("jan".to_string()));
+        assert_eq!(fourth["sales"], Value::Integer(150));
+    }
+
+    #[test]
+    fn test_unpivot_missing_column() {
+        let data = Value::Array(vec![Value::Object(IndexMap::from([
+            ("name".to_string(), Value::String("Alice".to_string())),
+            ("jan".to_string(), Value::Integer(100)),
+        ]))]);
+
+        let cols = vec!["jan".to_string(), "feb".to_string()];
+        let result = apply_unpivot(data, &cols, "variable", "value").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        // Missing column → Null
+        assert_eq!(arr[1].as_object().unwrap()["value"], Value::Null);
+    }
+
+    #[test]
+    fn test_unpivot_non_array_error() {
+        let value = Value::String("not an array".to_string());
+        let result = apply_unpivot(value, &["a".to_string()], "key", "val");
+        assert!(result.is_err());
+    }
+
+    // --- pivot tests ---
+
+    #[test]
+    fn test_pivot_basic() {
+        let data = Value::Array(vec![
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Alice".to_string())),
+                ("month".to_string(), Value::String("jan".to_string())),
+                ("sales".to_string(), Value::Integer(100)),
+            ])),
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Alice".to_string())),
+                ("month".to_string(), Value::String("feb".to_string())),
+                ("sales".to_string(), Value::Integer(200)),
+            ])),
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Bob".to_string())),
+                ("month".to_string(), Value::String("jan".to_string())),
+                ("sales".to_string(), Value::Integer(150)),
+            ])),
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Bob".to_string())),
+                ("month".to_string(), Value::String("feb".to_string())),
+                ("sales".to_string(), Value::Integer(250)),
+            ])),
+        ]);
+
+        let index = vec!["name".to_string()];
+        let result = apply_pivot(data, &index, "month", "sales").unwrap();
+        let arr = result.as_array().unwrap();
+
+        assert_eq!(arr.len(), 2);
+
+        let alice = arr[0].as_object().unwrap();
+        assert_eq!(alice["name"], Value::String("Alice".to_string()));
+        assert_eq!(alice["jan"], Value::Integer(100));
+        assert_eq!(alice["feb"], Value::Integer(200));
+
+        let bob = arr[1].as_object().unwrap();
+        assert_eq!(bob["name"], Value::String("Bob".to_string()));
+        assert_eq!(bob["jan"], Value::Integer(150));
+        assert_eq!(bob["feb"], Value::Integer(250));
+    }
+
+    #[test]
+    fn test_pivot_missing_values_filled_with_null() {
+        let data = Value::Array(vec![
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Alice".to_string())),
+                ("month".to_string(), Value::String("jan".to_string())),
+                ("sales".to_string(), Value::Integer(100)),
+            ])),
+            Value::Object(IndexMap::from([
+                ("name".to_string(), Value::String("Bob".to_string())),
+                ("month".to_string(), Value::String("feb".to_string())),
+                ("sales".to_string(), Value::Integer(250)),
+            ])),
+        ]);
+
+        let index = vec!["name".to_string()];
+        let result = apply_pivot(data, &index, "month", "sales").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+
+        // Alice has jan but not feb → feb is Null
+        let alice = arr[0].as_object().unwrap();
+        assert_eq!(alice["jan"], Value::Integer(100));
+        assert_eq!(alice["feb"], Value::Null);
+
+        // Bob has feb but not jan → jan is Null
+        let bob = arr[1].as_object().unwrap();
+        assert_eq!(bob["jan"], Value::Null);
+        assert_eq!(bob["feb"], Value::Integer(250));
+    }
+
+    #[test]
+    fn test_pivot_non_array_error() {
+        let value = Value::String("not an array".to_string());
+        let result = apply_pivot(value, &["name".to_string()], "col", "val");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pivot_unpivot_roundtrip() {
+        // Start with wide data
+        let wide = Value::Array(vec![Value::Object(IndexMap::from([
+            ("name".to_string(), Value::String("Alice".to_string())),
+            ("jan".to_string(), Value::Integer(100)),
+            ("feb".to_string(), Value::Integer(200)),
+        ]))]);
+
+        // Unpivot → long
+        let cols = vec!["jan".to_string(), "feb".to_string()];
+        let long = apply_unpivot(wide, &cols, "month", "sales").unwrap();
+        let long_arr = long.as_array().unwrap();
+        assert_eq!(long_arr.len(), 2);
+
+        // Pivot back → wide
+        let index = vec!["name".to_string()];
+        let wide_again = apply_pivot(long, &index, "month", "sales").unwrap();
+        let arr = wide_again.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        let row = arr[0].as_object().unwrap();
+        assert_eq!(row["name"], Value::String("Alice".to_string()));
+        assert_eq!(row["jan"], Value::Integer(100));
+        assert_eq!(row["feb"], Value::Integer(200));
     }
 }

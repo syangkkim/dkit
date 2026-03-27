@@ -252,6 +252,20 @@ pub struct DataFilterOptions {
     pub map_field: Vec<String>,
     /// 배열 필드를 개별 행으로 펼침 (unnest/flatten)
     pub explode: Vec<String>,
+    /// Unpivot (wide → long): 지정 컬럼들을 key-value 쌍으로 변환
+    pub unpivot: Option<String>,
+    /// Unpivot 결과의 key 컬럼명 (기본값: "variable")
+    pub unpivot_key: Option<String>,
+    /// Unpivot 결과의 value 컬럼명 (기본값: "value")
+    pub unpivot_value: Option<String>,
+    /// Pivot (long → wide): 활성화 여부
+    pub pivot: bool,
+    /// Pivot의 index 컬럼 (유지할 컬럼, 쉼표 구분)
+    pub pivot_index: Option<String>,
+    /// Pivot의 columns 필드 (값이 새 컬럼명이 되는 필드)
+    pub pivot_columns: Option<String>,
+    /// Pivot의 values 필드 (새 컬럼에 채울 값 필드)
+    pub pivot_values: Option<String>,
 }
 
 /// --agg 문자열을 GroupAggregate 벡터로 파싱한다.
@@ -390,6 +404,49 @@ pub fn apply_data_filters(
     for field in &opts.explode {
         operations.push(Operation::Explode {
             field: field.clone(),
+        });
+    }
+
+    // 1c. unpivot (wide → long)
+    if let Some(ref cols_str) = opts.unpivot {
+        let value_columns: Vec<String> =
+            cols_str.split(',').map(|s| s.trim().to_string()).collect();
+        let key_name = opts
+            .unpivot_key
+            .clone()
+            .unwrap_or_else(|| "variable".to_string());
+        let value_name = opts
+            .unpivot_value
+            .clone()
+            .unwrap_or_else(|| "value".to_string());
+        operations.push(Operation::Unpivot {
+            value_columns,
+            key_name,
+            value_name,
+        });
+    }
+
+    // 1d. pivot (long → wide)
+    if opts.pivot {
+        let columns_field = opts.pivot_columns.clone().ok_or_else(|| {
+            anyhow::anyhow!(
+                "--pivot requires --columns to specify which field's values become column names"
+            )
+        })?;
+        let values_field = opts.pivot_values.clone().ok_or_else(|| {
+            anyhow::anyhow!(
+                "--pivot requires --values to specify which field's values fill the new columns"
+            )
+        })?;
+        let index_fields: Vec<String> = opts
+            .pivot_index
+            .as_deref()
+            .map(|s| s.split(',').map(|f| f.trim().to_string()).collect())
+            .unwrap_or_default();
+        operations.push(Operation::Pivot {
+            index_fields,
+            columns_field,
+            values_field,
         });
     }
 
