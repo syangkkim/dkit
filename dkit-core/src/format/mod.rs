@@ -12,6 +12,8 @@ pub mod json;
 pub mod jsonl;
 /// Markdown table writer.
 pub mod markdown;
+/// Java `.properties` file reader and writer.
+pub mod properties;
 /// TOML reader and writer.
 pub mod toml;
 /// YAML reader and writer.
@@ -296,6 +298,8 @@ pub enum Format {
     Env,
     /// INI/CFG configuration file format (`*.ini`, `*.cfg`)
     Ini,
+    /// Java `.properties` file format (`*.properties`)
+    Properties,
 }
 
 impl Format {
@@ -317,6 +321,7 @@ impl Format {
             "table" => Ok(Format::Table),
             "env" | "dotenv" => Ok(Format::Env),
             "ini" | "cfg" | "conf" | "config" => Ok(Format::Ini),
+            "properties" => Ok(Format::Properties),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -366,6 +371,7 @@ impl Format {
 
         formats.push(("env", "Environment variables (.env) format"));
         formats.push(("ini", "INI/CFG configuration file format"));
+        formats.push(("properties", "Java .properties file format"));
         formats.push(("md", "Markdown table"));
         formats.push(("html", "HTML table"));
         formats.push(("table", "Terminal table (default for view)"));
@@ -392,6 +398,7 @@ impl std::fmt::Display for Format {
             Format::Table => write!(f, "Table"),
             Format::Env => write!(f, "ENV"),
             Format::Ini => write!(f, "INI"),
+            Format::Properties => write!(f, "Properties"),
         }
     }
 }
@@ -420,6 +427,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("html") => Ok(Format::Html),
         Some("env") => Ok(Format::Env),
         Some("ini" | "cfg") => Ok(Format::Ini),
+        Some("properties") => Ok(Format::Properties),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }

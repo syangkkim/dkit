@@ -16,6 +16,7 @@ use dkit_core::format::json::{JsonReader, JsonWriter};
 use dkit_core::format::jsonl::{JsonlReader, JsonlWriter};
 use dkit_core::format::markdown::MarkdownWriter;
 use dkit_core::format::msgpack::{MsgpackReader, MsgpackWriter};
+use dkit_core::format::properties::{PropertiesReader, PropertiesWriter};
 use dkit_core::format::toml::{TomlReader, TomlWriter};
 use dkit_core::format::xml::{XmlReader, XmlWriter};
 use dkit_core::format::yaml::{YamlReader, YamlWriter};
@@ -182,6 +183,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Xml => XmlReader::default().read(content),
         Format::Env => EnvReader.read(content),
         Format::Ini => IniReader.read(content),
+        Format::Properties => PropertiesReader.read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
@@ -218,6 +220,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Xml => XmlWriter::new(options.pretty, options.root_element.clone()).write(value),
         Format::Env => EnvWriter.write(value),
         Format::Ini => IniWriter.write(value),
+        Format::Properties => PropertiesWriter.write(value),
         Format::Msgpack => MsgpackWriter.write(value),
         Format::Xlsx => bail!("Excel is an input-only format and cannot be used as output"),
         Format::Sqlite => bail!("SQLite is an input-only format and cannot be used as output"),
