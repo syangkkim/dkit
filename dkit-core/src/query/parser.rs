@@ -61,6 +61,18 @@ pub enum Operation {
     Max { field: String },
     /// `distinct field` 고유값 목록
     Distinct { field: String },
+    /// `median field` 중앙값
+    Median { field: String },
+    /// `percentile field p` p번째 백분위수 (p: 0.0~1.0)
+    Percentile { field: String, p: f64 },
+    /// `stddev field` 표준편차 (모집단)
+    Stddev { field: String },
+    /// `variance field` 분산
+    Variance { field: String },
+    /// `mode field` 최빈값
+    Mode { field: String },
+    /// `group_concat field separator` 그룹 내 문자열 연결
+    GroupConcat { field: String, separator: String },
     /// `group_by field1, field2` 그룹별 집계
     /// 집계 연산: `group_by category | select category, count, sum_price`
     GroupBy {
@@ -117,6 +129,12 @@ pub enum AggregateFunc {
     Avg,
     Min,
     Max,
+    Median,
+    Percentile(f64),
+    Stddev,
+    Variance,
+    Mode,
+    GroupConcat(String),
 }
 
 /// Boolean condition used in `where` clauses.
@@ -541,6 +559,52 @@ impl Parser {
                 let field = self.parse_identifier()?;
                 Ok(Operation::Distinct { field })
             }
+            "median" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Median { field })
+            }
+            "percentile" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                self.skip_whitespace();
+                let p = self.parse_float_value()?;
+                if !(0.0..=1.0).contains(&p) {
+                    return Err(DkitError::QueryError(
+                        "percentile: p must be between 0.0 and 1.0".to_string(),
+                    ));
+                }
+                Ok(Operation::Percentile { field, p })
+            }
+            "stddev" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Stddev { field })
+            }
+            "variance" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Variance { field })
+            }
+            "mode" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                Ok(Operation::Mode { field })
+            }
+            "group_concat" => {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                self.skip_whitespace();
+                let separator = if self.peek() == Some('"') {
+                    match self.parse_string_literal()? {
+                        LiteralValue::String(s) => s,
+                        _ => ", ".to_string(),
+                    }
+                } else {
+                    ", ".to_string()
+                };
+                Ok(Operation::GroupConcat { field, separator })
+            }
             "group_by" => {
                 self.skip_whitespace();
                 let fields = self.parse_identifier_list()?;
@@ -607,18 +671,25 @@ impl Parser {
             }
         };
 
-        let func = match func_name.as_str() {
-            "count" => AggregateFunc::Count,
-            "sum" => AggregateFunc::Sum,
-            "avg" => AggregateFunc::Avg,
-            "min" => AggregateFunc::Min,
-            "max" => AggregateFunc::Max,
-            _ => {
-                // Not an aggregate function, restore position
-                self.pos = saved_pos;
-                return Ok(None);
-            }
-        };
+        // Check if it's a known aggregate function name
+        let is_known = matches!(
+            func_name.as_str(),
+            "count"
+                | "sum"
+                | "avg"
+                | "min"
+                | "max"
+                | "median"
+                | "percentile"
+                | "stddev"
+                | "variance"
+                | "mode"
+                | "group_concat"
+        );
+        if !is_known {
+            self.pos = saved_pos;
+            return Ok(None);
+        }
 
         self.skip_whitespace();
 
@@ -635,6 +706,50 @@ impl Parser {
             None
         } else {
             Some(self.parse_identifier()?)
+        };
+
+        self.skip_whitespace();
+
+        // Parse extra arguments for percentile and group_concat
+        let func = match func_name.as_str() {
+            "count" => AggregateFunc::Count,
+            "sum" => AggregateFunc::Sum,
+            "avg" => AggregateFunc::Avg,
+            "min" => AggregateFunc::Min,
+            "max" => AggregateFunc::Max,
+            "median" => AggregateFunc::Median,
+            "percentile" => {
+                if !self.consume_char(',') {
+                    return Err(DkitError::QueryError(format!(
+                        "percentile() requires a second argument (p value) at position {}",
+                        self.pos
+                    )));
+                }
+                self.skip_whitespace();
+                let p = self.parse_float_value()?;
+                if !(0.0..=1.0).contains(&p) {
+                    return Err(DkitError::QueryError(
+                        "percentile: p must be between 0.0 and 1.0".to_string(),
+                    ));
+                }
+                AggregateFunc::Percentile(p)
+            }
+            "stddev" => AggregateFunc::Stddev,
+            "variance" => AggregateFunc::Variance,
+            "mode" => AggregateFunc::Mode,
+            "group_concat" => {
+                let separator = if self.consume_char(',') {
+                    self.skip_whitespace();
+                    match self.parse_string_literal()? {
+                        LiteralValue::String(s) => s,
+                        _ => ", ".to_string(),
+                    }
+                } else {
+                    ", ".to_string()
+                };
+                AggregateFunc::GroupConcat(separator)
+            }
+            _ => unreachable!(),
         };
 
         self.skip_whitespace();
@@ -1357,6 +1472,36 @@ impl Parser {
     }
 
     /// 양의 정수 파싱 (limit 절용)
+    /// 부동소수점 값 파싱 (0.95 등)
+    fn parse_float_value(&mut self) -> Result<f64, DkitError> {
+        let start = self.pos;
+        if self.peek() == Some('-') {
+            self.advance();
+        }
+        while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
+            self.pos += 1;
+        }
+        if self.peek() == Some('.') {
+            self.advance();
+            while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
+                self.pos += 1;
+            }
+        }
+        if self.pos == start {
+            return Err(DkitError::QueryError(format!(
+                "expected number at position {}",
+                self.pos
+            )));
+        }
+        let num_str: String = self.input[start..self.pos].iter().collect();
+        num_str.parse().map_err(|_| {
+            DkitError::QueryError(format!(
+                "invalid number '{}' at position {}",
+                num_str, start
+            ))
+        })
+    }
+
     fn parse_positive_integer(&mut self) -> Result<usize, DkitError> {
         let start = self.pos;
         while !self.is_at_end() && self.input[self.pos].is_ascii_digit() {
@@ -2733,6 +2878,131 @@ mod tests {
             assert!(default.is_some());
         } else {
             panic!("expected Case expression");
+        }
+    }
+
+    // --- 통계 집계 함수 파싱 테스트 ---
+
+    #[test]
+    fn test_parse_median() {
+        let q = parse_query(".[] | median score").unwrap();
+        assert!(matches!(&q.operations[0], Operation::Median { field } if field == "score"));
+    }
+
+    #[test]
+    fn test_parse_percentile() {
+        let q = parse_query(".[] | percentile score 0.95").unwrap();
+        if let Operation::Percentile { field, p } = &q.operations[0] {
+            assert_eq!(field, "score");
+            assert!((p - 0.95).abs() < f64::EPSILON);
+        } else {
+            panic!("expected Percentile operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_percentile_invalid_p() {
+        let result = parse_query(".[] | percentile score 1.5");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_stddev() {
+        let q = parse_query(".[] | stddev salary").unwrap();
+        assert!(matches!(&q.operations[0], Operation::Stddev { field } if field == "salary"));
+    }
+
+    #[test]
+    fn test_parse_variance() {
+        let q = parse_query(".[] | variance salary").unwrap();
+        assert!(matches!(&q.operations[0], Operation::Variance { field } if field == "salary"));
+    }
+
+    #[test]
+    fn test_parse_mode() {
+        let q = parse_query(".[] | mode category").unwrap();
+        assert!(matches!(&q.operations[0], Operation::Mode { field } if field == "category"));
+    }
+
+    #[test]
+    fn test_parse_group_concat() {
+        let q = parse_query(".[] | group_concat name \", \"").unwrap();
+        if let Operation::GroupConcat { field, separator } = &q.operations[0] {
+            assert_eq!(field, "name");
+            assert_eq!(separator, ", ");
+        } else {
+            panic!("expected GroupConcat operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_group_concat_default_separator() {
+        let q = parse_query(".[] | group_concat name").unwrap();
+        if let Operation::GroupConcat { field, separator } = &q.operations[0] {
+            assert_eq!(field, "name");
+            assert_eq!(separator, ", ");
+        } else {
+            panic!("expected GroupConcat operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_group_by_with_median() {
+        let q = parse_query(".[] | group_by dept median(score)").unwrap();
+        if let Operation::GroupBy {
+            fields, aggregates, ..
+        } = &q.operations[0]
+        {
+            assert_eq!(fields, &["dept"]);
+            assert_eq!(aggregates.len(), 1);
+            assert!(matches!(aggregates[0].func, AggregateFunc::Median));
+            assert_eq!(aggregates[0].field, Some("score".to_string()));
+            assert_eq!(aggregates[0].alias, "median_score");
+        } else {
+            panic!("expected GroupBy operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_group_by_with_percentile() {
+        let q = parse_query(".[] | group_by dept percentile(score, 0.95)").unwrap();
+        if let Operation::GroupBy { aggregates, .. } = &q.operations[0] {
+            assert_eq!(aggregates.len(), 1);
+            if let AggregateFunc::Percentile(p) = aggregates[0].func {
+                assert!((p - 0.95).abs() < f64::EPSILON);
+            } else {
+                panic!("expected Percentile aggregate");
+            }
+        } else {
+            panic!("expected GroupBy operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_group_by_with_group_concat() {
+        let q = parse_query(".[] | group_by dept group_concat(name, \", \")").unwrap();
+        if let Operation::GroupBy { aggregates, .. } = &q.operations[0] {
+            assert_eq!(aggregates.len(), 1);
+            if let AggregateFunc::GroupConcat(sep) = &aggregates[0].func {
+                assert_eq!(sep, ", ");
+            } else {
+                panic!("expected GroupConcat aggregate");
+            }
+        } else {
+            panic!("expected GroupBy operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_group_by_mixed_aggregates() {
+        let q = parse_query(".[] | group_by dept count(), median(score), stddev(score)").unwrap();
+        if let Operation::GroupBy { aggregates, .. } = &q.operations[0] {
+            assert_eq!(aggregates.len(), 3);
+            assert!(matches!(aggregates[0].func, AggregateFunc::Count));
+            assert!(matches!(aggregates[1].func, AggregateFunc::Median));
+            assert!(matches!(aggregates[2].func, AggregateFunc::Stddev));
+        } else {
+            panic!("expected GroupBy operation");
         }
     }
 }
