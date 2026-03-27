@@ -933,7 +933,7 @@ fn select_exprs(value: &Value, exprs: &[SelectExpr]) -> Result<Value, DkitError>
 }
 
 /// 조건식 평가
-fn evaluate_condition(value: &Value, condition: &Condition) -> Result<bool, DkitError> {
+pub(crate) fn evaluate_condition(value: &Value, condition: &Condition) -> Result<bool, DkitError> {
     match condition {
         Condition::Comparison(cmp) => evaluate_comparison(value, cmp),
         Condition::And(left, right) => {
@@ -3079,5 +3079,119 @@ mod tests {
         assert_eq!(row["name"], Value::String("Alice".to_string()));
         assert_eq!(row["jan"], Value::Integer(100));
         assert_eq!(row["feb"], Value::Integer(200));
+    }
+
+    // --- if() / case expression integration tests ---
+
+    #[test]
+    fn test_select_with_if_expr() {
+        let data = sample_users();
+        let q = parse_query(".[] | select name, if(age < 30, \"young\", \"senior\") as category")
+            .unwrap();
+        let result = apply_operations(data, &q.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        // Alice: age 30, not < 30 → "senior"
+        assert_eq!(
+            arr[0].as_object().unwrap()["category"],
+            Value::String("senior".to_string())
+        );
+        // Bob: age 25, < 30 → "young"
+        assert_eq!(
+            arr[1].as_object().unwrap()["category"],
+            Value::String("young".to_string())
+        );
+        // Charlie: age 35, not < 30 → "senior"
+        assert_eq!(
+            arr[2].as_object().unwrap()["category"],
+            Value::String("senior".to_string())
+        );
+    }
+
+    #[test]
+    fn test_select_with_nested_if() {
+        let data = sample_users();
+        let q = parse_query(
+            ".[] | select name, if(age < 28, \"young\", if(age < 33, \"mid\", \"senior\")) as cat",
+        )
+        .unwrap();
+        let result = apply_operations(data, &q.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // Alice: 30 → mid
+        assert_eq!(
+            arr[0].as_object().unwrap()["cat"],
+            Value::String("mid".to_string())
+        );
+        // Bob: 25 → young
+        assert_eq!(
+            arr[1].as_object().unwrap()["cat"],
+            Value::String("young".to_string())
+        );
+        // Charlie: 35 → senior
+        assert_eq!(
+            arr[2].as_object().unwrap()["cat"],
+            Value::String("senior".to_string())
+        );
+    }
+
+    #[test]
+    fn test_select_with_case() {
+        let data = sample_users();
+        let q = parse_query(
+            ".[] | select name, case when city == \"Seoul\" then \"capital\" when city == \"Busan\" then \"port\" else \"other\" end as city_type",
+        )
+        .unwrap();
+        let result = apply_operations(data, &q.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap()["city_type"],
+            Value::String("capital".to_string())
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap()["city_type"],
+            Value::String("port".to_string())
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap()["city_type"],
+            Value::String("capital".to_string())
+        );
+    }
+
+    #[test]
+    fn test_select_case_no_else_returns_null() {
+        let data = sample_users();
+        let q = parse_query(
+            ".[] | select name, case when city == \"Tokyo\" then \"japan\" end as country",
+        )
+        .unwrap();
+        let result = apply_operations(data, &q.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // None match → null
+        for item in arr {
+            assert_eq!(item.as_object().unwrap()["country"], Value::Null);
+        }
+    }
+
+    #[test]
+    fn test_add_field_with_if() {
+        let data = sample_users();
+        let (name, expr) =
+            crate::query::parser::parse_add_field_expr("group = if(age >= 30, \"A\", \"B\")")
+                .unwrap();
+        let op = Operation::AddField { name, expr };
+        let result = apply_operation(data, &op).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(
+            arr[0].as_object().unwrap()["group"],
+            Value::String("A".to_string())
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap()["group"],
+            Value::String("B".to_string())
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap()["group"],
+            Value::String("A".to_string())
+        );
     }
 }

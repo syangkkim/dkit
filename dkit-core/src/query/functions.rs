@@ -1,4 +1,5 @@
 use crate::error::DkitError;
+use crate::query::filter::evaluate_condition;
 use crate::query::parser::{ArithmeticOp, Expr, LiteralValue};
 use crate::value::Value;
 
@@ -22,6 +23,28 @@ pub fn evaluate_expr(row: &Value, expr: &Expr) -> Result<Value, DkitError> {
             let lv = evaluate_expr(row, left)?;
             let rv = evaluate_expr(row, right)?;
             evaluate_binary_op(op, &lv, &rv)
+        }
+        Expr::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            if evaluate_condition(row, condition)? {
+                evaluate_expr(row, then_expr)
+            } else {
+                evaluate_expr(row, else_expr)
+            }
+        }
+        Expr::Case { branches, default } => {
+            for (condition, expr) in branches {
+                if evaluate_condition(row, condition)? {
+                    return evaluate_expr(row, expr);
+                }
+            }
+            match default {
+                Some(expr) => evaluate_expr(row, expr),
+                None => Ok(Value::Null),
+            }
         }
     }
 }
@@ -125,6 +148,14 @@ pub fn expr_default_key(expr: &Expr) -> String {
             }
         }
         Expr::BinaryOp { left, .. } => expr_default_key(left),
+        Expr::If { then_expr, .. } => expr_default_key(then_expr),
+        Expr::Case { branches, .. } => {
+            if let Some((_, expr)) = branches.first() {
+                expr_default_key(expr)
+            } else {
+                "case".to_string()
+            }
+        }
     }
 }
 
@@ -1414,5 +1445,212 @@ mod tests {
             evaluate_expr(&row, &expr).unwrap(),
             Value::String("Item42".to_string())
         );
+    }
+
+    // --- if() expression evaluation tests ---
+
+    #[test]
+    fn test_eval_if_true_branch() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![
+                ("age".to_string(), Value::Integer(15)),
+                ("name".to_string(), Value::String("Alice".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let expr = Expr::If {
+            condition: Condition::Comparison(Comparison {
+                field: "age".to_string(),
+                op: CompareOp::Lt,
+                value: LiteralValue::Integer(18),
+            }),
+            then_expr: Box::new(Expr::Literal(LiteralValue::String("minor".to_string()))),
+            else_expr: Box::new(Expr::Literal(LiteralValue::String("adult".to_string()))),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("minor".to_string())
+        );
+    }
+
+    #[test]
+    fn test_eval_if_false_branch() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![("age".to_string(), Value::Integer(30))]
+                .into_iter()
+                .collect(),
+        );
+        let expr = Expr::If {
+            condition: Condition::Comparison(Comparison {
+                field: "age".to_string(),
+                op: CompareOp::Lt,
+                value: LiteralValue::Integer(18),
+            }),
+            then_expr: Box::new(Expr::Literal(LiteralValue::String("minor".to_string()))),
+            else_expr: Box::new(Expr::Literal(LiteralValue::String("adult".to_string()))),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("adult".to_string())
+        );
+    }
+
+    #[test]
+    fn test_eval_if_nested() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![("age".to_string(), Value::Integer(70))]
+                .into_iter()
+                .collect(),
+        );
+        let expr = Expr::If {
+            condition: Condition::Comparison(Comparison {
+                field: "age".to_string(),
+                op: CompareOp::Lt,
+                value: LiteralValue::Integer(18),
+            }),
+            then_expr: Box::new(Expr::Literal(LiteralValue::String("minor".to_string()))),
+            else_expr: Box::new(Expr::If {
+                condition: Condition::Comparison(Comparison {
+                    field: "age".to_string(),
+                    op: CompareOp::Lt,
+                    value: LiteralValue::Integer(65),
+                }),
+                then_expr: Box::new(Expr::Literal(LiteralValue::String("adult".to_string()))),
+                else_expr: Box::new(Expr::Literal(LiteralValue::String("senior".to_string()))),
+            }),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("senior".to_string())
+        );
+    }
+
+    // --- case/when expression evaluation tests ---
+
+    #[test]
+    fn test_eval_case_first_branch() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![("status".to_string(), Value::String("active".to_string()))]
+                .into_iter()
+                .collect(),
+        );
+        let expr = Expr::Case {
+            branches: vec![
+                (
+                    Condition::Comparison(Comparison {
+                        field: "status".to_string(),
+                        op: CompareOp::Eq,
+                        value: LiteralValue::String("active".to_string()),
+                    }),
+                    Expr::Literal(LiteralValue::String("A".to_string())),
+                ),
+                (
+                    Condition::Comparison(Comparison {
+                        field: "status".to_string(),
+                        op: CompareOp::Eq,
+                        value: LiteralValue::String("inactive".to_string()),
+                    }),
+                    Expr::Literal(LiteralValue::String("I".to_string())),
+                ),
+            ],
+            default: Some(Box::new(Expr::Literal(LiteralValue::String(
+                "U".to_string(),
+            )))),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("A".to_string())
+        );
+    }
+
+    #[test]
+    fn test_eval_case_second_branch() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![("status".to_string(), Value::String("inactive".to_string()))]
+                .into_iter()
+                .collect(),
+        );
+        let expr = Expr::Case {
+            branches: vec![
+                (
+                    Condition::Comparison(Comparison {
+                        field: "status".to_string(),
+                        op: CompareOp::Eq,
+                        value: LiteralValue::String("active".to_string()),
+                    }),
+                    Expr::Literal(LiteralValue::String("A".to_string())),
+                ),
+                (
+                    Condition::Comparison(Comparison {
+                        field: "status".to_string(),
+                        op: CompareOp::Eq,
+                        value: LiteralValue::String("inactive".to_string()),
+                    }),
+                    Expr::Literal(LiteralValue::String("I".to_string())),
+                ),
+            ],
+            default: Some(Box::new(Expr::Literal(LiteralValue::String(
+                "U".to_string(),
+            )))),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("I".to_string())
+        );
+    }
+
+    #[test]
+    fn test_eval_case_default() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![("status".to_string(), Value::String("pending".to_string()))]
+                .into_iter()
+                .collect(),
+        );
+        let expr = Expr::Case {
+            branches: vec![(
+                Condition::Comparison(Comparison {
+                    field: "status".to_string(),
+                    op: CompareOp::Eq,
+                    value: LiteralValue::String("active".to_string()),
+                }),
+                Expr::Literal(LiteralValue::String("A".to_string())),
+            )],
+            default: Some(Box::new(Expr::Literal(LiteralValue::String(
+                "other".to_string(),
+            )))),
+        };
+        assert_eq!(
+            evaluate_expr(&row, &expr).unwrap(),
+            Value::String("other".to_string())
+        );
+    }
+
+    #[test]
+    fn test_eval_case_no_default_returns_null() {
+        use crate::query::parser::{CompareOp, Comparison, Condition};
+        let row = Value::Object(
+            vec![("status".to_string(), Value::String("pending".to_string()))]
+                .into_iter()
+                .collect(),
+        );
+        let expr = Expr::Case {
+            branches: vec![(
+                Condition::Comparison(Comparison {
+                    field: "status".to_string(),
+                    op: CompareOp::Eq,
+                    value: LiteralValue::String("active".to_string()),
+                }),
+                Expr::Literal(LiteralValue::String("A".to_string())),
+            )],
+            default: None,
+        };
+        assert_eq!(evaluate_expr(&row, &expr).unwrap(), Value::Null);
     }
 }
