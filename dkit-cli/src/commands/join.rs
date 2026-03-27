@@ -43,7 +43,9 @@ impl JoinType {
             "left" => Ok(JoinType::Left),
             "right" => Ok(JoinType::Right),
             "full" | "outer" | "full-outer" => Ok(JoinType::Full),
-            _ => bail!("Unknown join type: '{s}'\n  Hint: supported types are inner, left, right, full"),
+            _ => bail!(
+                "Unknown join type: '{s}'\n  Hint: supported types are inner, left, right, full"
+            ),
         }
     }
 }
@@ -100,7 +102,10 @@ fn extract_rows(value: Value, source: &str) -> Result<Vec<indexmap::IndexMap<Str
             Ok(rows)
         }
         Value::Object(map) => Ok(vec![map]),
-        _ => bail!("{source}: expected array of objects or a single object for join, got {}", value_type_name(&value)),
+        _ => bail!(
+            "{source}: expected array of objects or a single object for join, got {}",
+            value_type_name(&value)
+        ),
     }
 }
 
@@ -124,10 +129,7 @@ fn build_index(
 ) -> HashMap<String, Vec<usize>> {
     let mut index: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, row) in rows.iter().enumerate() {
-        let key_val = row
-            .get(key)
-            .map(value_to_key_string)
-            .unwrap_or_default();
+        let key_val = row.get(key).map(value_to_key_string).unwrap_or_default();
         index.entry(key_val).or_default().push(i);
     }
     index
@@ -155,8 +157,7 @@ fn merge_row(
     let mut merged = indexmap::IndexMap::new();
 
     // Collect all field names to detect conflicts
-    let right_keys: std::collections::HashSet<&str> =
-        right.keys().map(|s| s.as_str()).collect();
+    let right_keys: std::collections::HashSet<&str> = right.keys().map(|s| s.as_str()).collect();
 
     for (k, v) in left {
         if k == left_key && left_key != right_key {
@@ -190,10 +191,7 @@ fn merge_row(
 
 /// Create a null-filled row from a template (using the other side's columns).
 fn null_row(template: &[String]) -> indexmap::IndexMap<String, Value> {
-    template
-        .iter()
-        .map(|k| (k.clone(), Value::Null))
-        .collect()
+    template.iter().map(|k| (k.clone(), Value::Null)).collect()
 }
 
 /// Collect unique column names from rows.
@@ -312,7 +310,11 @@ pub fn run(args: &JoinArgs) -> Result<()> {
             "Join key '{}' not found in left file ({})\n  Hint: available fields are: {}",
             left_key,
             args.left.display(),
-            left_rows[0].keys().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            left_rows[0]
+                .keys()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
     if !right_rows.is_empty() && !right_rows.iter().any(|r| r.contains_key(&right_key)) {
@@ -320,7 +322,11 @@ pub fn run(args: &JoinArgs) -> Result<()> {
             "Join key '{}' not found in right file ({})\n  Hint: available fields are: {}",
             right_key,
             args.right.display(),
-            right_rows[0].keys().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            right_rows[0]
+                .keys()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
 
@@ -501,9 +507,18 @@ mod tests {
     #[test]
     fn test_inner_join() {
         let left = vec![
-            make_row(&[("id", Value::Integer(1)), ("name", Value::String("Alice".into()))]),
-            make_row(&[("id", Value::Integer(2)), ("name", Value::String("Bob".into()))]),
-            make_row(&[("id", Value::Integer(3)), ("name", Value::String("Charlie".into()))]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("name", Value::String("Alice".into())),
+            ]),
+            make_row(&[
+                ("id", Value::Integer(2)),
+                ("name", Value::String("Bob".into())),
+            ]),
+            make_row(&[
+                ("id", Value::Integer(3)),
+                ("name", Value::String("Charlie".into())),
+            ]),
         ];
         let right = vec![
             make_row(&[("id", Value::Integer(1)), ("amount", Value::Integer(100))]),
@@ -522,12 +537,19 @@ mod tests {
     #[test]
     fn test_left_join() {
         let left = vec![
-            make_row(&[("id", Value::Integer(1)), ("name", Value::String("Alice".into()))]),
-            make_row(&[("id", Value::Integer(3)), ("name", Value::String("Charlie".into()))]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("name", Value::String("Alice".into())),
+            ]),
+            make_row(&[
+                ("id", Value::Integer(3)),
+                ("name", Value::String("Charlie".into())),
+            ]),
         ];
-        let right = vec![
-            make_row(&[("id", Value::Integer(1)), ("amount", Value::Integer(100))]),
-        ];
+        let right = vec![make_row(&[
+            ("id", Value::Integer(1)),
+            ("amount", Value::Integer(100)),
+        ])];
 
         let result = execute_join(left, right, "id", "id", JoinType::Left);
         assert_eq!(result.len(), 2);
@@ -537,9 +559,10 @@ mod tests {
 
     #[test]
     fn test_right_join() {
-        let left = vec![
-            make_row(&[("id", Value::Integer(1)), ("name", Value::String("Alice".into()))]),
-        ];
+        let left = vec![make_row(&[
+            ("id", Value::Integer(1)),
+            ("name", Value::String("Alice".into())),
+        ])];
         let right = vec![
             make_row(&[("id", Value::Integer(1)), ("amount", Value::Integer(100))]),
             make_row(&[("id", Value::Integer(4)), ("amount", Value::Integer(400))]),
@@ -555,8 +578,14 @@ mod tests {
     #[test]
     fn test_full_join() {
         let left = vec![
-            make_row(&[("id", Value::Integer(1)), ("name", Value::String("Alice".into()))]),
-            make_row(&[("id", Value::Integer(3)), ("name", Value::String("Charlie".into()))]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("name", Value::String("Alice".into())),
+            ]),
+            make_row(&[
+                ("id", Value::Integer(3)),
+                ("name", Value::String("Charlie".into())),
+            ]),
         ];
         let right = vec![
             make_row(&[("id", Value::Integer(1)), ("amount", Value::Integer(100))]),
@@ -569,7 +598,10 @@ mod tests {
         assert_eq!(result[0].get("name"), Some(&Value::String("Alice".into())));
         assert_eq!(result[0].get("amount"), Some(&Value::Integer(100)));
         // id=3: left only
-        assert_eq!(result[1].get("name"), Some(&Value::String("Charlie".into())));
+        assert_eq!(
+            result[1].get("name"),
+            Some(&Value::String("Charlie".into()))
+        );
         assert_eq!(result[1].get("amount"), Some(&Value::Null));
         // id=4: right only
         assert_eq!(result[2].get("name"), Some(&Value::Null));
@@ -578,12 +610,14 @@ mod tests {
 
     #[test]
     fn test_join_different_keys() {
-        let left = vec![
-            make_row(&[("user_id", Value::Integer(1)), ("name", Value::String("Alice".into()))]),
-        ];
-        let right = vec![
-            make_row(&[("uid", Value::Integer(1)), ("amount", Value::Integer(100))]),
-        ];
+        let left = vec![make_row(&[
+            ("user_id", Value::Integer(1)),
+            ("name", Value::String("Alice".into())),
+        ])];
+        let right = vec![make_row(&[
+            ("uid", Value::Integer(1)),
+            ("amount", Value::Integer(100)),
+        ])];
 
         let result = execute_join(left, right, "user_id", "uid", JoinType::Inner);
         assert_eq!(result.len(), 1);
@@ -597,12 +631,24 @@ mod tests {
     #[test]
     fn test_join_many_to_many() {
         let left = vec![
-            make_row(&[("id", Value::Integer(1)), ("name", Value::String("Alice".into()))]),
-            make_row(&[("id", Value::Integer(1)), ("name", Value::String("Alice2".into()))]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("name", Value::String("Alice".into())),
+            ]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("name", Value::String("Alice2".into())),
+            ]),
         ];
         let right = vec![
-            make_row(&[("id", Value::Integer(1)), ("item", Value::String("A".into()))]),
-            make_row(&[("id", Value::Integer(1)), ("item", Value::String("B".into()))]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("item", Value::String("A".into())),
+            ]),
+            make_row(&[
+                ("id", Value::Integer(1)),
+                ("item", Value::String("B".into())),
+            ]),
         ];
 
         let result = execute_join(left, right, "id", "id", JoinType::Inner);
@@ -612,9 +658,7 @@ mod tests {
 
     #[test]
     fn test_extract_rows_array() {
-        let value = Value::Array(vec![
-            Value::Object(make_row(&[("a", Value::Integer(1))])),
-        ]);
+        let value = Value::Array(vec![Value::Object(make_row(&[("a", Value::Integer(1))]))]);
         let rows = extract_rows(value, "test").unwrap();
         assert_eq!(rows.len(), 1);
     }
