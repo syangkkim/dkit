@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "dkit"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "dkit-core"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "arrow",
