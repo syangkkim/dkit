@@ -1,6 +1,6 @@
 use crate::error::DkitError;
 use crate::query::filter::evaluate_condition;
-use crate::query::parser::{ArithmeticOp, Expr, LiteralValue};
+use crate::query::parser::{ArithmeticOp, Expr, LiteralValue, WindowFunc};
 use crate::value::Value;
 
 /// 표현식을 주어진 레코드(행)에 대해 평가하여 Value를 반환
@@ -46,6 +46,9 @@ pub fn evaluate_expr(row: &Value, expr: &Expr) -> Result<Value, DkitError> {
                 None => Ok(Value::Null),
             }
         }
+        Expr::Window { .. } => Err(DkitError::QueryError(
+            "window functions can only be used in select with array input".to_string(),
+        )),
     }
 }
 
@@ -156,6 +159,26 @@ pub fn expr_default_key(expr: &Expr) -> String {
                 "case".to_string()
             }
         }
+        Expr::Window { func, .. } => match func {
+            WindowFunc::RowNumber => "row_number".to_string(),
+            WindowFunc::Rank => "rank".to_string(),
+            WindowFunc::DenseRank => "dense_rank".to_string(),
+            WindowFunc::Lag { expr, .. } => format!("lag_{}", expr_default_key(expr)),
+            WindowFunc::Lead { expr, .. } => format!("lead_{}", expr_default_key(expr)),
+            WindowFunc::FirstValue { expr } => format!("first_value_{}", expr_default_key(expr)),
+            WindowFunc::LastValue { expr } => format!("last_value_{}", expr_default_key(expr)),
+            WindowFunc::Aggregate { func: agg, expr } => {
+                let name = match agg {
+                    crate::query::parser::AggregateFunc::Count => "count",
+                    crate::query::parser::AggregateFunc::Sum => "sum",
+                    crate::query::parser::AggregateFunc::Avg => "avg",
+                    crate::query::parser::AggregateFunc::Min => "min",
+                    crate::query::parser::AggregateFunc::Max => "max",
+                    _ => "agg",
+                };
+                format!("{}_{}", name, expr_default_key(expr))
+            }
+        },
     }
 }
 
