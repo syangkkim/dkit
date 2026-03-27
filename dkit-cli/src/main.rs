@@ -354,6 +354,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             log_format,
             log_error,
             parallel,
+            template,
+            template_file,
         } => {
             let parallel_threads = parse_parallel_option(&parallel)?;
             let run = || {
@@ -422,6 +424,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     log_format: log_format.as_deref(),
                     log_error: parse_log_error_mode(&log_error),
                     parallel: parallel_threads,
+                    template: template.clone(),
+                    template_file: template_file.clone(),
                 })
             };
 

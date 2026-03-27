@@ -24,6 +24,7 @@ use dkit_core::format::markdown::MarkdownWriter;
 use dkit_core::format::msgpack::{MsgpackReader, MsgpackWriter};
 use dkit_core::format::plist::{PlistReader, PlistWriter};
 use dkit_core::format::properties::{PropertiesReader, PropertiesWriter};
+use dkit_core::format::template::TemplateWriter;
 use dkit_core::format::toml::{TomlReader, TomlWriter};
 use dkit_core::format::xml::{XmlReader, XmlWriter};
 use dkit_core::format::yaml::{YamlReader, YamlWriter};
@@ -69,6 +70,8 @@ pub struct ConvertArgs<'a> {
     pub log_format: Option<&'a str>,
     pub log_error: LogParseErrorMode,
     pub parallel: Option<usize>,
+    pub template: Option<String>,
+    pub template_file: Option<String>,
 }
 
 /// convert 서브커맨드 실행
@@ -106,6 +109,8 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
         full_html: args.full_html,
         indent: args.indent.clone(),
         sort_keys: args.sort_keys,
+        template: args.template.clone(),
+        template_file: args.template_file.clone(),
     };
 
     // stdin mode: no input files or explicit "-"
@@ -664,6 +669,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Parquet => {
             bail!("Parquet files must be read from a file path, not from text input")
         }
+        Format::Template => bail!("Template is an output-only format and cannot be used as input"),
         Format::Markdown => bail!("Markdown is an output-only format and cannot be used as input"),
         Format::Html => bail!("HTML is an output-only format and cannot be used as input"),
         Format::Table => bail!("Table is an output-only format and cannot be used as input"),
@@ -730,6 +736,7 @@ fn write_value(value: &Value, format: Format, options: &FormatOptions) -> Result
         Format::Parquet => {
             bail!("Internal error: Parquet output should be handled via write_output")
         }
+        Format::Template => TemplateWriter::new(options.clone()).write(value),
         Format::Markdown => MarkdownWriter.write(value),
         Format::Html => HtmlWriter::new(options.styled, options.full_html).write(value),
         Format::Table => {

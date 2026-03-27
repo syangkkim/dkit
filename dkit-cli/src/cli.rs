@@ -259,6 +259,17 @@ pub enum Commands {
         /// Only applies when converting multiple files.
         #[arg(long, value_name = "N")]
         parallel: Option<String>,
+
+        /// Inline Tera template string for template output format.
+        /// Each record is rendered through this template.
+        /// Use with -f template. Example: '{{ name }} <{{ email }}>'
+        #[arg(long, value_name = "STRING")]
+        template: Option<String>,
+
+        /// Path to a Tera template file for template output format.
+        /// Use with -f template.
+        #[arg(long, value_name = "PATH", conflicts_with = "template")]
+        template_file: Option<String>,
     },
 
     /// Query data using path expressions

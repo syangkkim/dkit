@@ -273,6 +273,36 @@ pub mod plist {
     }
 }
 
+/// Template-based custom text output writer.
+#[cfg(feature = "template")]
+pub mod template;
+#[cfg(not(feature = "template"))]
+pub mod template {
+    //! Stub module — Template feature not enabled.
+    use super::FormatWriter;
+    use crate::value::Value;
+    use std::io::Write;
+
+    const MSG: &str = "Template support requires the 'template' feature.\n  Install with: cargo install dkit --features template";
+
+    pub struct TemplateWriter {
+        _private: (),
+    }
+    impl TemplateWriter {
+        pub fn new(_options: super::FormatOptions) -> Self {
+            Self { _private: () }
+        }
+    }
+    impl FormatWriter for TemplateWriter {
+        fn write(&self, _: &Value) -> anyhow::Result<String> {
+            anyhow::bail!(MSG)
+        }
+        fn write_to_writer(&self, _: &Value, _: impl Write) -> anyhow::Result<()> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
+
 /// XML reader and writer.
 #[cfg(feature = "xml")]
 pub mod xml;
@@ -370,6 +400,8 @@ pub enum Format {
     Hcl,
     /// macOS Property List (`*.plist`)
     Plist,
+    /// Template-based custom text output (write-only)
+    Template,
 }
 
 impl Format {
@@ -394,6 +426,7 @@ impl Format {
             "properties" => Ok(Format::Properties),
             "hcl" | "tf" | "tfvars" => Ok(Format::Hcl),
             "plist" => Ok(Format::Plist),
+            "template" | "tpl" => Ok(Format::Template),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -459,6 +492,15 @@ impl Format {
             ));
         }
 
+        if cfg!(feature = "template") {
+            formats.push(("template", "Custom text output via Tera templates"));
+        } else {
+            formats.push((
+                "template",
+                "Custom text output via Tera templates (requires --features template)",
+            ));
+        }
+
         formats.push(("env", "Environment variables (.env) format"));
         formats.push(("ini", "INI/CFG configuration file format"));
         formats.push(("properties", "Java .properties file format"));
@@ -491,6 +533,7 @@ impl std::fmt::Display for Format {
             Format::Properties => write!(f, "Properties"),
             Format::Hcl => write!(f, "HCL"),
             Format::Plist => write!(f, "Plist"),
+            Format::Template => write!(f, "Template"),
         }
     }
 }
@@ -706,6 +749,10 @@ pub struct FormatOptions {
     pub indent: Option<String>,
     /// JSON 오브젝트 키를 알파벳순으로 정렬
     pub sort_keys: bool,
+    /// Inline template string for template output
+    pub template: Option<String>,
+    /// File path for template output
+    pub template_file: Option<String>,
 }
 
 impl Default for FormatOptions {
@@ -721,6 +768,8 @@ impl Default for FormatOptions {
             full_html: false,
             indent: None,
             sort_keys: false,
+            template: None,
+            template_file: None,
         }
     }
 }
