@@ -257,3 +257,166 @@ fn batch_convert_shows_progress() {
         .stderr(predicate::str::contains("(2/2)"))
         .stderr(predicate::str::contains("ok"));
 }
+
+// --- Parallel batch conversion ---
+
+#[test]
+fn batch_convert_parallel_with_number() {
+    let input_dir = TempDir::new().unwrap();
+    let outdir = TempDir::new().unwrap();
+
+    fs::write(input_dir.path().join("a.json"), r#"[{"x": 1}]"#).unwrap();
+    fs::write(input_dir.path().join("b.json"), r#"[{"y": 2}]"#).unwrap();
+    fs::write(input_dir.path().join("c.json"), r#"[{"z": 3}]"#).unwrap();
+
+    dkit()
+        .args(&[
+            "convert",
+            input_dir.path().to_str().unwrap(),
+            "--format",
+            "csv",
+            "--outdir",
+            outdir.path().to_str().unwrap(),
+            "--parallel",
+            "2",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "3 succeeded, 0 failed out of 3 files",
+        ));
+
+    assert!(outdir.path().join("a.csv").exists());
+    assert!(outdir.path().join("b.csv").exists());
+    assert!(outdir.path().join("c.csv").exists());
+}
+
+#[test]
+fn batch_convert_parallel_auto() {
+    let input_dir = TempDir::new().unwrap();
+    let outdir = TempDir::new().unwrap();
+
+    fs::write(input_dir.path().join("a.json"), r#"[{"x": 1}]"#).unwrap();
+    fs::write(input_dir.path().join("b.json"), r#"[{"y": 2}]"#).unwrap();
+
+    dkit()
+        .args(&[
+            "convert",
+            input_dir.path().to_str().unwrap(),
+            "--format",
+            "csv",
+            "--outdir",
+            outdir.path().to_str().unwrap(),
+            "--parallel",
+            "auto",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "2 succeeded, 0 failed out of 2 files",
+        ));
+
+    assert!(outdir.path().join("a.csv").exists());
+    assert!(outdir.path().join("b.csv").exists());
+}
+
+#[test]
+fn batch_convert_parallel_with_errors() {
+    let input_dir = TempDir::new().unwrap();
+    let outdir = TempDir::new().unwrap();
+
+    fs::write(input_dir.path().join("good.json"), r#"[{"a": 1}]"#).unwrap();
+    fs::write(
+        input_dir.path().join("bad.json"),
+        "this is not valid json {{{",
+    )
+    .unwrap();
+
+    dkit()
+        .args(&[
+            "convert",
+            input_dir.path().to_str().unwrap(),
+            "--format",
+            "csv",
+            "--outdir",
+            outdir.path().to_str().unwrap(),
+            "--parallel",
+            "2",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("1 succeeded"))
+        .stderr(predicate::str::contains("1 failed"))
+        .stderr(predicate::str::contains("Failed files:"));
+
+    assert!(outdir.path().join("good.csv").exists());
+    assert!(!outdir.path().join("bad.csv").exists());
+}
+
+#[test]
+fn batch_convert_parallel_invalid_value() {
+    dkit()
+        .args(&[
+            "convert",
+            "tests/fixtures/users.json",
+            "tests/fixtures/users.csv",
+            "--format",
+            "yaml",
+            "--outdir",
+            "/tmp/dkit_test_invalid",
+            "--parallel",
+            "abc",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--parallel must be a positive number or 'auto'",
+        ));
+}
+
+#[test]
+fn batch_convert_parallel_zero() {
+    dkit()
+        .args(&[
+            "convert",
+            "tests/fixtures/users.json",
+            "tests/fixtures/users.csv",
+            "--format",
+            "yaml",
+            "--outdir",
+            "/tmp/dkit_test_zero",
+            "--parallel",
+            "0",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--parallel must be at least 1"));
+}
+
+#[test]
+fn batch_convert_parallel_with_rename() {
+    let input_dir = TempDir::new().unwrap();
+    let outdir = TempDir::new().unwrap();
+
+    fs::write(input_dir.path().join("a.json"), r#"[{"x": 1}]"#).unwrap();
+    fs::write(input_dir.path().join("b.json"), r#"[{"y": 2}]"#).unwrap();
+
+    dkit()
+        .args(&[
+            "convert",
+            input_dir.path().to_str().unwrap(),
+            "--format",
+            "csv",
+            "--outdir",
+            outdir.path().to_str().unwrap(),
+            "--parallel",
+            "2",
+            "--rename",
+            "{name}.converted.{ext}",
+        ])
+        .assert()
+        .success();
+
+    assert!(outdir.path().join("a.converted.csv").exists());
+    assert!(outdir.path().join("b.converted.csv").exists());
+}
