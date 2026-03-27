@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774613195508,
+  "lastUpdate": 1774614805314,
   "repoUrl": "https://github.com/syangkkim/dkit",
   "entries": {
     "Benchmark": [
@@ -12383,6 +12383,264 @@ window.BENCHMARK_DATA = {
             "name": "query_parse/. | where active == true | sort age | limit 50",
             "value": 953,
             "range": "± 5",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "syang.kkim@gmail.com",
+            "name": "syangkkim",
+            "username": "syangkkim"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ebfd2e20c3280c696aa0876008fe022e473b7819",
+          "message": "Merge pull request #263 from syangkkim/claude/next-issue-BEkLa\n\nfeat: add --template flag for custom text output formatting",
+          "timestamp": "2026-03-27T21:24:19+09:00",
+          "tree_id": "49d725f8a17b11f4048eb75404d8789bcfac2247",
+          "url": "https://github.com/syangkkim/dkit/commit/ebfd2e20c3280c696aa0876008fe022e473b7819"
+        },
+        "date": 1774614803848,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "convert_json_to_csv/1000",
+            "value": 2185264,
+            "range": "± 5763",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_json_to_csv/10000",
+            "value": 22183105,
+            "range": "± 548974",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_csv_to_json/1000",
+            "value": 2788505,
+            "range": "± 124478",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_csv_to_json/10000",
+            "value": 38769554,
+            "range": "± 775138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_json_to_jsonl/1000",
+            "value": 2222838,
+            "range": "± 11659",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_json_to_jsonl/10000",
+            "value": 22532271,
+            "range": "± 514149",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_jsonl_to_csv/1000",
+            "value": 2215343,
+            "range": "± 57879",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "convert_jsonl_to_csv/10000",
+            "value": 22133087,
+            "range": "± 319723",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "value_serialize/json",
+            "value": 1381582,
+            "range": "± 67104",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "value_serialize/csv",
+            "value": 808228,
+            "range": "± 48368",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "value_serialize/jsonl",
+            "value": 811118,
+            "range": "± 5327",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "json_read/1000",
+            "value": 1391024,
+            "range": "± 21314",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "json_read/10000",
+            "value": 17622866,
+            "range": "± 236168",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "json_write/1000",
+            "value": 1461540,
+            "range": "± 22973",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "json_write/10000",
+            "value": 23028393,
+            "range": "± 104326",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "csv_read/1000",
+            "value": 1364483,
+            "range": "± 45994",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "csv_read/10000",
+            "value": 13513093,
+            "range": "± 916529",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "csv_write/1000",
+            "value": 812639,
+            "range": "± 2788",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "csv_write/10000",
+            "value": 8123824,
+            "range": "± 123654",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "yaml_read/100",
+            "value": 857826,
+            "range": "± 6714",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "yaml_read/500",
+            "value": 4257612,
+            "range": "± 21041",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "yaml_write/100",
+            "value": 504596,
+            "range": "± 1441",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "yaml_write/500",
+            "value": 2530645,
+            "range": "± 6032",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_filter/1000",
+            "value": 598713,
+            "range": "± 4744",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_filter/10000",
+            "value": 11126847,
+            "range": "± 437579",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_sort/1000",
+            "value": 1787747,
+            "range": "± 41804",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_sort/10000",
+            "value": 23244905,
+            "range": "± 495478",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_sort_desc/1000",
+            "value": 1180101,
+            "range": "± 9222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_sort_desc/10000",
+            "value": 24249713,
+            "range": "± 103529",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_sum/1000",
+            "value": 607593,
+            "range": "± 13822",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_sum/10000",
+            "value": 10804774,
+            "range": "± 588425",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_group_by/1000",
+            "value": 898153,
+            "range": "± 27742",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_group_by/10000",
+            "value": 9247072,
+            "range": "± 185708",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_filter_sort/1000",
+            "value": 1695818,
+            "range": "± 8179",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_filter_sort/10000",
+            "value": 21807374,
+            "range": "± 549229",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_parse/. | where age > 30",
+            "value": 569,
+            "range": "± 6",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_parse/. | sort score desc | limit 100",
+            "value": 675,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_parse/. | group_by category | select category, count",
+            "value": 1467,
+            "range": "± 8",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "query_parse/. | where active == true | sort age | limit 50",
+            "value": 1136,
+            "range": "± 31",
             "unit": "ns/iter"
           }
         ]
