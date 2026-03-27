@@ -26,6 +26,10 @@ pub struct Cli {
     /// Show verbose error output (error chain, debug info)
     #[arg(long, global = true)]
     pub verbose: bool,
+
+    /// Show execution time (parse, transform, write phases)
+    #[arg(long, global = true)]
+    pub time: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -305,6 +309,10 @@ pub enum Commands {
         /// SQL query to execute on SQLite database
         #[arg(long, value_name = "SQL")]
         sql: Option<String>,
+
+        /// Show query execution plan without running the query
+        #[arg(long)]
+        explain: bool,
     },
 
     /// View data in a formatted table

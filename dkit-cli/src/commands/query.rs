@@ -28,7 +28,10 @@ use dkit_core::format::{
 };
 use dkit_core::query::evaluator::evaluate_path;
 use dkit_core::query::filter::apply_operations;
-use dkit_core::query::parser::parse_query;
+use dkit_core::query::parser::{
+    parse_query, AggregateFunc, ArithmeticOp, CompareOp, Comparison, Condition, Expr,
+    GroupAggregate, LiteralValue, Operation, Path as QueryPath, Query, Segment, SelectExpr,
+};
 use dkit_core::value::Value;
 
 pub struct QueryArgs<'a> {
@@ -40,10 +43,18 @@ pub struct QueryArgs<'a> {
     pub encoding_opts: EncodingOptions,
     pub excel_opts: ExcelOptions,
     pub sqlite_opts: SqliteOptions,
+    pub explain: bool,
 }
 
 /// query 서브커맨드 실행
 pub fn run(args: &QueryArgs) -> Result<()> {
+    // --explain: 쿼리 실행 계획만 출력하고 종료
+    if args.explain {
+        let query = parse_query(args.query)?;
+        print_explain(&query, args.input);
+        return Ok(());
+    }
+
     // 입력 읽기 (바이너리 포맷 자동 처리)
     let value = if args.input == "-" {
         if args.from == Some("msgpack") || args.from == Some("messagepack") {
@@ -172,6 +183,268 @@ fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
             .read_to_string(&mut buf)
             .context("Failed to read from stdin")?;
         Ok(buf)
+    }
+}
+
+/// Print a human-readable execution plan for a parsed query.
+fn print_explain(query: &Query, input: &str) {
+    eprintln!("Execution Plan:");
+
+    let mut step = 1;
+
+    // Step 1: Scan
+    eprintln!("  {}. Scan: {}", step, input);
+    step += 1;
+
+    // Step 2: Path navigation
+    if !query.path.segments.is_empty() {
+        eprintln!("  {}. Navigate: {}", step, format_path(&query.path));
+        step += 1;
+    }
+
+    // Remaining steps: pipeline operations
+    for op in &query.operations {
+        eprintln!("  {}. {}", step, format_operation(op));
+        step += 1;
+    }
+}
+
+fn format_path(path: &QueryPath) -> String {
+    let mut s = String::from(".");
+    for seg in &path.segments {
+        match seg {
+            Segment::Field(f) => {
+                s.push('.');
+                s.push_str(f);
+            }
+            Segment::Index(i) => {
+                s.push_str(&format!("[{}]", i));
+            }
+            Segment::Iterate => s.push_str("[]"),
+            Segment::Slice { start, end, step } => {
+                let start_s = start.map_or(String::new(), |v| v.to_string());
+                let end_s = end.map_or(String::new(), |v| v.to_string());
+                match step {
+                    Some(st) => s.push_str(&format!("[{}:{}:{}]", start_s, end_s, st)),
+                    None => s.push_str(&format!("[{}:{}]", start_s, end_s)),
+                }
+            }
+            Segment::Wildcard => s.push_str("[*]"),
+            Segment::RecursiveDescent(key) => {
+                s.push_str("..");
+                s.push_str(key);
+            }
+            _ => s.push_str("[?]"),
+        }
+    }
+    s
+}
+
+fn format_operation(op: &Operation) -> String {
+    match op {
+        Operation::Where(cond) => format!("Filter: {}", format_condition(cond)),
+        Operation::Select(exprs) => {
+            let cols: Vec<String> = exprs.iter().map(format_select_expr).collect();
+            format!("Project: {}", cols.join(", "))
+        }
+        Operation::Sort { field, descending } => {
+            let dir = if *descending { "DESC" } else { "ASC" };
+            format!("Sort: {} {}", field, dir)
+        }
+        Operation::Limit(n) => format!("Limit: {}", n),
+        Operation::Count { field } => match field {
+            Some(f) => format!("Aggregate: count({})", f),
+            None => "Aggregate: count()".to_string(),
+        },
+        Operation::Sum { field } => format!("Aggregate: sum({})", field),
+        Operation::Avg { field } => format!("Aggregate: avg({})", field),
+        Operation::Min { field } => format!("Aggregate: min({})", field),
+        Operation::Max { field } => format!("Aggregate: max({})", field),
+        Operation::Median { field } => format!("Aggregate: median({})", field),
+        Operation::Percentile { field, p } => {
+            format!("Aggregate: percentile({}, {})", field, p)
+        }
+        Operation::Stddev { field } => format!("Aggregate: stddev({})", field),
+        Operation::Variance { field } => format!("Aggregate: variance({})", field),
+        Operation::Mode { field } => format!("Aggregate: mode({})", field),
+        Operation::GroupConcat { field, separator } => {
+            format!("Aggregate: group_concat({}, \"{}\")", field, separator)
+        }
+        Operation::Distinct { field } => format!("Distinct: {}", field),
+        Operation::Unique => "Unique: (full record)".to_string(),
+        Operation::UniqueBy { field } => format!("Unique by: {}", field),
+        Operation::GroupBy {
+            fields,
+            having,
+            aggregates,
+        } => {
+            let mut s = format!("Group By: {}", fields.join(", "));
+            if !aggregates.is_empty() {
+                let aggs: Vec<String> = aggregates.iter().map(format_group_aggregate).collect();
+                s.push_str(&format!(" → {}", aggs.join(", ")));
+            }
+            if let Some(h) = having {
+                s.push_str(&format!(" having {}", format_condition(h)));
+            }
+            s
+        }
+        Operation::AddField { name, expr } => {
+            format!("Add Field: {} = {}", name, format_expr(expr))
+        }
+        Operation::MapField { name, expr } => {
+            format!("Map Field: {} = {}", name, format_expr(expr))
+        }
+        Operation::Explode { field } => format!("Explode: {}", field),
+        Operation::Unpivot {
+            value_columns,
+            key_name,
+            value_name,
+        } => {
+            format!(
+                "Unpivot: [{}] → ({}, {})",
+                value_columns.join(", "),
+                key_name,
+                value_name
+            )
+        }
+        Operation::Pivot {
+            index_fields,
+            columns_field,
+            values_field,
+        } => {
+            format!(
+                "Pivot: index=[{}], columns={}, values={}",
+                index_fields.join(", "),
+                columns_field,
+                values_field
+            )
+        }
+        _ => format!("{:?}", op),
+    }
+}
+
+fn format_condition(cond: &Condition) -> String {
+    match cond {
+        Condition::Comparison(cmp) => format_comparison(cmp),
+        Condition::And(l, r) => {
+            format!("({} AND {})", format_condition(l), format_condition(r))
+        }
+        Condition::Or(l, r) => {
+            format!("({} OR {})", format_condition(l), format_condition(r))
+        }
+        _ => format!("{:?}", cond),
+    }
+}
+
+fn format_comparison(cmp: &Comparison) -> String {
+    let op = match cmp.op {
+        CompareOp::Eq => "==",
+        CompareOp::Ne => "!=",
+        CompareOp::Gt => ">",
+        CompareOp::Lt => "<",
+        CompareOp::Ge => ">=",
+        CompareOp::Le => "<=",
+        CompareOp::Contains => "contains",
+        CompareOp::StartsWith => "starts_with",
+        CompareOp::EndsWith => "ends_with",
+        CompareOp::In => "in",
+        CompareOp::NotIn => "not in",
+        CompareOp::Matches => "matches",
+        CompareOp::NotMatches => "not matches",
+        _ => "?",
+    };
+    format!("{} {} {}", cmp.field, op, format_literal(&cmp.value))
+}
+
+fn format_literal(lit: &LiteralValue) -> String {
+    match lit {
+        LiteralValue::String(s) => format!("\"{}\"", s),
+        LiteralValue::Integer(n) => n.to_string(),
+        LiteralValue::Float(f) => f.to_string(),
+        LiteralValue::Bool(b) => b.to_string(),
+        LiteralValue::Null => "null".to_string(),
+        LiteralValue::List(items) => {
+            let parts: Vec<String> = items.iter().map(format_literal).collect();
+            format!("[{}]", parts.join(", "))
+        }
+        _ => format!("{:?}", lit),
+    }
+}
+
+fn format_expr(expr: &Expr) -> String {
+    match expr {
+        Expr::Field(f) => f.clone(),
+        Expr::Literal(lit) => format_literal(lit),
+        Expr::FuncCall { name, args } => {
+            let arg_strs: Vec<String> = args.iter().map(format_expr).collect();
+            format!("{}({})", name, arg_strs.join(", "))
+        }
+        Expr::BinaryOp { op, left, right } => {
+            let op_str = match op {
+                ArithmeticOp::Add => "+",
+                ArithmeticOp::Sub => "-",
+                ArithmeticOp::Mul => "*",
+                ArithmeticOp::Div => "/",
+            };
+            format!("({} {} {})", format_expr(left), op_str, format_expr(right))
+        }
+        Expr::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            format!(
+                "if({}, {}, {})",
+                format_condition(condition),
+                format_expr(then_expr),
+                format_expr(else_expr)
+            )
+        }
+        Expr::Case { branches, default } => {
+            let mut s = String::from("case");
+            for (cond, expr) in branches {
+                s.push_str(&format!(
+                    " when {} then {}",
+                    format_condition(cond),
+                    format_expr(expr)
+                ));
+            }
+            if let Some(d) = default {
+                s.push_str(&format!(" else {}", format_expr(d)));
+            }
+            s.push_str(" end");
+            s
+        }
+        _ => format!("{:?}", expr),
+    }
+}
+
+fn format_select_expr(se: &SelectExpr) -> String {
+    let base = format_expr(&se.expr);
+    match &se.alias {
+        Some(alias) => format!("{} as {}", base, alias),
+        None => base,
+    }
+}
+
+fn format_group_aggregate(ga: &GroupAggregate) -> String {
+    let func = match &ga.func {
+        AggregateFunc::Count => "count".to_string(),
+        AggregateFunc::Sum => "sum".to_string(),
+        AggregateFunc::Avg => "avg".to_string(),
+        AggregateFunc::Min => "min".to_string(),
+        AggregateFunc::Max => "max".to_string(),
+        AggregateFunc::Median => "median".to_string(),
+        AggregateFunc::Percentile(p) => format!("percentile({})", p),
+        AggregateFunc::Stddev => "stddev".to_string(),
+        AggregateFunc::Variance => "variance".to_string(),
+        AggregateFunc::Mode => "mode".to_string(),
+        AggregateFunc::GroupConcat(sep) => format!("group_concat(\"{}\")", sep),
+        _ => format!("{:?}", ga.func),
+    };
+    match &ga.field {
+        Some(f) => format!("{}({}) as {}", func, f, ga.alias),
+        None => format!("{}() as {}", func, ga.alias),
     }
 }
 
