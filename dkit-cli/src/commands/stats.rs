@@ -14,6 +14,7 @@ use dkit_core::format::ini::IniReader;
 use dkit_core::format::json::JsonReader;
 use dkit_core::format::jsonl::JsonlReader;
 use dkit_core::format::msgpack::MsgpackReader;
+use dkit_core::format::plist::PlistReader;
 use dkit_core::format::properties::PropertiesReader;
 use dkit_core::format::toml::TomlReader;
 use dkit_core::format::xml::XmlReader;
@@ -882,6 +883,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Ini => IniReader.read(content),
         Format::Properties => PropertiesReader.read(content),
         Format::Hcl => HclReader.read(content),
+        Format::Plist => PlistReader.read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")
