@@ -482,7 +482,9 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, DkitError> {
             if char_count >= width {
                 Ok(Value::String(s))
             } else {
-                let padding: String = std::iter::repeat(pad_char).take(width - char_count).collect();
+                let padding: String = std::iter::repeat(pad_char)
+                    .take(width - char_count)
+                    .collect();
                 Ok(Value::String(format!("{}{}", padding, s)))
             }
         }
@@ -527,7 +529,9 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, DkitError> {
             if char_count >= width {
                 Ok(Value::String(s))
             } else {
-                let padding: String = std::iter::repeat(pad_char).take(width - char_count).collect();
+                let padding: String = std::iter::repeat(pad_char)
+                    .take(width - char_count)
+                    .collect();
                 Ok(Value::String(format!("{}{}", s, padding)))
             }
         }
@@ -1038,32 +1042,44 @@ mod tests {
     #[test]
     fn test_starts_with() {
         let row = obj(&[("name", Value::String("Dr. Smith".to_string()))]);
-        let result =
-            eval(&row, &func("starts_with", vec![field("name"), lit_str("Dr.")])).unwrap();
+        let result = eval(
+            &row,
+            &func("starts_with", vec![field("name"), lit_str("Dr.")]),
+        )
+        .unwrap();
         assert_eq!(result, Value::Bool(true));
     }
 
     #[test]
     fn test_starts_with_false() {
         let row = obj(&[("name", Value::String("Mr. Smith".to_string()))]);
-        let result =
-            eval(&row, &func("starts_with", vec![field("name"), lit_str("Dr.")])).unwrap();
+        let result = eval(
+            &row,
+            &func("starts_with", vec![field("name"), lit_str("Dr.")]),
+        )
+        .unwrap();
         assert_eq!(result, Value::Bool(false));
     }
 
     #[test]
     fn test_ends_with() {
         let row = obj(&[("file", Value::String("data.json".to_string()))]);
-        let result =
-            eval(&row, &func("ends_with", vec![field("file"), lit_str(".json")])).unwrap();
+        let result = eval(
+            &row,
+            &func("ends_with", vec![field("file"), lit_str(".json")]),
+        )
+        .unwrap();
         assert_eq!(result, Value::Bool(true));
     }
 
     #[test]
     fn test_ends_with_false() {
         let row = obj(&[("file", Value::String("data.csv".to_string()))]);
-        let result =
-            eval(&row, &func("ends_with", vec![field("file"), lit_str(".json")])).unwrap();
+        let result = eval(
+            &row,
+            &func("ends_with", vec![field("file"), lit_str(".json")]),
+        )
+        .unwrap();
         assert_eq!(result, Value::Bool(false));
     }
 
