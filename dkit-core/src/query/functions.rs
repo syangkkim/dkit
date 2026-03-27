@@ -288,6 +288,250 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, DkitError> {
             ))
         }
 
+        "index_of" => {
+            if args.len() != 2 {
+                return Err(DkitError::QueryError(format!(
+                    "index_of() takes 2 arguments (string, substr), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Integer(-1)),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "index_of() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let substr = match &args[1] {
+                Value::String(s) => s.clone(),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "index_of() second argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            match s.find(&*substr) {
+                Some(pos) => {
+                    let char_pos = s[..pos].chars().count() as i64;
+                    Ok(Value::Integer(char_pos))
+                }
+                None => Ok(Value::Integer(-1)),
+            }
+        }
+        "rindex_of" => {
+            if args.len() != 2 {
+                return Err(DkitError::QueryError(format!(
+                    "rindex_of() takes 2 arguments (string, substr), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Integer(-1)),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "rindex_of() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let substr = match &args[1] {
+                Value::String(s) => s.clone(),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "rindex_of() second argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            match s.rfind(&*substr) {
+                Some(pos) => {
+                    let char_pos = s[..pos].chars().count() as i64;
+                    Ok(Value::Integer(char_pos))
+                }
+                None => Ok(Value::Integer(-1)),
+            }
+        }
+        "starts_with" => {
+            if args.len() != 2 {
+                return Err(DkitError::QueryError(format!(
+                    "starts_with() takes 2 arguments (string, prefix), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Bool(false)),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "starts_with() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let prefix = match &args[1] {
+                Value::String(s) => s.clone(),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "starts_with() second argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            Ok(Value::Bool(s.starts_with(&*prefix)))
+        }
+        "ends_with" => {
+            if args.len() != 2 {
+                return Err(DkitError::QueryError(format!(
+                    "ends_with() takes 2 arguments (string, suffix), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Bool(false)),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "ends_with() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let suffix = match &args[1] {
+                Value::String(s) => s.clone(),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "ends_with() second argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            Ok(Value::Bool(s.ends_with(&*suffix)))
+        }
+        "reverse" => {
+            let s = require_one_string(name, &args)?;
+            Ok(Value::String(s.chars().rev().collect()))
+        }
+        "repeat" => {
+            if args.len() != 2 {
+                return Err(DkitError::QueryError(format!(
+                    "repeat() takes 2 arguments (string, count), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Null),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "repeat() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let n = require_integer_arg("repeat", &args[1], "count")?;
+            if n < 0 {
+                return Err(DkitError::QueryError(
+                    "repeat() count must be non-negative".to_string(),
+                ));
+            }
+            Ok(Value::String(s.repeat(n as usize)))
+        }
+        "pad_left" => {
+            if args.len() != 3 {
+                return Err(DkitError::QueryError(format!(
+                    "pad_left() takes 3 arguments (string, width, char), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Null),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "pad_left() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let width = require_integer_arg("pad_left", &args[1], "width")? as usize;
+            let pad_char = match &args[2] {
+                Value::String(s) => {
+                    let mut chars = s.chars();
+                    match (chars.next(), chars.next()) {
+                        (Some(c), None) => c,
+                        _ => {
+                            return Err(DkitError::QueryError(
+                                "pad_left() third argument must be a single character".to_string(),
+                            ))
+                        }
+                    }
+                }
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "pad_left() third argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let char_count = s.chars().count();
+            if char_count >= width {
+                Ok(Value::String(s))
+            } else {
+                let padding: String = std::iter::repeat(pad_char).take(width - char_count).collect();
+                Ok(Value::String(format!("{}{}", padding, s)))
+            }
+        }
+        "pad_right" => {
+            if args.len() != 3 {
+                return Err(DkitError::QueryError(format!(
+                    "pad_right() takes 3 arguments (string, width, char), got {}",
+                    args.len()
+                )));
+            }
+            let s = match &args[0] {
+                Value::String(s) => s.clone(),
+                Value::Null => return Ok(Value::Null),
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "pad_right() first argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let width = require_integer_arg("pad_right", &args[1], "width")? as usize;
+            let pad_char = match &args[2] {
+                Value::String(s) => {
+                    let mut chars = s.chars();
+                    match (chars.next(), chars.next()) {
+                        (Some(c), None) => c,
+                        _ => {
+                            return Err(DkitError::QueryError(
+                                "pad_right() third argument must be a single character".to_string(),
+                            ))
+                        }
+                    }
+                }
+                v => {
+                    return Err(DkitError::QueryError(format!(
+                        "pad_right() third argument must be a string, got {}",
+                        value_type_name(v)
+                    )))
+                }
+            };
+            let char_count = s.chars().count();
+            if char_count >= width {
+                Ok(Value::String(s))
+            } else {
+                let padding: String = std::iter::repeat(pad_char).take(width - char_count).collect();
+                Ok(Value::String(format!("{}{}", s, padding)))
+            }
+        }
+
         // --- 수학 함수 ---
         "round" => {
             let n = require_numeric_arg(name, &args)?;
@@ -761,6 +1005,131 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result, Value::String("hello dkit".to_string()));
+    }
+
+    #[test]
+    fn test_index_of() {
+        let row = obj(&[("email", Value::String("user@example.com".to_string()))]);
+        let result = eval(&row, &func("index_of", vec![field("email"), lit_str("@")])).unwrap();
+        assert_eq!(result, Value::Integer(4));
+    }
+
+    #[test]
+    fn test_index_of_not_found() {
+        let row = obj(&[("s", Value::String("hello".to_string()))]);
+        let result = eval(&row, &func("index_of", vec![field("s"), lit_str("xyz")])).unwrap();
+        assert_eq!(result, Value::Integer(-1));
+    }
+
+    #[test]
+    fn test_rindex_of() {
+        let row = obj(&[("s", Value::String("abcabc".to_string()))]);
+        let result = eval(&row, &func("rindex_of", vec![field("s"), lit_str("abc")])).unwrap();
+        assert_eq!(result, Value::Integer(3));
+    }
+
+    #[test]
+    fn test_rindex_of_not_found() {
+        let row = obj(&[("s", Value::String("hello".to_string()))]);
+        let result = eval(&row, &func("rindex_of", vec![field("s"), lit_str("xyz")])).unwrap();
+        assert_eq!(result, Value::Integer(-1));
+    }
+
+    #[test]
+    fn test_starts_with() {
+        let row = obj(&[("name", Value::String("Dr. Smith".to_string()))]);
+        let result =
+            eval(&row, &func("starts_with", vec![field("name"), lit_str("Dr.")])).unwrap();
+        assert_eq!(result, Value::Bool(true));
+    }
+
+    #[test]
+    fn test_starts_with_false() {
+        let row = obj(&[("name", Value::String("Mr. Smith".to_string()))]);
+        let result =
+            eval(&row, &func("starts_with", vec![field("name"), lit_str("Dr.")])).unwrap();
+        assert_eq!(result, Value::Bool(false));
+    }
+
+    #[test]
+    fn test_ends_with() {
+        let row = obj(&[("file", Value::String("data.json".to_string()))]);
+        let result =
+            eval(&row, &func("ends_with", vec![field("file"), lit_str(".json")])).unwrap();
+        assert_eq!(result, Value::Bool(true));
+    }
+
+    #[test]
+    fn test_ends_with_false() {
+        let row = obj(&[("file", Value::String("data.csv".to_string()))]);
+        let result =
+            eval(&row, &func("ends_with", vec![field("file"), lit_str(".json")])).unwrap();
+        assert_eq!(result, Value::Bool(false));
+    }
+
+    #[test]
+    fn test_reverse() {
+        let row = obj(&[("s", Value::String("hello".to_string()))]);
+        let result = eval(&row, &func("reverse", vec![field("s")])).unwrap();
+        assert_eq!(result, Value::String("olleh".to_string()));
+    }
+
+    #[test]
+    fn test_repeat() {
+        let row = obj(&[("s", Value::String("ab".to_string()))]);
+        let result = eval(&row, &func("repeat", vec![field("s"), lit_int(3)])).unwrap();
+        assert_eq!(result, Value::String("ababab".to_string()));
+    }
+
+    #[test]
+    fn test_repeat_zero() {
+        let row = obj(&[("s", Value::String("ab".to_string()))]);
+        let result = eval(&row, &func("repeat", vec![field("s"), lit_int(0)])).unwrap();
+        assert_eq!(result, Value::String(String::new()));
+    }
+
+    #[test]
+    fn test_pad_left() {
+        let row = obj(&[("id", Value::String("42".to_string()))]);
+        let result = eval(
+            &row,
+            &func("pad_left", vec![field("id"), lit_int(5), lit_str("0")]),
+        )
+        .unwrap();
+        assert_eq!(result, Value::String("00042".to_string()));
+    }
+
+    #[test]
+    fn test_pad_left_no_padding_needed() {
+        let row = obj(&[("id", Value::String("12345".to_string()))]);
+        let result = eval(
+            &row,
+            &func("pad_left", vec![field("id"), lit_int(3), lit_str("0")]),
+        )
+        .unwrap();
+        assert_eq!(result, Value::String("12345".to_string()));
+    }
+
+    #[test]
+    fn test_pad_right() {
+        let row = obj(&[("s", Value::String("hi".to_string()))]);
+        let result = eval(
+            &row,
+            &func("pad_right", vec![field("s"), lit_int(5), lit_str(".")]),
+        )
+        .unwrap();
+        assert_eq!(result, Value::String("hi...".to_string()));
+    }
+
+    #[test]
+    fn test_pad_right_no_padding_needed() {
+        let row = obj(&[("s", Value::String("hello".to_string()))]);
+        let result = eval(
+            &row,
+            &func("pad_right", vec![field("s"), lit_int(3), lit_str(".")]),
+        )
+        .unwrap();
+        assert_eq!(result, Value::String("hello".to_string()));
     }
 
     // --- 수학 함수 ---
