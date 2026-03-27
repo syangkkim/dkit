@@ -4,6 +4,8 @@ pub mod csv;
 pub mod env;
 /// HTML table writer.
 pub mod html;
+/// INI/CFG configuration file reader and writer.
+pub mod ini;
 /// JSON reader, writer, and value conversion utilities.
 pub mod json;
 /// JSON Lines (NDJSON) reader and writer.
@@ -292,6 +294,8 @@ pub enum Format {
     Table,
     /// .env file format (`*.env`, `.env.*`)
     Env,
+    /// INI/CFG configuration file format (`*.ini`, `*.cfg`)
+    Ini,
 }
 
 impl Format {
@@ -312,6 +316,7 @@ impl Format {
             "html" => Ok(Format::Html),
             "table" => Ok(Format::Table),
             "env" | "dotenv" => Ok(Format::Env),
+            "ini" | "cfg" | "conf" | "config" => Ok(Format::Ini),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -360,6 +365,7 @@ impl Format {
         }
 
         formats.push(("env", "Environment variables (.env) format"));
+        formats.push(("ini", "INI/CFG configuration file format"));
         formats.push(("md", "Markdown table"));
         formats.push(("html", "HTML table"));
         formats.push(("table", "Terminal table (default for view)"));
@@ -385,6 +391,7 @@ impl std::fmt::Display for Format {
             Format::Html => write!(f, "HTML"),
             Format::Table => write!(f, "Table"),
             Format::Env => write!(f, "ENV"),
+            Format::Ini => write!(f, "INI"),
         }
     }
 }
@@ -412,6 +419,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("md") => Ok(Format::Markdown),
         Some("html") => Ok(Format::Html),
         Some("env") => Ok(Format::Env),
+        Some("ini" | "cfg") => Ok(Format::Ini),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }
