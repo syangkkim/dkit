@@ -32,6 +32,26 @@ dkit query data.json '.[::2]'            # 짝수 인덱스 요소 (step=2)
 dkit query data.json '.[1:5:2]'          # 인덱스 1~4 중 step=2
 ```
 
+## Recursive Descent (`..`)
+
+깊이에 관계없이 특정 키를 재귀적으로 찾는다. jq의 `..` 연산자에 해당.
+
+```bash
+# 모든 depth의 "email" 필드 찾기
+dkit query nested.json '..email'
+
+# 특정 경로 아래에서만 재귀 탐색
+dkit query data.json '.config..host'
+
+# 모든 "id" 필드 수집
+dkit query complex.json '..id'
+
+# 재귀 탐색 후 파이프라인 연결
+dkit query data.json '..name | where name != "admin"'
+```
+
+결과는 배열로 반환된다. depth limit이 적용되어 순환 참조를 방지한다.
+
 ## Pipeline
 
 `|` 로 여러 연산을 체이닝한다. 앞 연산의 결과가 다음 연산의 입력이 된다.
@@ -330,6 +350,62 @@ dkit query data.csv '.[] | select upper(name) as NAME, round(price, 2) as price_
 | `coalesce(a, b, ...)` | 첫 번째 non-null 값 반환 | `coalesce(name, "unknown")` |
 | `if_null(v, default)` | null이면 기본값 반환 | `if_null(email, "N/A")` |
 
+### 조건부 표현식
+
+#### if(condition, then, else)
+
+간단한 조건부 값 할당. 중첩 가능.
+
+```bash
+# 단순 조건
+dkit query data.json '.[] | select name, if(age < 18, "minor", "adult") as category'
+
+# 중첩 if
+dkit query data.json '.[] | select name, if(age < 18, "minor", if(age < 65, "adult", "senior")) as category'
+
+# 문자열 비교
+dkit query data.json '.[] | select name, if(role == "engineer", "tech", "non-tech") as dept'
+```
+
+#### case when ... then ... else ... end
+
+SQL 스타일의 다중 조건 분기. 복잡한 조건에 적합.
+
+```bash
+# 점수 등급 분류
+dkit query data.json '.[] | select name, case when score >= 90 then "A" when score >= 70 then "B" else "C" end as grade'
+
+# 다중 조건
+dkit query data.json '.[] | select name, case when age < 18 then "minor" when age < 65 then "adult" else "senior" end as category'
+```
+
+### Statistical Aggregate Functions
+
+기존 집계 함수(count, sum, avg, min, max, distinct) 외에 통계 분석용 함수를 지원한다.
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `median(field)` | 중앙값 | `.[] \| median salary` |
+| `percentile(field, p)` | p번째 백분위수 (p: 0.0~1.0) | `.[] \| percentile latency 0.95` |
+| `stddev(field)` | 표준편차 (모집단) | `.[] \| stddev score` |
+| `variance(field)` | 분산 | `.[] \| variance score` |
+| `mode(field)` | 최빈값 | `.[] \| mode color` |
+| `group_concat(field, sep)` | 그룹 내 문자열 연결 | `group_by category group_concat(name, ", ")` |
+
+```bash
+# 급여 중앙값
+dkit query employees.json '.[] | median salary'
+
+# 응답 시간 p95, p99
+dkit query metrics.json '.[] | percentile latency 0.95'
+
+# 부서별 통계
+dkit query employees.json '.[] | group_by department median(salary), stddev(salary)'
+
+# 카테고리별 이름 합치기
+dkit query products.json '.[] | group_by category group_concat(name, ", ")'
+```
+
 ### 함수 조합 예시
 
 ```bash
@@ -366,8 +442,9 @@ dkit query sales.csv '.rows[] | where region == "KR"' --to json -o korea.json
 
 ```
 query       = path ( "|" operation )*
-path        = "." segment*
+path        = "." segment* | ".." IDENTIFIER    (* recursive descent *)
 segment     = field_access | index_access | iterate | wildcard | slice
+            | ".." IDENTIFIER                    (* recursive descent mid-path *)
 field_access = IDENTIFIER ( "." IDENTIFIER )*
 index_access = "[" INTEGER "]"
 iterate     = "[" "]"
@@ -376,12 +453,15 @@ slice       = "[" [ INTEGER ] ":" [ INTEGER ] [ ":" INTEGER ] "]"
 
 operation   = where_op | select_op | sort_op | limit_op
             | count_op | sum_op | avg_op | min_op | max_op | distinct_op
-            | group_by_op
+            | median_op | percentile_op | stddev_op | variance_op | mode_op
+            | group_concat_op | group_by_op
 where_op    = "where" condition
 select_op   = "select" select_expr ( "," select_expr )*
 select_expr = expr [ "as" IDENTIFIER ]
-expr        = IDENTIFIER | literal | func_call
+expr        = IDENTIFIER | literal | func_call | if_expr | case_expr
 func_call   = IDENTIFIER "(" [ expr ( "," expr )* ] ")"
+if_expr     = "if" "(" condition "," expr "," expr ")"
+case_expr   = "case" ( "when" condition "then" expr )+ [ "else" expr ] "end"
 sort_op     = "sort" IDENTIFIER [ "desc" ]
 limit_op    = "limit" INTEGER
 count_op    = "count" [ IDENTIFIER ]
@@ -390,9 +470,16 @@ avg_op      = "avg" IDENTIFIER
 min_op      = "min" IDENTIFIER
 max_op      = "max" IDENTIFIER
 distinct_op = "distinct" IDENTIFIER
+median_op   = "median" IDENTIFIER
+percentile_op = "percentile" IDENTIFIER NUMBER
+stddev_op   = "stddev" IDENTIFIER
+variance_op = "variance" IDENTIFIER
+mode_op     = "mode" IDENTIFIER
+group_concat_op = "group_concat" IDENTIFIER STRING
 group_by_op = "group_by" IDENTIFIER ( "," IDENTIFIER )* aggregate* [ "having" condition ]
-aggregate   = agg_func "(" [ IDENTIFIER ] ")"
+aggregate   = agg_func "(" [ IDENTIFIER [ "," expr ] ] ")"
 agg_func    = "count" | "sum" | "avg" | "min" | "max"
+            | "median" | "percentile" | "stddev" | "variance" | "mode" | "group_concat"
 
 condition   = comparison ( logic_op comparison )*
 comparison  = IDENTIFIER compare_op value

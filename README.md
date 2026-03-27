@@ -85,6 +85,8 @@ dkit completions powershell > dkit.ps1 && . ./dkit.ps1
 | INI/CFG     | `.ini`, `.cfg`         |  ✓   |   ✓   | Section-based config files     |
 | .properties | `.properties`          |  ✓   |   ✓   | Java properties files          |
 | .env        | `.env`                 |  ✓   |   ✓   | Environment variable files     |
+| HCL         | `.hcl`, `.tf`, `.tfvars` |  ✓   |   ✓   | Terraform / HashiCorp configs  |
+| plist       | `.plist`               |  ✓   |   ✓   | macOS Property List (XML)      |
 | Markdown    | `.md`                  |  —   |   ✓   | GFM table, output-only         |
 | HTML        | `.html`                |  —   |   ✓   | Styled tables, output-only     |
 
@@ -171,6 +173,23 @@ dkit convert .env --to json                         # .env → JSON
 dkit convert config.json --to env -o .env            # JSON → .env
 dkit diff .env.dev .env.prod                         # Compare environments
 
+# HCL / Terraform format
+dkit convert main.tf --to json                      # Terraform → JSON
+dkit convert variables.json --to hcl -o vars.tf     # JSON → HCL
+dkit query main.tf '.resource.aws_instance'         # Query Terraform config
+
+# plist (macOS Property List) format
+dkit convert Info.plist --to json                   # plist → JSON
+dkit convert config.json --to plist -o Info.plist   # JSON → plist
+dkit query Info.plist '.CFBundleVersion'             # Query plist value
+
+# Explode (unnest arrays into rows)
+dkit convert data.json --to csv --explode tags      # Unnest array field
+
+# Pivot / Unpivot (reshape data)
+dkit convert wide.csv --to json --unpivot 'jan,feb,mar' --key month --value sales
+dkit convert long.csv --to json --pivot --index name --columns month --values sales
+
 # Watch mode (re-convert on file change)
 dkit convert data.json --to csv --watch
 ```
@@ -195,6 +214,14 @@ dkit query data.json '.[*].name'                     # All names (wildcard)
 # IN / NOT IN, matches operators
 dkit query data.json '.[] | where status in ("active", "pending")'
 dkit query data.json '.[] | where name matches "^[A-C]"'
+
+# Recursive descent (..) — find keys at any depth
+dkit query nested.json '..email'                     # All 'email' fields
+dkit query terraform.json '..instance_type'          # Deep key search
+
+# Conditional expressions
+dkit query data.json '.[] | select name, if(age < 18, "minor", "adult") as category'
+dkit query data.json '.[] | select name, case when score >= 90 then "A" when score >= 70 then "B" else "C" end as grade'
 
 # Aggregate functions
 dkit query data.csv '.[] | count'
@@ -223,6 +250,7 @@ dkit query data.json '.users[]' --to csv -o users.csv
 | `.[]` | Iterate all elements |
 | `.[*]` | Wildcard (same as `[]`) |
 | `.[0:3]`, `.[-2:]`, `.[::2]` | Array slicing (start:end:step) |
+| `..key` | Recursive descent (find key at any depth) |
 | `where .field == value` | Filter (`==`, `!=`, `>`, `<`, `>=`, `<=`) |
 | `where .field contains "str"` | String filter (`contains`, `starts_with`, `ends_with`) |
 | `where .field in ("a", "b")` | Membership filter (`in`, `not in`) |
@@ -241,8 +269,9 @@ dkit query data.json '.users[]' --to csv -o users.csv
 | Date     | `now`, `date`, `year`, `month`, `day` |
 | Type     | `to_int`, `to_float`, `to_string`, `to_bool` |
 | Util     | `coalesce`, `if_null` |
+| Conditional | `if(cond, then, else)`, `case when ... then ... end` |
 
-**Aggregate functions:** `count`, `sum`, `avg`, `min`, `max`, `distinct`
+**Aggregate functions:** `count`, `sum`, `avg`, `min`, `max`, `distinct`, `median`, `percentile`, `stddev`, `variance`, `mode`, `group_concat`
 
 See [Query Syntax Reference](docs/query-syntax.md) for the full grammar and more examples.
 
@@ -364,6 +393,8 @@ dkit y2j config.yaml                # YAML → JSON
 | SQLite input | ✓ | — | — | — |
 | INI / .properties | ✓ | — | — | — |
 | .env files | ✓ | — | — | — |
+| HCL / Terraform | ✓ | — | — | — |
+| plist (macOS) | ✓ | — | — | — |
 | Cross-format convert | ✓ | — | Partial | Partial |
 | Query (where/select/sort) | ✓ | ✓ | ✓ | ✓ |
 | Aggregate / GROUP BY | ✓ | Partial | ✓ | — |

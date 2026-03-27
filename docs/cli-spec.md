@@ -66,6 +66,14 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 | `--map <EXPR>` | | 기존 필드 값 변환 (여러 번 사용 가능, e.g. `name = upper(name)`) | |
 | `--indent <INDENT>` | | JSON 들여쓰기 (숫자: 스페이스 수, `tab`: 탭 문자) | 2 |
 | `--sort-keys` | | JSON 객체 키를 알파벳순으로 정렬 | false |
+| `--explode <FIELD>` | | 배열 필드를 개별 행으로 펼침 (여러 번 사용 가능) | |
+| `--unpivot <COLUMNS>` | | Wide → Long 변환: 언피벗할 컬럼 목록 (쉼표 구분) | |
+| `--pivot` | | Long → Wide 변환 모드 활성화 | false |
+| `--key <NAME>` | | 언피벗 시 key 컬럼명 | `variable` |
+| `--value <NAME>` | | 언피벗/피벗 시 value 컬럼명 | `value` |
+| `--index <FIELDS>` | | 피벗 시 유지할 인덱스 컬럼 (쉼표 구분) | |
+| `--columns <FIELD>` | | 피벗 시 새 컬럼명이 될 필드 | |
+| `--values <FIELD>` | | 피벗 시 새 컬럼 값이 될 필드 | |
 | `--dry-run` | | 미리보기 모드 (파일 생성 없이 stdout으로 출력) | false |
 | `--dry-run-limit <N>` | | 미리보기 시 출력 레코드 수 | 10 |
 
@@ -184,6 +192,26 @@ dkit convert config.json --to properties -o app.properties  # JSON → propertie
 dkit convert .env --to json                              # .env → JSON
 dkit convert config.json --to env -o .env                # JSON → .env
 dkit convert .env --to yaml                              # .env → YAML
+
+# HCL (Terraform) 포맷 변환
+dkit convert main.tf --to json                           # HCL → JSON
+dkit convert variables.json --to hcl -o vars.tf          # JSON → HCL
+dkit convert main.tf --to yaml                           # HCL → YAML
+
+# plist (macOS Property List) 포맷 변환
+dkit convert Info.plist --to json                        # plist → JSON
+dkit convert config.json --to plist -o Info.plist        # JSON → plist
+
+# Explode (배열 필드를 개별 행으로 펼침)
+dkit convert data.json --to csv --explode tags           # 배열 → 개별 행
+dkit convert data.json --to json --explode tags --explode categories  # 복수 필드
+
+# Unpivot (Wide → Long)
+dkit convert wide.csv --to json --unpivot 'jan,feb,mar' --key month --value sales
+dkit convert data.json --to csv --unpivot 'q1,q2,q3'    # 기본 키명: variable, value
+
+# Pivot (Long → Wide)
+dkit convert long.csv --to json --pivot --index name --columns month --values sales
 ```
 
 ## query
