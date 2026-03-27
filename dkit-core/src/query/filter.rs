@@ -789,6 +789,20 @@ fn compare_values(
     op: &CompareOp,
     literal: &LiteralValue,
 ) -> Result<bool, DkitError> {
+    // IN / NOT IN: 리스트 내 포함 여부 확인
+    if let LiteralValue::List(list) = literal {
+        let contained = list
+            .iter()
+            .any(|item| compare_values(field, &CompareOp::Eq, item).unwrap_or(false));
+        return match op {
+            CompareOp::In => Ok(contained),
+            CompareOp::NotIn => Ok(!contained),
+            _ => Err(DkitError::QueryError(
+                "list values only support 'in' and 'not in' operators".to_string(),
+            )),
+        };
+    }
+
     match (field, literal) {
         // 정수 비교
         (Value::Integer(a), LiteralValue::Integer(b)) => Ok(apply_compare_op(*a, op, *b)),
@@ -846,6 +860,7 @@ fn apply_compare_op<T: PartialOrd>(a: T, op: &CompareOp, b: T) -> bool {
         CompareOp::Ge => a >= b,
         CompareOp::Le => a <= b,
         CompareOp::Contains | CompareOp::StartsWith | CompareOp::EndsWith => false,
+        CompareOp::In | CompareOp::NotIn => false,
     }
 }
 
@@ -2398,5 +2413,152 @@ mod tests {
         } else {
             panic!("expected array");
         }
+    }
+
+    // --- IN / NOT IN ---
+
+    #[test]
+    fn test_where_in_string() {
+        let data = sample_users();
+        let cond = make_condition(
+            "city",
+            CompareOp::In,
+            LiteralValue::List(vec![
+                LiteralValue::String("Seoul".to_string()),
+                LiteralValue::String("Tokyo".to_string()),
+            ]),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Alice, Charlie
+    }
+
+    #[test]
+    fn test_where_not_in_string() {
+        let data = sample_users();
+        let cond = make_condition(
+            "city",
+            CompareOp::NotIn,
+            LiteralValue::List(vec![LiteralValue::String("Seoul".to_string())]),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1); // Bob
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name").unwrap(),
+            &Value::String("Bob".to_string())
+        );
+    }
+
+    #[test]
+    fn test_where_in_integer() {
+        let data = sample_users();
+        let cond = make_condition(
+            "age",
+            CompareOp::In,
+            LiteralValue::List(vec![LiteralValue::Integer(25), LiteralValue::Integer(35)]),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Bob, Charlie
+    }
+
+    #[test]
+    fn test_where_not_in_integer() {
+        let data = sample_users();
+        let cond = make_condition(
+            "age",
+            CompareOp::NotIn,
+            LiteralValue::List(vec![LiteralValue::Integer(25), LiteralValue::Integer(35)]),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1); // Alice (age 30)
+    }
+
+    #[test]
+    fn test_where_in_empty_list() {
+        let data = sample_users();
+        let cond = make_condition("city", CompareOp::In, LiteralValue::List(vec![]));
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 0);
+    }
+
+    #[test]
+    fn test_where_not_in_empty_list() {
+        let data = sample_users();
+        let cond = make_condition("city", CompareOp::NotIn, LiteralValue::List(vec![]));
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3); // all users
+    }
+
+    #[test]
+    fn test_where_in_no_match() {
+        let data = sample_users();
+        let cond = make_condition(
+            "city",
+            CompareOp::In,
+            LiteralValue::List(vec![
+                LiteralValue::String("Tokyo".to_string()),
+                LiteralValue::String("Osaka".to_string()),
+            ]),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_in_query() {
+        let query = parse_query(".[] | where city in (\"Seoul\", \"Busan\")").unwrap();
+        let data = sample_users();
+        let result = {
+            let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+            apply_operations(path_result, &query.operations)
+        }
+        .unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3); // all users are in Seoul or Busan
+    }
+
+    #[test]
+    fn test_parse_not_in_query() {
+        let query = parse_query(".[] | where city not in (\"Seoul\")").unwrap();
+        let data = sample_users();
+        let result = {
+            let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+            apply_operations(path_result, &query.operations)
+        }
+        .unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1); // only Bob (Busan)
+    }
+
+    #[test]
+    fn test_parse_in_with_integers() {
+        let query = parse_query(".[] | where age in (25, 35)").unwrap();
+        let data = sample_users();
+        let result = {
+            let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+            apply_operations(path_result, &query.operations)
+        }
+        .unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Bob, Charlie
+    }
+
+    #[test]
+    fn test_in_combined_with_and() {
+        let query = parse_query(".[] | where city in (\"Seoul\", \"Busan\") and age > 28").unwrap();
+        let data = sample_users();
+        let result = {
+            let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+            apply_operations(path_result, &query.operations)
+        }
+        .unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Alice (30, Seoul), Charlie (35, Seoul)
     }
 }

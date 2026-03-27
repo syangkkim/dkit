@@ -135,6 +135,7 @@ fn literal_to_value(lit: &LiteralValue) -> Value {
         LiteralValue::Float(f) => Value::Float(*f),
         LiteralValue::Bool(b) => Value::Bool(*b),
         LiteralValue::Null => Value::Null,
+        LiteralValue::List(items) => Value::Array(items.iter().map(literal_to_value).collect()),
     }
 }
 

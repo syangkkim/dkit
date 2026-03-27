@@ -128,6 +128,8 @@ pub enum CompareOp {
     Contains,   // contains
     StartsWith, // starts_with
     EndsWith,   // ends_with
+    In,         // in
+    NotIn,      // not in
 }
 
 /// Literal value used as a comparison operand or in expressions.
@@ -139,6 +141,7 @@ pub enum LiteralValue {
     Float(f64),
     Bool(bool),
     Null,
+    List(Vec<LiteralValue>),
 }
 
 /// Arithmetic binary operator.
@@ -849,10 +852,49 @@ impl Parser {
     }
 
     /// 비교식 파싱: `IDENTIFIER compare_op literal_value`
+    /// 또는 `IDENTIFIER in (value1, value2, ...)` / `IDENTIFIER not in (value1, value2, ...)`
     fn parse_comparison(&mut self) -> Result<Comparison, DkitError> {
         // 필드 이름
         let field = self.parse_identifier()?;
         self.skip_whitespace();
+
+        // Check for `in` / `not in` operators
+        let saved_pos = self.pos;
+        if let Ok(keyword) = self.parse_keyword() {
+            match keyword.as_str() {
+                "in" => {
+                    self.skip_whitespace();
+                    let list = self.parse_literal_list()?;
+                    return Ok(Comparison {
+                        field,
+                        op: CompareOp::In,
+                        value: LiteralValue::List(list),
+                    });
+                }
+                "not" => {
+                    self.skip_whitespace();
+                    let saved_pos2 = self.pos;
+                    if let Ok(kw2) = self.parse_keyword() {
+                        if kw2 == "in" {
+                            self.skip_whitespace();
+                            let list = self.parse_literal_list()?;
+                            return Ok(Comparison {
+                                field,
+                                op: CompareOp::NotIn,
+                                value: LiteralValue::List(list),
+                            });
+                        }
+                    }
+                    self.pos = saved_pos2;
+                    self.pos = saved_pos;
+                }
+                _ => {
+                    self.pos = saved_pos;
+                }
+            }
+        } else {
+            self.pos = saved_pos;
+        }
 
         // 비교 연산자
         let op = self.parse_compare_op()?;
@@ -982,6 +1024,45 @@ impl Parser {
                 self.pos
             ))),
         }
+    }
+
+    /// 리터럴 리스트 파싱: `(value1, value2, ...)`
+    fn parse_literal_list(&mut self) -> Result<Vec<LiteralValue>, DkitError> {
+        if !self.consume_char('(') {
+            return Err(DkitError::QueryError(format!(
+                "expected '(' at position {}",
+                self.pos
+            )));
+        }
+
+        let mut values = Vec::new();
+        self.skip_whitespace();
+
+        // Handle empty list
+        if self.peek() == Some(')') {
+            self.advance();
+            return Ok(values);
+        }
+
+        // Parse first value
+        values.push(self.parse_literal_value()?);
+
+        loop {
+            self.skip_whitespace();
+            if self.consume_char(')') {
+                break;
+            }
+            if !self.consume_char(',') {
+                return Err(DkitError::QueryError(format!(
+                    "expected ',' or ')' at position {}",
+                    self.pos
+                )));
+            }
+            self.skip_whitespace();
+            values.push(self.parse_literal_value()?);
+        }
+
+        Ok(values)
     }
 
     /// 문자열 리터럴 파싱: `"..."`
