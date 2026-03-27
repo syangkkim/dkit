@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-27
+
+### Added
+
+- **`--explode` flag**: Unnest/flatten array fields into individual rows — `dkit convert data.json -f json --explode tags`. Supports multiple explode fields and empty array handling. (#193)
+- **`--pivot` / `--unpivot` flags**: Reshape data between wide and long formats — `dkit convert wide.csv -f csv --unpivot 'jan,feb,mar' --key month --value sales`. Supports `--index`, `--columns`, `--values` options. (#194)
+- **HCL (HashiCorp Configuration Language) format**: Read and write HCL v2 files (Terraform `.tf`) — `dkit convert main.tf -f json`. Block-based structure mapped to nested objects. Feature flag: `hcl`. (#195)
+- **`.plist` (macOS Property List) format**: Read and write XML plist files — `dkit convert Info.plist -f json`. Supports dict, array, string, integer, real, boolean, date, and data types. Feature flag: `plist`. (#196)
+- **Recursive descent (`..`) operator**: Deep key search in query expressions — `dkit query nested.json '..email'`. Recursively collects matching fields at any depth. (#212)
+- **Conditional expressions (`if/then/else`, `case/when`)**: Conditional value assignment in queries — `select name, if(age < 18, "minor", "adult") as category` and SQL-style `CASE WHEN ... THEN ... END`. (#213)
+- **Statistical aggregate functions**: `median()`, `percentile(field, p)`, `stddev()`, `variance()`, `mode()`, `group_concat(field, separator)` for advanced data analysis in queries. (#214)
+
+### Testing & Docs
+
+- **Comprehensive v1.3.0 integration tests**: End-to-end tests for all new features, updated README and docs. (#202)
+
 ## [1.2.0] - 2026-03-27
 
 ### Added
@@ -176,7 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
-[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/syangkkim/dkit/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/syangkkim/dkit/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/syangkkim/dkit/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/syangkkim/dkit/compare/v0.9.0...v1.0.0
