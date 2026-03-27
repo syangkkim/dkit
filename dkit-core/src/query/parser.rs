@@ -64,6 +64,8 @@ pub enum Operation {
     UniqueBy { field: String },
     /// 새 필드 추가 (computed column): `--add-field 'total = amount * quantity'`
     AddField { name: String, expr: Expr },
+    /// 기존 필드 값 변환: `--map 'name = upper(name)'`
+    MapField { name: String, expr: Expr },
 }
 
 /// GROUP BY 집계 연산 정의

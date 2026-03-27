@@ -163,6 +163,10 @@ pub enum Commands {
         #[arg(long = "add-field", value_name = "EXPR")]
         add_field: Vec<String>,
 
+        /// Transform an existing field's value (e.g. 'name = upper(name)'). Can be used multiple times
+        #[arg(long = "map", value_name = "EXPR")]
+        map_field: Vec<String>,
+
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
         compression: String,
@@ -378,6 +382,10 @@ pub enum Commands {
         /// Add a computed field (e.g. 'total = amount * quantity'). Can be used multiple times
         #[arg(long = "add-field", value_name = "EXPR")]
         add_field: Vec<String>,
+
+        /// Transform an existing field's value (e.g. 'name = upper(name)'). Can be used multiple times
+        #[arg(long = "map", value_name = "EXPR")]
+        map_field: Vec<String>,
 
         /// Watch input file for changes and auto re-run
         #[arg(long)]

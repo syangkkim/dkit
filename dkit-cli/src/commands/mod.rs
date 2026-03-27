@@ -248,6 +248,8 @@ pub struct DataFilterOptions {
     pub unique_by: Option<String>,
     /// 계산 필드 추가 표현식 목록 (예: "total = amount * quantity")
     pub add_field: Vec<String>,
+    /// 기존 필드 값 변환 표현식 목록 (예: "name = upper(name)")
+    pub map_field: Vec<String>,
 }
 
 /// --agg 문자열을 GroupAggregate 벡터로 파싱한다.
@@ -390,6 +392,17 @@ pub fn apply_data_filters(
             )
         })?;
         operations.push(Operation::AddField { name, expr });
+    }
+
+    // 2b. map (기존 필드 값 변환)
+    for expr_str in &opts.map_field {
+        let (name, expr) =
+            dkit_core::query::parser::parse_add_field_expr(expr_str).map_err(|e| {
+                anyhow::anyhow!(
+                    "Invalid --map expression: {e}\n  Hint: use format like 'name = upper(name)'"
+                )
+            })?;
+        operations.push(Operation::MapField { name, expr });
     }
 
     // 3. unique / unique-by (중복 제거)
