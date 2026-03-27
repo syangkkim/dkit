@@ -13,6 +13,7 @@ use dkit_core::format::hcl::HclReader;
 use dkit_core::format::ini::IniReader;
 use dkit_core::format::json::JsonReader;
 use dkit_core::format::jsonl::JsonlReader;
+use dkit_core::format::log::{LogParseErrorMode, LogReader, LogReaderOptions};
 use dkit_core::format::msgpack::MsgpackReader;
 use dkit_core::format::plist::PlistReader;
 use dkit_core::format::properties::PropertiesReader;
@@ -36,6 +37,8 @@ pub struct StatsArgs<'a> {
     pub encoding_opts: EncodingOptions,
     pub excel_opts: ExcelOptions,
     pub sqlite_opts: SqliteOptions,
+    pub log_format: Option<&'a str>,
+    pub log_error: LogParseErrorMode,
 }
 
 /// 출력 포맷
@@ -813,6 +816,19 @@ fn read_stdin_with_encoding(opts: &EncodingOptions) -> Result<String> {
 }
 
 fn read_input_as_value(args: &StatsArgs) -> Result<(Value, Format)> {
+    if let Some(log_fmt) = args.log_format {
+        let log_opts = LogReaderOptions {
+            on_error: args.log_error,
+        };
+        let log_reader = LogReader::new(log_fmt, log_opts)?;
+        let content = if args.input == "-" {
+            read_stdin_with_encoding(&args.encoding_opts)?
+        } else {
+            read_file_with_encoding(Path::new(args.input), &args.encoding_opts)?
+        };
+        let value = log_reader.read(&content)?;
+        return Ok((value, Format::Jsonl)); // Log output is array of objects, similar to JSONL
+    }
     if args.input == "-" {
         if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();

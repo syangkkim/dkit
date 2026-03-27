@@ -16,6 +16,7 @@ use dkit_core::format::html::HtmlWriter;
 use dkit_core::format::ini::{IniReader, IniWriter};
 use dkit_core::format::json::{JsonReader, JsonWriter};
 use dkit_core::format::jsonl::{JsonlReader, JsonlWriter};
+use dkit_core::format::log::{LogParseErrorMode, LogReader, LogReaderOptions};
 use dkit_core::format::markdown::MarkdownWriter;
 use dkit_core::format::msgpack::{MsgpackReader, MsgpackWriter};
 use dkit_core::format::plist::{PlistReader, PlistWriter};
@@ -62,6 +63,8 @@ pub struct ConvertArgs<'a> {
     pub streaming_opts: Option<super::streaming::StreamingOptions>,
     pub dry_run: bool,
     pub dry_run_limit: usize,
+    pub log_format: Option<&'a str>,
+    pub log_error: LogParseErrorMode,
 }
 
 /// convert 서브커맨드 실행
@@ -176,7 +179,14 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
     }
 
     if is_stdin {
-        let value = if args.from == Some("msgpack") || args.from == Some("messagepack") {
+        let value = if let Some(log_fmt) = args.log_format {
+            let buf = read_stdin_with_encoding(&args.encoding_opts)?;
+            let log_opts = LogReaderOptions {
+                on_error: args.log_error,
+            };
+            let log_reader = LogReader::new(log_fmt, log_opts)?;
+            log_reader.read(&buf)?
+        } else if args.from == Some("msgpack") || args.from == Some("messagepack") {
             let mut buf = Vec::new();
             io::stdin()
                 .read_to_end(&mut buf)
@@ -297,26 +307,36 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
 
     // Single file
     let path = &resolved_files[0];
-    let source_format = match args.from {
-        Some(f) => Format::from_str(f)?,
-        None => detect_format(path)?,
-    };
 
-    let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
-    let read_options = FormatOptions {
-        delimiter: read_delimiter,
-        no_header: args.no_header,
-        ..Default::default()
-    };
+    let value = if let Some(log_fmt) = args.log_format {
+        let content = read_file_with_encoding(path, &args.encoding_opts)?;
+        let log_opts = LogReaderOptions {
+            on_error: args.log_error,
+        };
+        let log_reader = LogReader::new(log_fmt, log_opts)?;
+        log_reader.read(&content)?
+    } else {
+        let source_format = match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(path)?,
+        };
 
-    let value = read_value_from_path(
-        path,
-        source_format,
-        &read_options,
-        &args.encoding_opts,
-        &args.excel_opts,
-        &args.sqlite_opts,
-    )?;
+        let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
+        let read_options = FormatOptions {
+            delimiter: read_delimiter,
+            no_header: args.no_header,
+            ..Default::default()
+        };
+
+        read_value_from_path(
+            path,
+            source_format,
+            &read_options,
+            &args.encoding_opts,
+            &args.excel_opts,
+            &args.sqlite_opts,
+        )?
+    };
     let value = super::apply_data_filters(value, &args.data_filter)?;
 
     if args.dry_run {
@@ -364,26 +384,35 @@ fn convert_single_file(
     write_options: &FormatOptions,
     outdir: &Path,
 ) -> Result<()> {
-    let source_format = match args.from {
-        Some(f) => Format::from_str(f)?,
-        None => detect_format(path)?,
-    };
+    let value = if let Some(log_fmt) = args.log_format {
+        let content = read_file_with_encoding(path, &args.encoding_opts)?;
+        let log_opts = LogReaderOptions {
+            on_error: args.log_error,
+        };
+        let log_reader = LogReader::new(log_fmt, log_opts)?;
+        log_reader.read(&content)?
+    } else {
+        let source_format = match args.from {
+            Some(f) => Format::from_str(f)?,
+            None => detect_format(path)?,
+        };
 
-    let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
-    let read_options = FormatOptions {
-        delimiter: read_delimiter,
-        no_header: args.no_header,
-        ..Default::default()
-    };
+        let read_delimiter = args.delimiter.or_else(|| default_delimiter(path));
+        let read_options = FormatOptions {
+            delimiter: read_delimiter,
+            no_header: args.no_header,
+            ..Default::default()
+        };
 
-    let value = read_value_from_path(
-        path,
-        source_format,
-        &read_options,
-        &args.encoding_opts,
-        &args.excel_opts,
-        &args.sqlite_opts,
-    )?;
+        read_value_from_path(
+            path,
+            source_format,
+            &read_options,
+            &args.encoding_opts,
+            &args.excel_opts,
+            &args.sqlite_opts,
+        )?
+    };
     let value = super::apply_data_filters(value, &args.data_filter)?;
 
     let out_name = make_output_name(path, args.to, args.rename);

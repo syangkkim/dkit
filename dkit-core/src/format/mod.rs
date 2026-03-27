@@ -10,6 +10,8 @@ pub mod ini;
 pub mod json;
 /// JSON Lines (NDJSON) reader and writer.
 pub mod jsonl;
+/// Log file reader (Apache, nginx, syslog, custom patterns).
+pub mod log;
 /// Markdown table writer.
 pub mod markdown;
 /// Java `.properties` file reader and writer.
