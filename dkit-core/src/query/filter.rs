@@ -38,6 +38,7 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         Operation::UniqueBy { field } => apply_unique_by(value, field),
         Operation::AddField { name, expr } => apply_add_field(value, name, expr),
         Operation::MapField { name, expr } => apply_map_field(value, name, expr),
+        Operation::Explode { field } => apply_explode(value, field),
     }
 }
 
@@ -502,6 +503,51 @@ fn apply_map_field(value: Value, name: &str, expr: &Expr) -> Result<Value, DkitE
         }
         _ => Err(DkitError::QueryError(
             "map requires an array or object input".to_string(),
+        )),
+    }
+}
+
+/// explode: 배열 필드를 개별 행으로 펼침 (unnest/flatten)
+/// 예: [{name:"a", tags:["x","y"]}] → [{name:"a", tags:"x"}, {name:"a", tags:"y"}]
+/// 빈 배열인 경우 해당 레코드 제외
+fn apply_explode(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut result = Vec::new();
+            for item in arr {
+                match item {
+                    Value::Object(ref map) => {
+                        match map.get(field) {
+                            Some(Value::Array(elements)) => {
+                                if elements.is_empty() {
+                                    // 빈 배열: 해당 레코드 제외
+                                    continue;
+                                }
+                                for element in elements {
+                                    let mut new_map = map.clone();
+                                    new_map.insert(field.to_string(), element.clone());
+                                    result.push(Value::Object(new_map));
+                                }
+                            }
+                            Some(_) => {
+                                // 배열이 아닌 값: 그대로 유지
+                                result.push(item.clone());
+                            }
+                            None => {
+                                // 필드가 없는 경우: 해당 레코드 제외
+                                continue;
+                            }
+                        }
+                    }
+                    other => {
+                        result.push(other);
+                    }
+                }
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err(DkitError::QueryError(
+            "explode requires an array input".to_string(),
         )),
     }
 }
@@ -2631,5 +2677,109 @@ mod tests {
         .unwrap();
         let arr = result.as_array().unwrap();
         assert_eq!(arr.len(), 2); // Alice (30, Seoul), Charlie (35, Seoul)
+    }
+
+    // --- explode tests ---
+
+    fn sample_with_tags() -> Value {
+        Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                m.insert(
+                    "tags".to_string(),
+                    Value::Array(vec![
+                        Value::String("x".to_string()),
+                        Value::String("y".to_string()),
+                    ]),
+                );
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Bob".to_string()));
+                m.insert(
+                    "tags".to_string(),
+                    Value::Array(vec![Value::String("z".to_string())]),
+                );
+                Value::Object(m)
+            },
+        ])
+    }
+
+    #[test]
+    fn test_explode_basic() {
+        let result = apply_explode(sample_with_tags(), "tags").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(
+            arr[0].as_object().unwrap()["name"],
+            Value::String("Alice".to_string())
+        );
+        assert_eq!(
+            arr[0].as_object().unwrap()["tags"],
+            Value::String("x".to_string())
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap()["tags"],
+            Value::String("y".to_string())
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap()["name"],
+            Value::String("Bob".to_string())
+        );
+        assert_eq!(
+            arr[2].as_object().unwrap()["tags"],
+            Value::String("z".to_string())
+        );
+    }
+
+    #[test]
+    fn test_explode_empty_array_excluded() {
+        let value = Value::Array(vec![{
+            let mut m = IndexMap::new();
+            m.insert("name".to_string(), Value::String("Alice".to_string()));
+            m.insert("tags".to_string(), Value::Array(vec![]));
+            Value::Object(m)
+        }]);
+        let result = apply_explode(value, "tags").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 0);
+    }
+
+    #[test]
+    fn test_explode_missing_field_excluded() {
+        let value = Value::Array(vec![{
+            let mut m = IndexMap::new();
+            m.insert("name".to_string(), Value::String("Alice".to_string()));
+            Value::Object(m)
+        }]);
+        let result = apply_explode(value, "tags").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 0);
+    }
+
+    #[test]
+    fn test_explode_non_array_field_kept() {
+        let value = Value::Array(vec![{
+            let mut m = IndexMap::new();
+            m.insert("name".to_string(), Value::String("Alice".to_string()));
+            m.insert("tags".to_string(), Value::String("single".to_string()));
+            Value::Object(m)
+        }]);
+        let result = apply_explode(value, "tags").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0].as_object().unwrap()["tags"],
+            Value::String("single".to_string())
+        );
+    }
+
+    #[test]
+    fn test_explode_non_array_input_error() {
+        let value = Value::String("not an array".to_string());
+        let result = apply_explode(value, "tags");
+        assert!(result.is_err());
     }
 }

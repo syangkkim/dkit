@@ -74,6 +74,8 @@ pub enum Operation {
     AddField { name: String, expr: Expr },
     /// 기존 필드 값 변환: `--map 'name = upper(name)'`
     MapField { name: String, expr: Expr },
+    /// 배열 필드를 개별 행으로 펼침 (unnest/flatten): `--explode tags`
+    Explode { field: String },
 }
 
 /// GROUP BY 집계 연산 정의
