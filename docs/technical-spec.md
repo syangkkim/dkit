@@ -419,6 +419,121 @@ pub enum QueryNode {
 }
 ```
 
+## Template Output Format
+
+- `tera` 크레이트 사용 (Jinja2 호환 템플릿 엔진)
+- feature flag: `template` (선택적 의존성)
+- `--template <STRING>`: 인라인 템플릿 문자열
+- `--template-file <PATH>`: 파일 기반 템플릿
+- 각 레코드마다 템플릿 렌더링, Array일 경우 요소별로 줄바꿈 출력
+- Object 값은 키-값 쌍으로 Tera 컨텍스트에 삽입
+- 비-Object 값은 `value` 키로 컨텍스트에 삽입
+- 내장 필터: `upper`, `lower`, `default` (Tera 내장)
+- 파일: `dkit-core/src/format/template.rs`
+
+### FormatOptions 확장
+
+```rust
+pub struct FormatOptions {
+    // ... 기존 필드 ...
+    pub template: Option<String>,       // 인라인 템플릿 문자열
+    pub template_file: Option<String>,  // 템플릿 파일 경로
+}
+```
+
+## JOIN Engine
+
+두 데이터 소스를 공통 키로 결합하는 해시 기반 JOIN 구현.
+
+### Join Types
+
+```rust
+pub enum JoinType {
+    Inner,  // 양쪽 매칭만
+    Left,   // 왼쪽 전체 + 매칭
+    Right,  // 오른쪽 전체 + 매칭
+    Full,   // 양쪽 전체
+}
+```
+
+### 알고리즘
+
+- Hash Join: 작은 쪽 테이블을 HashMap에 로드, 큰 쪽을 스트리밍
+- 키 명세: `field` (양쪽 동일 키) 또는 `left_field=right_field` (다른 키)
+- 입력: Array<Object> (표형 데이터) 필수
+- 다양한 입력 포맷 지원 (JSON, CSV, YAML, Excel, SQLite 등)
+- 파일: `dkit-cli/src/commands/join.rs`
+
+## Window Functions
+
+쿼리 엔진에 윈도우 함수를 추가하여 행 순서 기반 분석을 지원.
+
+### WindowFunc Enum
+
+```rust
+pub enum WindowFunc {
+    RowNumber,
+    Rank,
+    DenseRank,
+    Lag { expr: Box<Expr>, offset: Option<i64> },
+    Lead { expr: Box<Expr>, offset: Option<i64> },
+    FirstValue { expr: Box<Expr>, ignore_nulls: bool },
+    LastValue { expr: Box<Expr>, ignore_nulls: bool },
+    Aggregate { func: String, field: Option<String> },
+}
+
+pub struct WindowSpec {
+    pub partition_by: Vec<String>,
+    pub order_by: Vec<(String, SortOrder)>,
+    pub frame: Option<WindowFrame>,
+}
+```
+
+### 구현 방식
+
+- 파서: `OVER (PARTITION BY ... ORDER BY ...)` 절 파싱
+- 평가기: 데이터를 메모리에 로드 후 파티션별 처리
+- `select` 절에서만 사용 가능, 배열 입력 필수
+- 파일: `dkit-core/src/query/parser.rs`, `dkit-core/src/query/functions.rs`
+
+## Profile Command
+
+데이터셋의 구조와 품질을 자동으로 프로파일링.
+
+### 프로파일 결과 구조
+
+```rust
+struct DatasetProfile {
+    total_records: usize,
+    total_fields: usize,
+    duplicate_rows: usize,
+    file_format: String,
+    fields: Vec<FieldProfile>,
+}
+
+struct FieldProfile {
+    name: String,
+    inferred_type: &'static str,  // "str", "int", "float", "bool"
+    null_percent: f64,
+    unique_count: usize,
+    top_value: String,
+    pattern: String,               // "enum", "text(~N)", "*@*.com", "N-M" 등
+    numeric: Option<NumericProfile>,
+    string: Option<StringProfile>,
+}
+```
+
+### 출력 포맷
+
+- `text`/`table`: 테이블 형태 (기본값)
+- `json`: JSON 구조화 출력
+- `yaml`: YAML 출력
+- `md`/`markdown`: Markdown 테이블
+
+### 파일
+
+- `dkit-cli/src/commands/profile.rs`
+
 ## Testing Strategy
 
 ### Unit Tests

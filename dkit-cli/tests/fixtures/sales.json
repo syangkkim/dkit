@@ -1,0 +1,7 @@
+[
+  {"name": "Alice", "department": "Engineering", "revenue": 50000},
+  {"name": "Bob", "department": "Marketing", "revenue": 35000},
+  {"name": "Charlie", "department": "Engineering", "revenue": 60000},
+  {"name": "Diana", "department": "Marketing", "revenue": 45000},
+  {"name": "Eve", "department": "Engineering", "revenue": 55000}
+]

@@ -422,6 +422,56 @@ dkit query data.json '.[] | select upper(name), year(created_at) as year'
 dkit query data.csv '.[] | where score > 80 | select name, to_string(score) as score_str'
 ```
 
+## Window Functions
+
+윈도우 함수를 사용하여 행 순서 기반 분석을 수행한다. `OVER` 절로 파티션과 정렬을 지정한다.
+
+### 기본 문법
+
+```
+window_func() OVER ([PARTITION BY field, ...] ORDER BY field [ASC|DESC])
+```
+
+### 지원 함수
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `row_number()` | 행 번호 (1부터) | `row_number() over (order by name)` |
+| `rank()` | 순위 (동점 시 같은 순위, 다음 순위 건너뜀) | `rank() over (order by score desc)` |
+| `dense_rank()` | 순위 (동점 시 같은 순위, 다음 순위 연속) | `dense_rank() over (order by score desc)` |
+| `lag(expr, offset)` | 이전 행 참조 | `lag(value, 1) over (order by date)` |
+| `lead(expr, offset)` | 다음 행 참조 | `lead(value, 1) over (order by date)` |
+| `first_value(expr)` | 윈도우 내 첫 번째 값 | `first_value(name) over (order by score desc)` |
+| `last_value(expr)` | 윈도우 내 마지막 값 | `last_value(name) over (order by score desc)` |
+| `sum/avg/count/min/max(field)` | 윈도우 집계 | `sum(amount) over (order by date)` |
+
+### 사용 예시
+
+```bash
+# 순위 매기기
+dkit query sales.json '.[] | select name, revenue, rank() over (order by revenue desc) as rank'
+
+# 파티션별 순위
+dkit query sales.json '.[] | select department, name, revenue, row_number() over (partition by department order by revenue desc) as dept_rank'
+
+# 이전/다음 행 참조
+dkit query timeseries.json '.[] | select date, value, lag(value, 1) over (order by date) as prev_value'
+dkit query timeseries.json '.[] | select date, value, lead(value, 1) over (order by date) as next_value'
+
+# 누적 합계 (Running Total)
+dkit query transactions.json '.[] | select date, amount, sum(amount) over (order by date) as running_total'
+
+# 첫 번째/마지막 값
+dkit query sales.json '.[] | select name, revenue, first_value(name) over (order by revenue desc) as top_earner'
+```
+
+### 주의사항
+
+- 윈도우 함수는 `select` 절에서만 사용 가능
+- 입력은 배열이어야 함
+- `PARTITION BY`와 `ORDER BY` 모두 선택적이지만, 대부분 `ORDER BY`가 필요
+- 데이터를 메모리에 로드하여 처리하므로 매우 큰 데이터셋에서는 주의
+
 ## Combined Examples
 
 ```bash
@@ -458,8 +508,19 @@ operation   = where_op | select_op | sort_op | limit_op
 where_op    = "where" condition
 select_op   = "select" select_expr ( "," select_expr )*
 select_expr = expr [ "as" IDENTIFIER ]
-expr        = IDENTIFIER | literal | func_call | if_expr | case_expr
+expr        = IDENTIFIER | literal | func_call | if_expr | case_expr | window_expr
 func_call   = IDENTIFIER "(" [ expr ( "," expr )* ] ")"
+window_expr = window_func "over" "(" [ partition_clause ] [ order_clause ] ")"
+window_func = "row_number" "(" ")"
+            | "rank" "(" ")"
+            | "dense_rank" "(" ")"
+            | "lag" "(" expr [ "," INTEGER ] ")"
+            | "lead" "(" expr [ "," INTEGER ] ")"
+            | "first_value" "(" expr ")"
+            | "last_value" "(" expr ")"
+            | agg_func "(" [ IDENTIFIER ] ")"
+partition_clause = "partition" "by" IDENTIFIER ( "," IDENTIFIER )*
+order_clause     = "order" "by" IDENTIFIER [ "asc" | "desc" ] ( "," IDENTIFIER [ "asc" | "desc" ] )*
 if_expr     = "if" "(" condition "," expr "," expr ")"
 case_expr   = "case" ( "when" condition "then" expr )+ [ "else" expr ] "end"
 sort_op     = "sort" IDENTIFIER [ "desc" ]

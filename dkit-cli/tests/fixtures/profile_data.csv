@@ -1,0 +1,8 @@
+name,age,email,city,score
+Alice,30,alice@example.com,Seoul,85
+Bob,25,bob@example.com,Tokyo,92
+Charlie,35,,Seoul,78
+Diana,28,diana@example.com,Busan,95
+Eve,31,eve@example.com,Seoul,88
+Frank,,frank@example.com,Tokyo,72
+Grace,29,grace@example.com,Busan,91
