@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-27
+
+### Added
+
+- **Log format parsing (`--log-format`)**: Parse log files into structured data with pre-defined formats (Apache Combined/Common, nginx, syslog) and custom user-defined patterns — `dkit convert access.log -f json --log-format apache`. (#197)
+- **`--parallel` flag for batch conversion**: Multi-threaded parallel processing for multi-file conversions via `rayon` — `dkit convert logs/*.json -f csv --parallel 4` or `--parallel auto` for automatic core detection. (#215)
+- **`--time` execution profiling**: Measure and display execution time breakdown (parse, transform, write, total) on stderr for any subcommand — `dkit convert huge.json -f csv --time`. (#216)
+- **`--explain` query plan**: Display the query execution plan without running the query — `dkit query data.json 'select ...' --explain`. Shows scan, filter, group by, aggregate, sort, and project steps. (#216)
+
+### Testing & Docs
+
+- **Comprehensive v1.4.0 integration tests**: End-to-end tests for `--log-format`, `--parallel`, `--time`, and `--explain`. README and docs updated. (#204)
+
 ## [1.3.0] - 2026-03-27
 
 ### Added
@@ -192,7 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
-[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/syangkkim/dkit/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/syangkkim/dkit/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/syangkkim/dkit/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/syangkkim/dkit/compare/v1.0.0...v1.1.0
