@@ -29,6 +29,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Convert between data formats (JSON, CSV, YAML, TOML)
     #[command(
@@ -178,6 +179,34 @@ pub enum Commands {
         /// Explode (unnest) an array field into individual rows. Can be used multiple times
         #[arg(long, value_name = "FIELD")]
         explode: Vec<String>,
+
+        /// Unpivot (wide → long): specify columns to unpivot (e.g. 'jan,feb,mar')
+        #[arg(long, value_name = "COLUMNS")]
+        unpivot: Option<String>,
+
+        /// Pivot (long → wide): enable pivot mode
+        #[arg(long)]
+        pivot: bool,
+
+        /// Key/variable column name for unpivot output (default: 'variable')
+        #[arg(long, value_name = "NAME")]
+        key: Option<String>,
+
+        /// Value column name for unpivot/pivot (default: 'value')
+        #[arg(long = "value", value_name = "NAME")]
+        value_col: Option<String>,
+
+        /// Index columns for pivot (columns to keep as-is, comma-separated)
+        #[arg(long, value_name = "FIELDS")]
+        index: Option<String>,
+
+        /// Column field for pivot (the field whose values become new column names)
+        #[arg(long, value_name = "FIELD")]
+        columns: Option<String>,
+
+        /// Values field for pivot (the field whose values fill the new columns)
+        #[arg(long, value_name = "FIELD")]
+        values: Option<String>,
 
         /// Parquet compression codec (none, snappy, gzip, zstd)
         #[arg(long, value_name = "CODEC", default_value = "none")]
