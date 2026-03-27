@@ -192,6 +192,21 @@ dkit convert long.csv --to json --pivot --index name --columns month --values sa
 
 # Watch mode (re-convert on file change)
 dkit convert data.json --to csv --watch
+
+# Log file parsing
+dkit convert access.log --to json --log-format apache        # Apache log → JSON
+dkit convert app.log --to csv --log-format nginx             # nginx log → CSV
+dkit convert app.log --to json --log-format syslog           # syslog → JSON
+dkit convert app.log --to json --log-format '{timestamp} [{level}] {message}'  # Custom pattern
+dkit convert app.log --to json --log-format apache --log-error raw  # Include unparseable lines
+
+# Parallel batch conversion
+dkit convert *.json --to csv --outdir ./out/ --parallel 4    # 4 threads
+dkit convert *.json --to csv --outdir ./out/ --parallel auto # Auto-detect CPU cores
+
+# Execution timing (available on all commands)
+dkit convert data.json --to csv --time
+dkit query data.json '.users[]' --time
 ```
 
 ### `query` — Data querying
@@ -238,6 +253,12 @@ dkit query data.json '.[] | select name, coalesce(email, "N/A")'
 
 # Output in any format
 dkit query data.json '.users[]' --to csv -o users.csv
+
+# Query execution plan (--explain)
+dkit query data.json '.[] | where age > 20 | select name | sort name desc | limit 5' --explain
+
+# Query log files
+dkit query access.log '.[] | where status == 404' --log-format apache
 ```
 
 **Query syntax reference:**
@@ -407,6 +428,10 @@ dkit y2j config.yaml                # YAML → JSON
 | Sampling | ✓ | — | — | — |
 | Flatten / unflatten | ✓ | — | — | — |
 | Streaming (large files) | ✓ | — | ✓ | — |
+| Log parsing | ✓ | — | — | — |
+| Parallel batch conversion | ✓ | — | — | — |
+| Execution timing | ✓ | — | — | — |
+| Query explain plan | ✓ | — | — | — |
 | Watch mode | ✓ | — | — | — |
 | Config file | ✓ | — | — | — |
 | Shell completions | ✓ | ✓ | ✓ | ✓ |

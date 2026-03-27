@@ -287,6 +287,47 @@ pub struct FormatOptions {
 - 포맷 자동 감지: `.plist` 확장자
 - feature flag: `plist` (선택적 의존성)
 
+### Log Format Parser
+
+- `dkit-core/src/format/log.rs`에서 구현
+- `LogReader`가 `FormatReader` 트레이트를 구현하여 기존 파이프라인과 통합
+- 패턴 기반 파서: 포맷 문자열 → 정규식(regex) 컴파일 → 라인별 매칭
+
+#### 사전 정의 포맷
+
+| 포맷명 | 별칭 | 설명 |
+|--------|------|------|
+| `apache-combined` | `apache`, `combined` | Apache Combined Log Format |
+| `apache-common` | `common` | Apache Common Log Format |
+| `nginx` | | nginx 기본 access log |
+| `syslog` | | RFC 3164 syslog |
+
+#### 사용자 정의 패턴
+
+- `{field_name}` 플레이스홀더를 사용하여 커스텀 패턴 정의
+- 예: `{timestamp} [{level}] {message}`
+- 각 `{field}`는 정규식 캡처 그룹으로 변환
+- 필드 다음 문자에 따라 매칭 전략 결정:
+  - 공백: `\S+` (비공백 매칭)
+  - `[` 또는 `"`: 해당 구분자까지 매칭
+  - 패턴 끝: `.+` (나머지 전체 매칭)
+
+#### 타입 추론
+
+- `"-"` → `Value::Null` (Apache 로그의 빈 필드 표현)
+- 정수 패턴 → `Value::Integer`
+- 소수점 포함 실수 패턴 → `Value::Float`
+- 기타 → `Value::String`
+
+#### 에러 처리 (LogParseErrorMode)
+
+```rust
+pub enum LogParseErrorMode {
+    Skip,  // 파싱 실패 행 건너뛰기 (기본값)
+    Raw,   // 실패 행을 { "_raw": "원본 라인" } 객체로 포함
+}
+```
+
 ## Encoding Support
 
 ### 인코딩 감지 우선순위

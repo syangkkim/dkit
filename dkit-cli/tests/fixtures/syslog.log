@@ -1,0 +1,3 @@
+Mar 10 13:55:36 myhost sshd[1234]: Accepted publickey for user from 10.0.0.1
+Mar 10 13:56:00 myhost cron[5678]: Job completed successfully
+Mar 10 13:57:00 webserver nginx[9012]: Connection established from 192.168.1.1
