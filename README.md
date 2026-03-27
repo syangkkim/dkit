@@ -98,6 +98,8 @@ All conversion paths between readable and writable formats are supported. Format
 |---------------|--------------------------------------------------|
 | `convert`     | Convert between any supported formats             |
 | `query`       | Query and transform data with expressions         |
+| `join`        | Join two files on a common key (inner/left/right/full) |
+| `profile`     | Profile data quality (types, nulls, cardinality)  |
 | `view`        | Preview data as a formatted table                 |
 | `stats`       | Show statistics (count, avg, percentiles, etc.)   |
 | `schema`      | Inspect data structure as a tree                  |
@@ -296,6 +298,57 @@ dkit query access.log '.[] | where status == 404' --log-format apache
 
 See [Query Syntax Reference](docs/query-syntax.md) for the full grammar and more examples.
 
+### `join` — Cross-file data joining
+
+```bash
+# Inner join on same key name
+dkit join users.json orders.json --on user_id -f json
+
+# Left join with different key names
+dkit join users.csv orders.csv --on id=user_id --type left -f csv
+
+# Cross-format join (YAML + CSV)
+dkit join users.yaml transactions.csv --on email -f table
+
+# Full outer join
+dkit join a.json b.json --on id --type full -f json --pretty
+```
+
+### `profile` — Data profiling
+
+```bash
+dkit profile data.csv                            # Table output
+dkit profile data.csv --output-format json        # JSON output for scripting
+dkit profile data.csv --detailed                  # Detailed stats (histograms, outliers)
+dkit profile data.json                            # JSON input
+dkit profile data.csv --output-format md           # Markdown output
+```
+
+### `query` — Window functions
+
+```bash
+# Ranking
+dkit query sales.json '.[] | select name, revenue, rank() over (order by revenue desc) as rank'
+
+# Partition-based ranking
+dkit query sales.json '.[] | select dept, name, revenue, row_number() over (partition by dept order by revenue desc) as dept_rank'
+
+# Previous/next row reference
+dkit query timeseries.json '.[] | select date, value, lag(value, 1) over (order by date) as prev_value'
+
+# Running total
+dkit query transactions.json '.[] | select date, amount, sum(amount) over (order by date) as running_total'
+```
+
+### `convert` — Template output
+
+```bash
+# Custom text output with Tera templates (requires --features template)
+dkit convert users.json -f template --template '{{ name }} <{{ email }}>'
+dkit convert data.json -f template --template-file report.hbs
+dkit convert data.json -f template --template '{{ name | upper }}'   # Filters: upper, lower, default
+```
+
 ### `view` — Table preview
 
 ```bash
@@ -432,6 +485,10 @@ dkit y2j config.yaml                # YAML → JSON
 | Parallel batch conversion | ✓ | — | — | — |
 | Execution timing | ✓ | — | — | — |
 | Query explain plan | ✓ | — | — | — |
+| Window functions | ✓ | — | — | — |
+| Cross-file JOIN | ✓ | — | — | — |
+| Data profiling | ✓ | — | — | — |
+| Template output | ✓ | — | ✓ | — |
 | Watch mode | ✓ | — | — | — |
 | Config file | ✓ | — | — | — |
 | Shell completions | ✓ | ✓ | ✓ | ✓ |

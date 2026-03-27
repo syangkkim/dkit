@@ -48,12 +48,14 @@ src/
 │   ├── markdown.rs         # Markdown 테이블 (GFM, 출력 전용)
 │   ├── html.rs             # HTML 테이블 (출력 전용)
 │   ├── xlsx.rs             # Excel (.xlsx, 입력 전용, calamine)
-│   └── sqlite.rs           # SQLite (.db/.sqlite, 입력 전용, rusqlite)
+│   ├── sqlite.rs           # SQLite (.db/.sqlite, 입력 전용, rusqlite)
+│   └── template.rs         # Tera 템플릿 (출력 전용, feature flag: template)
 │
 ├── query/                  # 쿼리 엔진
 │   ├── mod.rs
-│   ├── parser.rs           # 쿼리 문법 파서
+│   ├── parser.rs           # 쿼리 문법 파서 (윈도우 함수 포함)
 │   ├── evaluator.rs        # 쿼리 실행기
+│   ├── functions.rs        # 내장 함수 + 윈도우 함수 평가
 │   └── filter.rs           # where/sort/limit 처리
 │
 ├── commands/               # 서브커맨드 구현
@@ -64,7 +66,9 @@ src/
 │   ├── stats.rs
 │   ├── schema.rs
 │   ├── merge.rs
-│   └── diff.rs
+│   ├── diff.rs
+│   ├── join.rs             # 크로스 파일 JOIN
+│   └── profile.rs          # 데이터 프로파일링
 │
 └── output/                 # 출력 포맷터
     ├── mod.rs
@@ -114,6 +118,7 @@ pub trait FormatWriter {
 | 인코딩 자동 감지 | chardetng | 0.1.x | BOM 없는 파일의 인코딩 휴리스틱 감지 |
 | Excel 읽기 | calamine | 0.26.x | .xlsx 파일 파싱 (입력 전용) |
 | SQLite 읽기 | rusqlite | 0.32.x | SQLite 데이터베이스 읽기 (입력 전용) |
+| 템플릿 엔진 | tera | 1.x | Jinja2 호환 템플릿 렌더링 (선택적) |
 
 ## Conversion Matrix (v0.6)
 
