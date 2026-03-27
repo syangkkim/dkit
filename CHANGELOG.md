@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-27
+
+### Added
+
+- **`--template` flag for custom text output**: Tera-based template rendering for `convert` subcommand — `dkit convert data.json -f template --template '{{name}} <{{email}}>'`. Supports inline templates (`--template`), file-based templates (`--template-file`), and built-in helpers (`upper`, `lower`, `default`). Feature flag: `template`. (#217)
+- **`join` subcommand**: Cross-file key-based data joining — `dkit join users.json orders.json --on user_id -f table`. Supports `inner`, `left`, `right`, and `full` join types with `--on key` or `--on left_key=right_key` syntax. Works across different data formats. (#218)
+- **Window functions in query**: `row_number()`, `rank()`, `dense_rank()`, `lag()`, `lead()`, `first_value()`, `last_value()`, and window aggregates (`sum/avg/count/min/max(...) OVER (...)`) with `PARTITION BY` and `ORDER BY` support. (#219)
+- **`profile` subcommand**: Data profiling and quality analysis — `dkit profile data.csv`. Shows field types, null ratios, unique counts, top values, numeric statistics, string length analysis, and pattern detection. Supports `--output-format json` and `--detailed` mode. (#220)
+
+### Testing & Docs
+
+- **Comprehensive v1.5.0 integration tests**: End-to-end tests for `--template`, `join`, window functions, and `profile`. README and docs updated. (#221)
+
 ## [1.4.0] - 2026-03-27
 
 ### Added
@@ -205,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
-[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/syangkkim/dkit/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/syangkkim/dkit/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/syangkkim/dkit/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/syangkkim/dkit/compare/v1.1.0...v1.2.0
