@@ -620,6 +620,76 @@ pub enum Commands {
         sql: Option<String>,
     },
 
+    /// Join two data files on a common key
+    #[command(
+        after_help = "Examples:\n  dkit join users.json orders.json --on user_id -f json\n  dkit join users.csv orders.csv --on id=user_id --type left -f csv\n  dkit join users.yaml transactions.csv --on email -f table\n  dkit join a.json b.json --on id --type full -f json --pretty"
+    )]
+    Join {
+        /// Left input file path
+        #[arg(value_name = "LEFT")]
+        left: PathBuf,
+
+        /// Right input file path
+        #[arg(value_name = "RIGHT")]
+        right: PathBuf,
+
+        /// Join key: 'field' (same name in both) or 'left_field=right_field'
+        #[arg(long, value_name = "KEY", required = true)]
+        on: String,
+
+        /// Join type: inner, left, right, full (default: inner)
+        #[arg(long = "type", value_name = "TYPE", default_value = "inner")]
+        join_type: String,
+
+        /// Output format (json, csv, yaml, toml, etc.)
+        #[arg(short = 'f', long, alias = "to", value_name = "FORMAT")]
+        format: Option<String>,
+
+        /// Output file path (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// CSV delimiter character (default: ',')
+        #[arg(long, value_name = "CHAR")]
+        delimiter: Option<char>,
+
+        /// Pretty-print output
+        #[arg(long)]
+        pretty: bool,
+
+        /// Compact single-line output (JSON)
+        #[arg(long, conflicts_with = "pretty")]
+        compact: bool,
+
+        /// Treat CSV as having no header row
+        #[arg(long)]
+        no_header: bool,
+
+        /// Input file encoding (e.g. euc-kr, shift_jis, latin1)
+        #[arg(long, value_name = "ENCODING")]
+        encoding: Option<String>,
+
+        /// Auto-detect input file encoding
+        #[arg(long)]
+        detect_encoding: bool,
+
+        /// Excel sheet name or index (default: first sheet)
+        #[arg(long, value_name = "SHEET")]
+        sheet: Option<String>,
+
+        /// Excel header row number, 1-based (default: 1)
+        #[arg(long, value_name = "N")]
+        header_row: Option<usize>,
+
+        /// SQLite table name to read from
+        #[arg(long, value_name = "TABLE")]
+        table: Option<String>,
+
+        /// SQL query to execute on SQLite database
+        #[arg(long, value_name = "SQL")]
+        sql: Option<String>,
+    },
+
     /// Show schema/structure of data
     #[command(
         after_help = "Examples:\n  dkit schema config.yaml\n  dkit schema data.json\n  cat data.json | dkit schema - --from json"

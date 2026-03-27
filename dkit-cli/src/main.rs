@@ -637,6 +637,44 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 sqlite_opts: SqliteOptions { table, sql },
             })?;
         }
+        Commands::Join {
+            left,
+            right,
+            on,
+            join_type,
+            format,
+            output,
+            delimiter,
+            pretty,
+            compact,
+            no_header,
+            encoding,
+            detect_encoding,
+            sheet,
+            header_row,
+            table,
+            sql,
+        } => {
+            let jt = commands::join::JoinType::from_str(&join_type)?;
+            commands::join::run(&commands::join::JoinArgs {
+                left: &left,
+                right: &right,
+                on: &on,
+                join_type: jt,
+                to: format.as_deref(),
+                output: output.as_deref(),
+                delimiter,
+                no_header,
+                pretty,
+                compact,
+                encoding_opts: EncodingOptions {
+                    encoding,
+                    detect_encoding,
+                },
+                excel_opts: ExcelOptions { sheet, header_row },
+                sqlite_opts: SqliteOptions { table, sql },
+            })?;
+        }
         Commands::Schema {
             input,
             from,
