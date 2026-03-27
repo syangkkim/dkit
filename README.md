@@ -82,6 +82,8 @@ dkit completions powershell > dkit.ps1 && . ./dkit.ps1
 | Parquet     | `.parquet`             |  ✓   |   ✓   | Snappy / Gzip / Zstd compression |
 | Excel       | `.xlsx`                |  ✓   |   —   | Sheet selection, input-only    |
 | SQLite      | `.db`, `.sqlite`       |  ✓   |   —   | Custom SQL queries, input-only |
+| INI/CFG     | `.ini`, `.cfg`         |  ✓   |   ✓   | Section-based config files     |
+| .properties | `.properties`          |  ✓   |   ✓   | Java properties files          |
 | .env        | `.env`                 |  ✓   |   ✓   | Environment variable files     |
 | Markdown    | `.md`                  |  —   |   ✓   | GFM table, output-only         |
 | HTML        | `.html`                |  —   |   ✓   | Styled tables, output-only     |
@@ -124,6 +126,8 @@ cat data.json | dkit convert --from json --to csv
 
 # Format-specific options
 dkit convert data.json --to json --compact           # Minified JSON
+dkit convert data.json --to json --indent 4          # 4-space indentation
+dkit convert data.json --to json --sort-keys         # Alphabetically sorted keys
 dkit convert data.csv --to json --no-header           # CSV without header row
 dkit convert data.json --to xml --root-element items  # Custom XML root
 dkit convert data.json --to html --styled --full-html # Styled HTML document
@@ -142,6 +146,14 @@ dkit convert data.csv --to json --detect-encoding
 # Streaming for large files
 dkit convert large.jsonl --from jsonl -f csv --chunk-size 1000 -o out.csv
 
+# Deduplication
+dkit convert data.json --to csv --unique             # Remove duplicate records
+dkit convert data.json --to csv --unique-by email    # Deduplicate by field
+
+# Computed fields and transformations
+dkit convert data.json --to json --add-field 'total = price * qty'
+dkit convert data.json --to json --map 'name = upper(name)'
+
 # Column selection and aggregation
 dkit convert data.json --to csv --select 'name, email'
 dkit convert sales.csv --to json --group-by category --agg 'count(), sum(amount)'
@@ -149,6 +161,10 @@ dkit convert data.json --to csv --select 'name, age' --filter 'age > 30' --sort-
 
 # Dry-run (preview without writing)
 dkit convert huge.json --to csv -o output.csv --dry-run
+
+# INI / .properties format
+dkit convert config.ini --to json                    # INI → JSON
+dkit convert app.properties --to yaml                # Properties → YAML
 
 # .env format
 dkit convert .env --to json                         # .env → JSON
@@ -170,6 +186,15 @@ dkit query data.json '.users[0].name'
 dkit query data.json '.users[] | where age > 20 | select name, email'
 dkit query data.json '.items[] | sort price desc | limit 5'
 dkit query data.json '.users[] | where name contains "Kim"'
+
+# Array slicing and wildcards
+dkit query data.json '.[0:3]'                        # First 3 elements
+dkit query data.json '.[-2:]'                        # Last 2 elements
+dkit query data.json '.[*].name'                     # All names (wildcard)
+
+# IN / NOT IN, matches operators
+dkit query data.json '.[] | where status in ("active", "pending")'
+dkit query data.json '.[] | where name matches "^[A-C]"'
 
 # Aggregate functions
 dkit query data.csv '.[] | count'
@@ -196,8 +221,12 @@ dkit query data.json '.users[]' --to csv -o users.csv
 | `.field.sub` | Nested field access |
 | `.[0]`, `.[-1]` | Array index (0-based, negative from end) |
 | `.[]` | Iterate all elements |
+| `.[*]` | Wildcard (same as `[]`) |
+| `.[0:3]`, `.[-2:]`, `.[::2]` | Array slicing (start:end:step) |
 | `where .field == value` | Filter (`==`, `!=`, `>`, `<`, `>=`, `<=`) |
 | `where .field contains "str"` | String filter (`contains`, `starts_with`, `ends_with`) |
+| `where .field in ("a", "b")` | Membership filter (`in`, `not in`) |
+| `where .field matches "regex"` | Regex filter (`matches`, `not matches`) |
 | `select .f1, .f2` | Select specific fields |
 | `sort .field [desc]` | Sort ascending/descending |
 | `limit N` | Limit results |
@@ -207,7 +236,7 @@ dkit query data.json '.users[]' --to csv -o users.csv
 
 | Category | Functions |
 |----------|-----------|
-| String   | `upper`, `lower`, `trim`, `ltrim`, `rtrim`, `length`, `substr`, `concat`, `replace`, `split` |
+| String   | `upper`, `lower`, `trim`, `ltrim`, `rtrim`, `length`, `substr`, `concat`, `replace`, `split`, `index_of`, `rindex_of`, `starts_with`, `ends_with`, `reverse`, `repeat`, `pad_left`, `pad_right` |
 | Math     | `round`, `ceil`, `floor`, `abs`, `sqrt`, `pow` |
 | Date     | `now`, `date`, `year`, `month`, `day` |
 | Type     | `to_int`, `to_float`, `to_string`, `to_bool` |
@@ -333,6 +362,7 @@ dkit y2j config.yaml                # YAML → JSON
 | Parquet | ✓ | — | — | — |
 | Excel (.xlsx) input | ✓ | — | — | — |
 | SQLite input | ✓ | — | — | — |
+| INI / .properties | ✓ | — | — | — |
 | .env files | ✓ | — | — | — |
 | Cross-format convert | ✓ | — | Partial | Partial |
 | Query (where/select/sort) | ✓ | ✓ | ✓ | ✓ |

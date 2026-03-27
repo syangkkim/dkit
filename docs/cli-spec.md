@@ -60,6 +60,12 @@ dkit convert --from <FORMAT> --to <FORMAT>  # stdin 사용 시
 | `--sort-order <ORDER>` | | 정렬 방향 (`asc`, `desc`) | `asc` |
 | `--head <N>` | | 처음 N개 레코드만 출력 | |
 | `--tail <N>` | | 마지막 N개 레코드만 출력 | |
+| `--unique` | | 전체 레코드 기준 중복 제거 | false |
+| `--unique-by <FIELD>` | | 특정 필드 기준 중복 제거 (첫 번째 유지) | |
+| `--add-field <EXPR>` | | 계산 필드 추가 (여러 번 사용 가능, e.g. `total = price * qty`) | |
+| `--map <EXPR>` | | 기존 필드 값 변환 (여러 번 사용 가능, e.g. `name = upper(name)`) | |
+| `--indent <INDENT>` | | JSON 들여쓰기 (숫자: 스페이스 수, `tab`: 탭 문자) | 2 |
+| `--sort-keys` | | JSON 객체 키를 알파벳순으로 정렬 | false |
 | `--dry-run` | | 미리보기 모드 (파일 생성 없이 stdout으로 출력) | false |
 | `--dry-run-limit <N>` | | 미리보기 시 출력 레코드 수 | 10 |
 
@@ -146,6 +152,34 @@ dkit convert data.csv --to json --filter 'status == "active"' --head 10
 dkit convert huge.json --to csv -o output.csv --dry-run         # 파일 생성 없이 미리보기
 dkit convert data.json --to csv --dry-run --dry-run-limit 5     # 처음 5개 레코드만 미리보기
 
+# 중복 제거
+dkit convert data.json --to csv --unique                 # 전체 레코드 기준 중복 제거
+dkit convert data.json --to csv --unique-by email        # email 기준 중복 제거
+
+# 계산 필드 추가 (--add-field)
+dkit convert data.json --to json --add-field 'total = price * quantity'
+dkit convert data.csv --to json --add-field 'greeting = name + " from " + city'
+dkit convert data.json --to csv --add-field 'double_age = age * 2' --add-field 'label = upper(name)'
+
+# 필드 값 변환 (--map)
+dkit convert data.json --to json --map 'name = upper(name)'
+dkit convert data.csv --to json --map 'email = lower(email)' --map 'name = trim(name)'
+
+# JSON 출력 옵션
+dkit convert data.csv --to json --indent 4               # 4-스페이스 들여쓰기
+dkit convert data.csv --to json --indent tab              # 탭 들여쓰기
+dkit convert data.csv --to json --sort-keys               # 키 알파벳순 정렬
+dkit convert data.csv --to json --compact --sort-keys      # 한 줄 + 키 정렬
+
+# .ini / .cfg 포맷 변환
+dkit convert config.ini --to json                        # INI → JSON
+dkit convert config.json --to ini -o config.ini          # JSON → INI
+dkit convert config.cfg --to yaml                        # CFG → YAML
+
+# .properties 포맷 변환
+dkit convert app.properties --to json                    # properties → JSON
+dkit convert config.json --to properties -o app.properties  # JSON → properties
+
 # .env 포맷 변환
 dkit convert .env --to json                              # .env → JSON
 dkit convert config.json --to env -o .env                # JSON → .env
@@ -197,6 +231,8 @@ dkit query <INPUT> '<QUERY>' [OPTIONS]
 |------|-----------|
 | 비교 | `==`, `!=`, `>`, `<`, `>=`, `<=` |
 | 문자열 | `contains`, `starts_with`, `ends_with` |
+| 멤버십 | `in (v1, v2, ...)`, `not in (v1, v2, ...)` |
+| 정규식 | `matches "pattern"`, `not matches "pattern"` |
 | 논리 | `and`, `or` |
 
 ### Options
@@ -214,6 +250,20 @@ dkit query data.json '.users[0].name'
 dkit query data.json '.users[] | where age > 30'
 dkit query data.json '.users[] | where age > 30 | select name, email'
 dkit query users.csv '.rows[] | where age > 30' --to json -o filtered.json
+
+# 배열 슬라이싱 / 와일드카드
+dkit query data.json '.[0:3]'                    # 처음 3개 요소
+dkit query data.json '.[-2:]'                    # 마지막 2개 요소
+dkit query data.json '.[::2]'                    # 짝수 인덱스 요소
+dkit query data.json '.[*].name'                 # 모든 요소의 name 필드
+
+# IN / NOT IN 연산자
+dkit query data.json '.[] | where status in ("active", "pending")'
+dkit query data.json '.[] | where category not in ("deleted", "archived")'
+
+# matches 정규식 연산자
+dkit query data.json '.[] | where name matches "^[A-C]"'
+dkit query data.json '.[] | where email not matches "@test\\.com$"'
 ```
 
 ## view
@@ -250,6 +300,12 @@ dkit view <INPUT> [OPTIONS]
 | `--agg <EXPR>` | 집계 함수 | |
 | `--filter <EXPR>` | 필터 표현식 | |
 | `--sort-by <FIELD>` | 정렬 기준 필드 | |
+| `--head <N>` | 처음 N개 레코드만 출력 | |
+| `--tail <N>` | 마지막 N개 레코드만 출력 | |
+| `--unique` | 전체 레코드 기준 중복 제거 | false |
+| `--unique-by <FIELD>` | 특정 필드 기준 중복 제거 | |
+| `--add-field <EXPR>` | 계산 필드 추가 (여러 번 사용 가능) | |
+| `--map <EXPR>` | 필드 값 변환 (여러 번 사용 가능) | |
 
 ### Examples
 
@@ -286,8 +342,19 @@ dkit view data.json --select 'name, email'       # 특정 필드만 표시
 dkit view sales.csv --group-by category --agg 'count(), sum(amount)'  # 집계 테이블
 dkit view data.csv --select 'name, score' --filter 'score > 80' --sort-by score
 
+# 중복 제거
+dkit view data.csv --unique-by email             # email 기준 유니크 행만 표시
+
+# 필드 추가/변환
+dkit view data.json --add-field 'total = price * qty'    # 계산 필드 추가
+dkit view data.csv --map 'name = upper(name)'            # 필드 값 변환
+
 # .env 파일 보기
 dkit view .env                                   # .env 파일 테이블로 보기
+
+# .ini / .properties 파일 보기
+dkit view config.ini                             # INI 파일 보기
+dkit view app.properties                         # Properties 파일 보기
 ```
 
 ## stats
