@@ -207,6 +207,38 @@ pub mod xlsx {
     }
 }
 
+/// HCL (HashiCorp Configuration Language) reader and writer.
+#[cfg(feature = "hcl")]
+pub mod hcl;
+#[cfg(not(feature = "hcl"))]
+pub mod hcl {
+    //! Stub module — HCL feature not enabled.
+    use super::{FormatReader, FormatWriter};
+    use crate::value::Value;
+    use std::io::{Read, Write};
+
+    const MSG: &str = "HCL support requires the 'hcl' feature.\n  Install with: cargo install dkit --features hcl";
+
+    pub struct HclReader;
+    impl FormatReader for HclReader {
+        fn read(&self, _: &str) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+        fn read_from_reader(&self, _: impl Read) -> anyhow::Result<Value> {
+            anyhow::bail!(MSG)
+        }
+    }
+    pub struct HclWriter;
+    impl FormatWriter for HclWriter {
+        fn write(&self, _: &Value) -> anyhow::Result<String> {
+            anyhow::bail!(MSG)
+        }
+        fn write_to_writer(&self, _: &Value, _: impl Write) -> anyhow::Result<()> {
+            anyhow::bail!(MSG)
+        }
+    }
+}
+
 /// XML reader and writer.
 #[cfg(feature = "xml")]
 pub mod xml;
@@ -300,6 +332,8 @@ pub enum Format {
     Ini,
     /// Java `.properties` file format (`*.properties`)
     Properties,
+    /// HCL (HashiCorp Configuration Language) (`*.hcl`, `*.tf`, `*.tfvars`)
+    Hcl,
 }
 
 impl Format {
@@ -322,6 +356,7 @@ impl Format {
             "env" | "dotenv" => Ok(Format::Env),
             "ini" | "cfg" | "conf" | "config" => Ok(Format::Ini),
             "properties" => Ok(Format::Properties),
+            "hcl" | "tf" | "tfvars" => Ok(Format::Hcl),
             _ => Err(DkitError::UnknownFormat(s.to_string())),
         }
     }
@@ -369,6 +404,15 @@ impl Format {
             ));
         }
 
+        if cfg!(feature = "hcl") {
+            formats.push(("hcl", "HCL (HashiCorp Configuration Language)"));
+        } else {
+            formats.push((
+                "hcl",
+                "HCL (HashiCorp Configuration Language) (requires --features hcl)",
+            ));
+        }
+
         formats.push(("env", "Environment variables (.env) format"));
         formats.push(("ini", "INI/CFG configuration file format"));
         formats.push(("properties", "Java .properties file format"));
@@ -399,6 +443,7 @@ impl std::fmt::Display for Format {
             Format::Env => write!(f, "ENV"),
             Format::Ini => write!(f, "INI"),
             Format::Properties => write!(f, "Properties"),
+            Format::Hcl => write!(f, "HCL"),
         }
     }
 }
@@ -428,6 +473,7 @@ pub fn detect_format(path: &Path) -> Result<Format, DkitError> {
         Some("env") => Ok(Format::Env),
         Some("ini" | "cfg") => Ok(Format::Ini),
         Some("properties") => Ok(Format::Properties),
+        Some("hcl" | "tf" | "tfvars") => Ok(Format::Hcl),
         Some(ext) => Err(DkitError::UnknownFormat(ext.to_string())),
         None => Err(DkitError::UnknownFormat("(no extension)".to_string())),
     }

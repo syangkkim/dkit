@@ -8,6 +8,7 @@ use super::{
 use anyhow::{bail, Result};
 use dkit_core::format::csv::CsvReader;
 use dkit_core::format::env::EnvReader;
+use dkit_core::format::hcl::HclReader;
 use dkit_core::format::ini::IniReader;
 use dkit_core::format::json::JsonReader;
 use dkit_core::format::jsonl::JsonlReader;
@@ -322,6 +323,7 @@ fn read_value(content: &str, format: Format, options: &FormatOptions) -> Result<
         Format::Env => EnvReader.read(content),
         Format::Ini => IniReader.read(content),
         Format::Properties => PropertiesReader.read(content),
+        Format::Hcl => HclReader.read(content),
         Format::Msgpack => MsgpackReader.read(content),
         Format::Xlsx => {
             bail!("Excel files must be read as binary; use file path input instead of stdin")

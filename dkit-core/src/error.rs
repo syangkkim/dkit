@@ -1,7 +1,7 @@
 /// 지원하는 포맷 목록 (에러 메시지용)
 pub const SUPPORTED_FORMATS: &[&str] = &[
     "json", "jsonl", "csv", "tsv", "yaml", "yml", "toml", "env", "xml", "msgpack", "xlsx",
-    "sqlite", "parquet", "md", "html", "table",
+    "sqlite", "parquet", "hcl", "tf", "md", "html", "table",
 ];
 
 /// Compute Levenshtein edit distance between two strings.
