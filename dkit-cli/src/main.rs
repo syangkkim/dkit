@@ -12,6 +12,7 @@ use clap::CommandFactory;
 use cli::{AliasAction, Cli, Commands, ConfigAction};
 use commands::{EncodingOptions, ExcelOptions, ParquetWriteOptions, SqliteOptions};
 use dkit_core::error::{suggest_format, DkitError, SUPPORTED_FORMATS};
+use dkit_core::format::log::LogParseErrorMode;
 
 fn main() {
     // Spawn a thread with a larger stack to prevent stack overflows on Windows,
@@ -339,6 +340,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             watch_paths,
             dry_run,
             dry_run_limit,
+            log_format,
+            log_error,
         } => {
             let run = || {
                 commands::convert::run(&commands::convert::ConvertArgs {
@@ -403,6 +406,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     }),
                     dry_run,
                     dry_run_limit,
+                    log_format: log_format.as_deref(),
+                    log_error: parse_log_error_mode(&log_error),
                 })
             };
 
@@ -556,6 +561,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             header_row,
             table,
             sql,
+            log_format,
+            log_error,
         } => {
             let effective_column = column.or(field);
             commands::stats::run(&commands::stats::StatsArgs {
@@ -573,6 +580,8 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
                 sqlite_opts: SqliteOptions { table, sql },
+                log_format: log_format.as_deref(),
+                log_error: parse_log_error_mode(&log_error),
             })?;
         }
         Commands::Merge {
@@ -830,4 +839,11 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn parse_log_error_mode(s: &str) -> LogParseErrorMode {
+    match s.to_lowercase().as_str() {
+        "raw" => LogParseErrorMode::Raw,
+        _ => LogParseErrorMode::Skip,
+    }
 }

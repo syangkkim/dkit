@@ -239,6 +239,16 @@ pub enum Commands {
         /// Number of records to show in dry-run preview (default: 10)
         #[arg(long, value_name = "N", default_value = "10")]
         dry_run_limit: usize,
+
+        /// Parse input as log file using a predefined or custom format.
+        /// Predefined: apache, apache-combined, apache-common, nginx, syslog.
+        /// Custom: use {field} placeholders, e.g. '{timestamp} [{level}] {message}'
+        #[arg(long, value_name = "FORMAT")]
+        log_format: Option<String>,
+
+        /// How to handle log lines that fail to parse: 'skip' (default) or 'raw'
+        #[arg(long, value_name = "MODE", default_value = "skip")]
+        log_error: String,
     },
 
     /// Query data using path expressions
@@ -511,6 +521,16 @@ pub enum Commands {
         /// SQL query to execute on SQLite database
         #[arg(long, value_name = "SQL")]
         sql: Option<String>,
+
+        /// Parse input as log file using a predefined or custom format.
+        /// Predefined: apache, apache-combined, apache-common, nginx, syslog.
+        /// Custom: use {field} placeholders, e.g. '{timestamp} [{level}] {message}'
+        #[arg(long, value_name = "FORMAT")]
+        log_format: Option<String>,
+
+        /// How to handle log lines that fail to parse: 'skip' (default) or 'raw'
+        #[arg(long, value_name = "MODE", default_value = "skip")]
+        log_error: String,
     },
 
     /// Merge multiple data files into one
