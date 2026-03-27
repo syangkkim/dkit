@@ -195,6 +195,17 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    /// 조건 표현식: `if(condition, then_expr, else_expr)`
+    If {
+        condition: Condition,
+        then_expr: Box<Expr>,
+        else_expr: Box<Expr>,
+    },
+    /// CASE 표현식: `case when cond1 then expr1 [when cond2 then expr2]* [else expr] end`
+    Case {
+        branches: Vec<(Condition, Expr)>,
+        default: Option<Box<Expr>>,
+    },
 }
 
 /// SELECT 절의 컬럼 표현식
@@ -788,6 +799,10 @@ impl Parser {
                     "true" => return Ok(Expr::Literal(LiteralValue::Bool(true))),
                     "false" => return Ok(Expr::Literal(LiteralValue::Bool(false))),
                     "null" => return Ok(Expr::Literal(LiteralValue::Null)),
+                    // if(condition, then_expr, else_expr)
+                    "if" => return self.parse_if_expr(),
+                    // case when ... then ... [when ... then ...] [else ...] end
+                    "case" => return self.parse_case_expr(),
                     _ => {}
                 }
                 // Check for function call: name(...)
@@ -828,6 +843,100 @@ impl Parser {
                 self.pos
             ))),
         }
+    }
+
+    /// `if(condition, then_expr, else_expr)` 파싱
+    fn parse_if_expr(&mut self) -> Result<Expr, DkitError> {
+        self.skip_whitespace();
+        if !self.consume_char('(') {
+            return Err(DkitError::QueryError(format!(
+                "expected '(' after 'if' at position {}",
+                self.pos
+            )));
+        }
+        self.skip_whitespace();
+        let condition = self.parse_condition()?;
+        self.skip_whitespace();
+        if !self.consume_char(',') {
+            return Err(DkitError::QueryError(format!(
+                "expected ',' after condition in if() at position {}",
+                self.pos
+            )));
+        }
+        self.skip_whitespace();
+        let then_expr = self.parse_expr()?;
+        self.skip_whitespace();
+        if !self.consume_char(',') {
+            return Err(DkitError::QueryError(format!(
+                "expected ',' after then-expression in if() at position {}",
+                self.pos
+            )));
+        }
+        self.skip_whitespace();
+        let else_expr = self.parse_expr()?;
+        self.skip_whitespace();
+        if !self.consume_char(')') {
+            return Err(DkitError::QueryError(format!(
+                "expected ')' at position {}",
+                self.pos
+            )));
+        }
+        Ok(Expr::If {
+            condition,
+            then_expr: Box::new(then_expr),
+            else_expr: Box::new(else_expr),
+        })
+    }
+
+    /// `case when cond then expr [when cond then expr]* [else expr] end` 파싱
+    fn parse_case_expr(&mut self) -> Result<Expr, DkitError> {
+        let mut branches = Vec::new();
+        let mut default = None;
+
+        loop {
+            self.skip_whitespace();
+            let saved_pos = self.pos;
+            let keyword = self.parse_keyword().unwrap_or_default();
+            match keyword.as_str() {
+                "when" => {
+                    self.skip_whitespace();
+                    let condition = self.parse_condition()?;
+                    self.skip_whitespace();
+                    let then_kw = self.parse_keyword()?;
+                    if then_kw != "then" {
+                        return Err(DkitError::QueryError(format!(
+                            "expected 'then' after condition in case expression, found '{}'",
+                            then_kw
+                        )));
+                    }
+                    self.skip_whitespace();
+                    let expr = self.parse_expr()?;
+                    branches.push((condition, expr));
+                }
+                "else" => {
+                    self.skip_whitespace();
+                    default = Some(Box::new(self.parse_expr()?));
+                }
+                "end" => {
+                    break;
+                }
+                _ => {
+                    self.pos = saved_pos;
+                    return Err(DkitError::QueryError(format!(
+                        "expected 'when', 'else', or 'end' in case expression at position {}",
+                        self.pos
+                    )));
+                }
+            }
+        }
+
+        if branches.is_empty() {
+            return Err(DkitError::QueryError(
+                "case expression requires at least one 'when' branch".to_string(),
+            ));
+        }
+
+        Ok(Expr::Case { branches, default })
     }
 
     /// 쉼표로 구분된 식별자 목록 파싱: `IDENTIFIER ( "," IDENTIFIER )*`
@@ -2485,5 +2594,145 @@ mod tests {
             vec![Segment::RecursiveDescent("name".to_string())]
         );
         assert_eq!(q.operations.len(), 1);
+    }
+
+    // --- if() expression tests ---
+
+    #[test]
+    fn test_if_expr_simple() {
+        let q = parse_query(".items[] | select if(age < 18, \"minor\", \"adult\") as category")
+            .unwrap();
+        assert_eq!(q.operations.len(), 1);
+        if let Operation::Select(exprs) = &q.operations[0] {
+            assert_eq!(exprs.len(), 1);
+            assert_eq!(exprs[0].alias, Some("category".to_string()));
+            assert!(matches!(&exprs[0].expr, Expr::If { .. }));
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_if_expr_nested() {
+        let q = parse_query(
+            ".[] | select if(age < 18, \"minor\", if(age < 65, \"adult\", \"senior\")) as cat",
+        )
+        .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::If { else_expr, .. } = &exprs[0].expr {
+                assert!(matches!(else_expr.as_ref(), Expr::If { .. }));
+            } else {
+                panic!("expected If expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_if_expr_with_and_condition() {
+        let q = parse_query(".[] | select if(age > 18 and age < 65, \"adult\", \"other\") as cat")
+            .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::If { condition, .. } = &exprs[0].expr {
+                assert!(matches!(condition, Condition::And(_, _)));
+            } else {
+                panic!("expected If expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_if_expr_missing_paren() {
+        let result = parse_query(".[] | select if age < 18, \"minor\", \"adult\"");
+        assert!(result.is_err());
+    }
+
+    // --- case/when expression tests ---
+
+    #[test]
+    fn test_case_simple() {
+        let q = parse_query(
+            ".[] | select case when status == \"active\" then \"A\" else \"I\" end as code",
+        )
+        .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Case { branches, default } = &exprs[0].expr {
+                assert_eq!(branches.len(), 1);
+                assert!(default.is_some());
+            } else {
+                panic!("expected Case expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_case_multiple_when() {
+        let q = parse_query(
+            ".[] | select case when age < 18 then \"minor\" when age < 65 then \"adult\" else \"senior\" end as category",
+        )
+        .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Case { branches, default } = &exprs[0].expr {
+                assert_eq!(branches.len(), 2);
+                assert!(default.is_some());
+            } else {
+                panic!("expected Case expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_case_no_else() {
+        let q =
+            parse_query(".[] | select case when status == \"active\" then \"yes\" end as active")
+                .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Case { branches, default } = &exprs[0].expr {
+                assert_eq!(branches.len(), 1);
+                assert!(default.is_none());
+            } else {
+                panic!("expected Case expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_case_no_when_fails() {
+        let result = parse_query(".[] | select case else \"x\" end as y");
+        assert!(result.is_err());
+    }
+
+    // --- if/case in add-field ---
+
+    #[test]
+    fn test_add_field_with_if() {
+        let (name, expr) =
+            parse_add_field_expr("tier = if(revenue > 10000, \"gold\", \"silver\")").unwrap();
+        assert_eq!(name, "tier");
+        assert!(matches!(expr, Expr::If { .. }));
+    }
+
+    #[test]
+    fn test_add_field_with_case() {
+        let (name, expr) = parse_add_field_expr(
+            "tier = case when revenue > 10000 then \"gold\" when revenue > 5000 then \"silver\" else \"bronze\" end",
+        )
+        .unwrap();
+        assert_eq!(name, "tier");
+        if let Expr::Case { branches, default } = expr {
+            assert_eq!(branches.len(), 2);
+            assert!(default.is_some());
+        } else {
+            panic!("expected Case expression");
+        }
     }
 }
