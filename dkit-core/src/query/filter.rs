@@ -817,6 +817,18 @@ fn compare_values(
             CompareOp::Contains => Ok(a.contains(b.as_str())),
             CompareOp::StartsWith => Ok(a.starts_with(b.as_str())),
             CompareOp::EndsWith => Ok(a.ends_with(b.as_str())),
+            CompareOp::Matches => {
+                let re = regex::Regex::new(b).map_err(|e| {
+                    DkitError::QueryError(format!("invalid regex pattern '{}': {}", b, e))
+                })?;
+                Ok(re.is_match(a))
+            }
+            CompareOp::NotMatches => {
+                let re = regex::Regex::new(b).map_err(|e| {
+                    DkitError::QueryError(format!("invalid regex pattern '{}': {}", b, e))
+                })?;
+                Ok(!re.is_match(a))
+            }
             _ => Ok(apply_compare_op(a.as_str(), op, b.as_str())),
         },
         // 불리언: == 와 != 만 지원
@@ -861,6 +873,7 @@ fn apply_compare_op<T: PartialOrd>(a: T, op: &CompareOp, b: T) -> bool {
         CompareOp::Le => a <= b,
         CompareOp::Contains | CompareOp::StartsWith | CompareOp::EndsWith => false,
         CompareOp::In | CompareOp::NotIn => false,
+        CompareOp::Matches | CompareOp::NotMatches => false,
     }
 }
 
@@ -1229,6 +1242,64 @@ mod tests {
         );
         let result = run_where(&data, &cond).unwrap();
         assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_where_matches() {
+        let data = sample_files();
+        let cond = make_condition(
+            "email",
+            CompareOp::Matches,
+            LiteralValue::String(".*@gmail\\.com$".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 2); // alice@gmail.com, charlie@gmail.com
+    }
+
+    #[test]
+    fn test_where_matches_pattern() {
+        let data = sample_files();
+        let cond = make_condition(
+            "name",
+            CompareOp::Matches,
+            LiteralValue::String("^.*\\.json$".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 2); // config.json, data.json
+    }
+
+    #[test]
+    fn test_where_not_matches() {
+        let data = sample_files();
+        let cond = make_condition(
+            "email",
+            CompareOp::NotMatches,
+            LiteralValue::String(".*@gmail\\.com$".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 1); // bob@yahoo.com
+    }
+
+    #[test]
+    fn test_where_matches_no_match() {
+        let data = sample_files();
+        let cond = make_condition(
+            "email",
+            CompareOp::Matches,
+            LiteralValue::String("^admin@".to_string()),
+        );
+        let result = run_where(&data, &cond).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_where_matches_invalid_regex() {
+        let result = compare_values(
+            &Value::String("test@example.com".to_string()),
+            &CompareOp::Matches,
+            &LiteralValue::String("[invalid".to_string()),
+        );
+        assert!(result.is_err());
     }
 
     // --- 논리 연산자 ---

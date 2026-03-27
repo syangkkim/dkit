@@ -905,6 +905,7 @@ dependencies = [
  "parquet",
  "quick-xml 0.37.5",
  "rand",
+ "regex",
  "rmp-serde",
  "rusqlite",
  "serde",

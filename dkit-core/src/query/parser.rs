@@ -130,6 +130,8 @@ pub enum CompareOp {
     EndsWith,   // ends_with
     In,         // in
     NotIn,      // not in
+    Matches,    // matches (regex)
+    NotMatches, // not matches (regex)
 }
 
 /// Literal value used as a comparison operand or in expressions.
@@ -883,6 +885,14 @@ impl Parser {
                                 op: CompareOp::NotIn,
                                 value: LiteralValue::List(list),
                             });
+                        } else if kw2 == "matches" {
+                            self.skip_whitespace();
+                            let value = self.parse_literal_value()?;
+                            return Ok(Comparison {
+                                field,
+                                op: CompareOp::NotMatches,
+                                value,
+                            });
                         }
                     }
                     self.pos = saved_pos2;
@@ -981,6 +991,7 @@ impl Parser {
                     "contains" => Ok(CompareOp::Contains),
                     "starts_with" => Ok(CompareOp::StartsWith),
                     "ends_with" => Ok(CompareOp::EndsWith),
+                    "matches" => Ok(CompareOp::Matches),
                     _ => {
                         self.pos = saved_pos;
                         Err(DkitError::QueryError(format!(
@@ -1809,6 +1820,31 @@ mod tests {
         assert_eq!(cmp.field, "file");
         assert_eq!(cmp.op, CompareOp::EndsWith);
         assert_eq!(cmp.value, LiteralValue::String(".json".to_string()));
+    }
+
+    #[test]
+    fn test_where_matches() {
+        let q = parse_query(".[] | where email matches \".*@gmail\\.com$\"").unwrap();
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "email");
+        assert_eq!(cmp.op, CompareOp::Matches);
+        assert_eq!(
+            cmp.value,
+            LiteralValue::String(".*@gmail\\.com$".to_string())
+        );
+    }
+
+    #[test]
+    fn test_where_not_matches() {
+        let q = parse_query(".[] | where name not matches \"^test_\"").unwrap();
+        let Operation::Where(Condition::Comparison(cmp)) = &q.operations[0] else {
+            panic!("expected Comparison");
+        };
+        assert_eq!(cmp.field, "name");
+        assert_eq!(cmp.op, CompareOp::NotMatches);
+        assert_eq!(cmp.value, LiteralValue::String("^test_".to_string()));
     }
 
     // --- 논리 연산자 파싱 ---
