@@ -40,13 +40,24 @@ pub fn evaluate_path(value: &Value, path: &Path) -> Result<Value, DkitError> {
                         )));
                     }
                 },
-                Segment::Iterate => match val {
+                Segment::Iterate | Segment::Wildcard => match val {
                     Value::Array(arr) => {
                         next_results.extend(arr.iter().cloned());
                     }
                     _ => {
                         return Err(DkitError::PathNotFound(
                             "cannot iterate over non-array value".to_string(),
+                        ));
+                    }
+                },
+                Segment::Slice { start, end, step } => match val {
+                    Value::Array(arr) => {
+                        let sliced = apply_slice(arr, *start, *end, *step)?;
+                        next_results.extend(sliced);
+                    }
+                    _ => {
+                        return Err(DkitError::PathNotFound(
+                            "cannot slice non-array value".to_string(),
                         ));
                     }
                 },
@@ -57,7 +68,12 @@ pub fn evaluate_path(value: &Value, path: &Path) -> Result<Value, DkitError> {
     }
 
     // 이터레이션이 있었으면 배열로 반환, 아니면 단일 값
-    let has_iterate = path.segments.iter().any(|s| matches!(s, Segment::Iterate));
+    let has_iterate = path.segments.iter().any(|s| {
+        matches!(
+            s,
+            Segment::Iterate | Segment::Wildcard | Segment::Slice { .. }
+        )
+    });
     if has_iterate {
         Ok(Value::Array(results))
     } else {
@@ -68,6 +84,81 @@ pub fn evaluate_path(value: &Value, path: &Path) -> Result<Value, DkitError> {
             _ => Ok(Value::Array(results)),
         }
     }
+}
+
+/// Python 스타일 배열 슬라이싱 적용
+fn apply_slice(
+    arr: &[Value],
+    start: Option<i64>,
+    end: Option<i64>,
+    step: Option<i64>,
+) -> Result<Vec<Value>, DkitError> {
+    let len = arr.len() as i64;
+    let step = step.unwrap_or(1);
+
+    if step == 0 {
+        return Err(DkitError::QueryError(
+            "slice step cannot be zero".to_string(),
+        ));
+    }
+
+    // Python 스타일 인덱스 클램핑
+    let clamp = |idx: i64| -> i64 {
+        if idx < 0 {
+            let resolved = len + idx;
+            if resolved < 0 {
+                0
+            } else {
+                resolved
+            }
+        } else if idx > len {
+            len
+        } else {
+            idx
+        }
+    };
+
+    let (start_idx, end_idx) = if step > 0 {
+        let s = match start {
+            Some(v) => clamp(v),
+            None => 0,
+        };
+        let e = match end {
+            Some(v) => clamp(v),
+            None => len,
+        };
+        (s, e)
+    } else {
+        let s = match start {
+            Some(v) => clamp(v),
+            None => len - 1,
+        };
+        let e = match end {
+            Some(v) => clamp(v),
+            None => -1,
+        };
+        (s, e)
+    };
+
+    let mut result = Vec::new();
+    let mut i = start_idx;
+    if step > 0 {
+        while i < end_idx {
+            if i >= 0 && i < len {
+                result.push(arr[i as usize].clone());
+            }
+            i += step;
+        }
+    } else {
+        while i > end_idx {
+            if i >= 0 && i < len {
+                result.push(arr[i as usize].clone());
+            }
+            i += step;
+        }
+    }
+
+    Ok(result)
 }
 
 /// 음수 인덱스를 양수로 변환
@@ -389,5 +480,233 @@ mod tests {
         let data = Value::Null;
         let result = eval(&data, ".").unwrap();
         assert_eq!(result, Value::Null);
+    }
+
+    // --- 배열 와일드카드 ---
+
+    #[test]
+    fn test_wildcard_basic() {
+        let data = sample_data();
+        let result = eval(&data, ".users[*]").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+    }
+
+    #[test]
+    fn test_wildcard_with_field() {
+        let data = sample_data();
+        let result = eval(&data, ".users[*].name").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::String("Alice".to_string()),
+                Value::String("Bob".to_string()),
+                Value::String("Charlie".to_string()),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_wildcard_on_non_array() {
+        let data = sample_data();
+        let err = eval(&data, ".name[*]").unwrap_err();
+        assert!(matches!(err, DkitError::PathNotFound(_)));
+    }
+
+    // --- 배열 슬라이싱 ---
+
+    #[test]
+    fn test_slice_basic() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+            Value::Integer(40),
+            Value::Integer(50),
+        ]);
+        let result = eval(&data, ".[0:3]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::Integer(10),
+                Value::Integer(20),
+                Value::Integer(30),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_slice_open_end() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+            Value::Integer(40),
+            Value::Integer(50),
+        ]);
+        let result = eval(&data, ".[2:]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::Integer(30),
+                Value::Integer(40),
+                Value::Integer(50),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_slice_open_start() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+            Value::Integer(40),
+            Value::Integer(50),
+        ]);
+        let result = eval(&data, ".[:2]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::Integer(10), Value::Integer(20),])
+        );
+    }
+
+    #[test]
+    fn test_slice_negative_start() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+            Value::Integer(40),
+            Value::Integer(50),
+        ]);
+        let result = eval(&data, ".[-2:]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::Integer(40), Value::Integer(50),])
+        );
+    }
+
+    #[test]
+    fn test_slice_negative_end() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+            Value::Integer(40),
+            Value::Integer(50),
+        ]);
+        let result = eval(&data, ".[1:-1]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::Integer(20),
+                Value::Integer(30),
+                Value::Integer(40),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_slice_with_step() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+            Value::Integer(40),
+            Value::Integer(50),
+        ]);
+        let result = eval(&data, ".[0:5:2]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::Integer(10),
+                Value::Integer(30),
+                Value::Integer(50),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_slice_reverse() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+        ]);
+        let result = eval(&data, ".[::-1]").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::Integer(30),
+                Value::Integer(20),
+                Value::Integer(10),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_slice_empty_result() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+        ]);
+        let result = eval(&data, ".[5:10]").unwrap();
+        assert_eq!(result, Value::Array(vec![]));
+    }
+
+    #[test]
+    fn test_slice_on_nested_field() {
+        let data = sample_data();
+        let result = eval(&data, ".users[0:2]").unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+        assert_eq!(
+            arr[1].as_object().unwrap().get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_slice_with_field_after() {
+        let data = sample_data();
+        let result = eval(&data, ".users[0:2].name").unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::String("Alice".to_string()),
+                Value::String("Bob".to_string()),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_slice_on_non_array() {
+        let data = sample_data();
+        let err = eval(&data, ".name[0:2]").unwrap_err();
+        assert!(matches!(err, DkitError::PathNotFound(_)));
+    }
+
+    #[test]
+    fn test_slice_step_zero_error() {
+        let data = Value::Array(vec![Value::Integer(10)]);
+        let err = eval(&data, ".[::0]").unwrap_err();
+        assert!(matches!(err, DkitError::QueryError(_)));
+    }
+
+    #[test]
+    fn test_slice_full_open() {
+        let data = Value::Array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+        ]);
+        let result = eval(&data, ".[:]").unwrap();
+        assert_eq!(result, data);
     }
 }
