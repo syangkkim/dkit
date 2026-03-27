@@ -29,6 +29,12 @@ fn apply_operation(value: Value, operation: &Operation) -> Result<Value, DkitErr
         Operation::Min { field } => apply_min(value, field),
         Operation::Max { field } => apply_max(value, field),
         Operation::Distinct { field } => apply_distinct(value, field),
+        Operation::Median { field } => apply_median(value, field),
+        Operation::Percentile { field, p } => apply_percentile(value, field, *p),
+        Operation::Stddev { field } => apply_stddev(value, field),
+        Operation::Variance { field } => apply_variance(value, field),
+        Operation::Mode { field } => apply_mode(value, field),
+        Operation::GroupConcat { field, separator } => apply_group_concat(value, field, separator),
         Operation::GroupBy {
             fields,
             having,
@@ -404,6 +410,213 @@ fn apply_distinct(value: Value, field: &str) -> Result<Value, DkitError> {
         }
         _ => Err(DkitError::QueryError(
             "distinct requires an array input".to_string(),
+        )),
+    }
+}
+
+/// 배열에서 숫자 필드 값을 추출하는 헬퍼
+fn collect_numeric_values(arr: &[Value], field: &str) -> Result<Vec<f64>, DkitError> {
+    let mut values = Vec::new();
+    for item in arr {
+        match item {
+            Value::Object(map) => match map.get(field) {
+                Some(Value::Integer(n)) => values.push(*n as f64),
+                Some(Value::Float(f)) => values.push(*f),
+                Some(Value::Null) | None => {}
+                Some(v) => {
+                    return Err(DkitError::QueryError(format!(
+                        "field '{}' is not numeric (got {})",
+                        field, v
+                    )));
+                }
+            },
+            _ => {
+                return Err(DkitError::QueryError(
+                    "requires an array of objects".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(values)
+}
+
+/// 아이템 슬라이스에서 숫자 필드 값을 추출하는 헬퍼 (group aggregate용)
+fn collect_numeric_values_from_items(items: &[Value], field: &str) -> Vec<f64> {
+    let mut values = Vec::new();
+    for item in items {
+        if let Value::Object(map) = item {
+            match map.get(field) {
+                Some(Value::Integer(n)) => values.push(*n as f64),
+                Some(Value::Float(f)) => values.push(*f),
+                _ => {}
+            }
+        }
+    }
+    values
+}
+
+/// percentile 계산 헬퍼 (linear interpolation)
+fn compute_percentile(sorted: &[f64], p: f64) -> f64 {
+    if sorted.len() == 1 {
+        return sorted[0];
+    }
+    let index = p * (sorted.len() - 1) as f64;
+    let lower = index.floor() as usize;
+    let upper = index.ceil() as usize;
+    if lower == upper {
+        sorted[lower]
+    } else {
+        let frac = index - lower as f64;
+        sorted[lower] * (1.0 - frac) + sorted[upper] * frac
+    }
+}
+
+/// median: 배열에서 지정된 숫자 필드의 중앙값을 반환
+fn apply_median(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut values = collect_numeric_values(&arr, field)?;
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let mid = values.len() / 2;
+            if values.len() % 2 == 0 {
+                Ok(Value::Float((values[mid - 1] + values[mid]) / 2.0))
+            } else {
+                Ok(Value::Float(values[mid]))
+            }
+        }
+        _ => Err(DkitError::QueryError(
+            "median requires an array input".to_string(),
+        )),
+    }
+}
+
+/// percentile: 배열에서 지정된 숫자 필드의 p번째 백분위수를 반환
+fn apply_percentile(value: Value, field: &str, p: f64) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut values = collect_numeric_values(&arr, field)?;
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            Ok(Value::Float(compute_percentile(&values, p)))
+        }
+        _ => Err(DkitError::QueryError(
+            "percentile requires an array input".to_string(),
+        )),
+    }
+}
+
+/// stddev: 배열에서 지정된 숫자 필드의 표준편차(모집단)를 반환
+fn apply_stddev(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let values = collect_numeric_values(&arr, field)?;
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            let mean = values.iter().sum::<f64>() / values.len() as f64;
+            let variance =
+                values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
+            Ok(Value::Float(variance.sqrt()))
+        }
+        _ => Err(DkitError::QueryError(
+            "stddev requires an array input".to_string(),
+        )),
+    }
+}
+
+/// variance: 배열에서 지정된 숫자 필드의 분산을 반환
+fn apply_variance(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let values = collect_numeric_values(&arr, field)?;
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            let mean = values.iter().sum::<f64>() / values.len() as f64;
+            let variance =
+                values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
+            Ok(Value::Float(variance))
+        }
+        _ => Err(DkitError::QueryError(
+            "variance requires an array input".to_string(),
+        )),
+    }
+}
+
+/// mode: 배열에서 지정된 필드의 최빈값을 반환
+fn apply_mode(value: Value, field: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut freq: Vec<(Value, usize)> = Vec::new();
+            for item in &arr {
+                match item {
+                    Value::Object(map) => {
+                        if let Some(v) = map.get(field) {
+                            if matches!(v, Value::Null) {
+                                continue;
+                            }
+                            if let Some(entry) = freq.iter_mut().find(|(val, _)| val == v) {
+                                entry.1 += 1;
+                            } else {
+                                freq.push((v.clone(), 1));
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "mode requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            if freq.is_empty() {
+                return Ok(Value::Null);
+            }
+            let max_count = freq.iter().map(|(_, c)| *c).max().unwrap_or(0);
+            let mode_val = freq.into_iter().find(|(_, c)| *c == max_count).unwrap().0;
+            Ok(mode_val)
+        }
+        _ => Err(DkitError::QueryError(
+            "mode requires an array input".to_string(),
+        )),
+    }
+}
+
+/// group_concat: 배열에서 지정된 필드의 값을 문자열로 연결
+fn apply_group_concat(value: Value, field: &str, separator: &str) -> Result<Value, DkitError> {
+    match value {
+        Value::Array(arr) => {
+            let mut parts: Vec<String> = Vec::new();
+            for item in &arr {
+                match item {
+                    Value::Object(map) => {
+                        if let Some(v) = map.get(field) {
+                            match v {
+                                Value::Null => {}
+                                Value::String(s) => parts.push(s.clone()),
+                                Value::Integer(n) => parts.push(n.to_string()),
+                                Value::Float(f) => parts.push(f.to_string()),
+                                Value::Bool(b) => parts.push(b.to_string()),
+                                _ => parts.push(format!("{}", v)),
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(DkitError::QueryError(
+                            "group_concat requires an array of objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            Ok(Value::String(parts.join(separator)))
+        }
+        _ => Err(DkitError::QueryError(
+            "group_concat requires an array input".to_string(),
         )),
     }
 }
@@ -901,6 +1114,106 @@ fn compute_group_aggregate(
                 }
             }
             Ok(max_val.unwrap_or(Value::Null))
+        }
+        AggregateFunc::Median => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("median() requires a field argument".to_string())
+            })?;
+            let mut values = collect_numeric_values_from_items(items, f);
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let mid = values.len() / 2;
+            if values.len() % 2 == 0 {
+                Ok(Value::Float((values[mid - 1] + values[mid]) / 2.0))
+            } else {
+                Ok(Value::Float(values[mid]))
+            }
+        }
+        AggregateFunc::Percentile(p) => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("percentile() requires a field argument".to_string())
+            })?;
+            let mut values = collect_numeric_values_from_items(items, f);
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            Ok(Value::Float(compute_percentile(&values, *p)))
+        }
+        AggregateFunc::Stddev => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("stddev() requires a field argument".to_string())
+            })?;
+            let values = collect_numeric_values_from_items(items, f);
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            let mean = values.iter().sum::<f64>() / values.len() as f64;
+            let variance =
+                values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
+            Ok(Value::Float(variance.sqrt()))
+        }
+        AggregateFunc::Variance => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("variance() requires a field argument".to_string())
+            })?;
+            let values = collect_numeric_values_from_items(items, f);
+            if values.is_empty() {
+                return Ok(Value::Null);
+            }
+            let mean = values.iter().sum::<f64>() / values.len() as f64;
+            let variance =
+                values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
+            Ok(Value::Float(variance))
+        }
+        AggregateFunc::Mode => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("mode() requires a field argument".to_string())
+            })?;
+            let mut freq: Vec<(Value, usize)> = Vec::new();
+            for item in items {
+                if let Value::Object(map) = item {
+                    if let Some(v) = map.get(f) {
+                        if matches!(v, Value::Null) {
+                            continue;
+                        }
+                        if let Some(entry) = freq.iter_mut().find(|(val, _)| val == v) {
+                            entry.1 += 1;
+                        } else {
+                            freq.push((v.clone(), 1));
+                        }
+                    }
+                }
+            }
+            if freq.is_empty() {
+                return Ok(Value::Null);
+            }
+            let max_count = freq.iter().map(|(_, c)| *c).max().unwrap_or(0);
+            let mode_val = freq.into_iter().find(|(_, c)| *c == max_count).unwrap().0;
+            Ok(mode_val)
+        }
+        AggregateFunc::GroupConcat(separator) => {
+            let f = field.ok_or_else(|| {
+                DkitError::QueryError("group_concat() requires a field argument".to_string())
+            })?;
+            let mut parts: Vec<String> = Vec::new();
+            for item in items {
+                if let Value::Object(map) = item {
+                    if let Some(v) = map.get(f) {
+                        match v {
+                            Value::Null => {}
+                            Value::String(s) => parts.push(s.clone()),
+                            Value::Integer(n) => parts.push(n.to_string()),
+                            Value::Float(fv) => parts.push(fv.to_string()),
+                            Value::Bool(b) => parts.push(b.to_string()),
+                            _ => parts.push(format!("{}", v)),
+                        }
+                    }
+                }
+            }
+            Ok(Value::String(parts.join(separator)))
         }
     }
 }
@@ -3193,5 +3506,453 @@ mod tests {
             arr[2].as_object().unwrap()["group"],
             Value::String("A".to_string())
         );
+    }
+
+    // --- 통계 집계 함수 테스트 ---
+
+    fn sample_scores() -> Value {
+        Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                m.insert("score".to_string(), Value::Integer(90));
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Bob".to_string()));
+                m.insert("score".to_string(), Value::Integer(80));
+                m.insert("dept".to_string(), Value::String("B".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Charlie".to_string()));
+                m.insert("score".to_string(), Value::Integer(70));
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Diana".to_string()));
+                m.insert("score".to_string(), Value::Integer(85));
+                m.insert("dept".to_string(), Value::String("B".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Eve".to_string()));
+                m.insert("score".to_string(), Value::Integer(95));
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                Value::Object(m)
+            },
+        ])
+    }
+
+    #[test]
+    fn test_median_odd_count() {
+        let data = sample_scores();
+        let query = parse_query(".[] | median score").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        // sorted: 70, 80, 85, 90, 95 → median = 85.0
+        assert_eq!(result, Value::Float(85.0));
+    }
+
+    #[test]
+    fn test_median_even_count() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("val".to_string(), Value::Integer(10));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("val".to_string(), Value::Integer(20));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("val".to_string(), Value::Integer(30));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("val".to_string(), Value::Integer(40));
+                Value::Object(m)
+            },
+        ]);
+        let query = parse_query(".[] | median val").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        // sorted: 10, 20, 30, 40 → median = (20+30)/2 = 25.0
+        assert_eq!(result, Value::Float(25.0));
+    }
+
+    #[test]
+    fn test_median_empty() {
+        let data = Value::Array(vec![]);
+        let result = apply_median(data, "val").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_percentile_basic() {
+        let data = sample_scores();
+        let query = parse_query(".[] | percentile score 0.5").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        // sorted: 70, 80, 85, 90, 95 → p50 = 85.0
+        assert_eq!(result, Value::Float(85.0));
+    }
+
+    #[test]
+    fn test_percentile_p0_and_p1() {
+        let data = sample_scores();
+        // p=0.0 → minimum
+        let result = apply_percentile(data.clone(), "score", 0.0).unwrap();
+        assert_eq!(result, Value::Float(70.0));
+
+        // p=1.0 → maximum
+        let result = apply_percentile(data, "score", 1.0).unwrap();
+        assert_eq!(result, Value::Float(95.0));
+    }
+
+    #[test]
+    fn test_percentile_interpolation() {
+        // Values: 10, 20, 30, 40 → p=0.25 → index=0.75 → lerp(10,20,0.75) = 17.5
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(10));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(20));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(30));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(40));
+                Value::Object(m)
+            },
+        ]);
+        let result = apply_percentile(data, "v", 0.25).unwrap();
+        assert_eq!(result, Value::Float(17.5));
+    }
+
+    #[test]
+    fn test_percentile_empty() {
+        let data = Value::Array(vec![]);
+        let result = apply_percentile(data, "val", 0.5).unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_stddev_basic() {
+        // values: 70, 80, 85, 90, 95 → mean=84, variance=((14^2+4^2+1+6^2+11^2)/5)=74, stddev=sqrt(74)
+        let data = sample_scores();
+        let query = parse_query(".[] | stddev score").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        match result {
+            Value::Float(f) => {
+                let expected = (74.0_f64).sqrt(); // ~8.602
+                assert!(
+                    (f - expected).abs() < 0.001,
+                    "stddev was {}, expected {}",
+                    f,
+                    expected
+                );
+            }
+            _ => panic!("expected Float"),
+        }
+    }
+
+    #[test]
+    fn test_stddev_empty() {
+        let data = Value::Array(vec![]);
+        let result = apply_stddev(data, "score").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_variance_basic() {
+        let data = sample_scores();
+        let query = parse_query(".[] | variance score").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        match result {
+            Value::Float(f) => {
+                // mean=84, var = (196+16+1+36+121)/5 = 370/5 = 74
+                assert!(
+                    (f - 74.0).abs() < 0.001,
+                    "variance was {}, expected 74.0",
+                    f
+                );
+            }
+            _ => panic!("expected Float"),
+        }
+    }
+
+    #[test]
+    fn test_variance_empty() {
+        let data = Value::Array(vec![]);
+        let result = apply_variance(data, "score").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_mode_basic() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("color".to_string(), Value::String("red".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("color".to_string(), Value::String("blue".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("color".to_string(), Value::String("red".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("color".to_string(), Value::String("green".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("color".to_string(), Value::String("red".to_string()));
+                Value::Object(m)
+            },
+        ]);
+        let query = parse_query(".[] | mode color").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(result, Value::String("red".to_string()));
+    }
+
+    #[test]
+    fn test_mode_numeric() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(1));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(2));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(2));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("v".to_string(), Value::Integer(3));
+                Value::Object(m)
+            },
+        ]);
+        let result = apply_mode(data, "v").unwrap();
+        assert_eq!(result, Value::Integer(2));
+    }
+
+    #[test]
+    fn test_mode_empty() {
+        let data = Value::Array(vec![]);
+        let result = apply_mode(data, "v").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_group_concat_basic() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_concat name \", \"").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(
+            result,
+            Value::String("Alice, Bob, Charlie, Diana, Eve".to_string())
+        );
+    }
+
+    #[test]
+    fn test_group_concat_default_separator() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_concat name").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        assert_eq!(
+            result,
+            Value::String("Alice, Bob, Charlie, Diana, Eve".to_string())
+        );
+    }
+
+    #[test]
+    fn test_group_concat_with_integers() {
+        let data = sample_scores();
+        let result = apply_group_concat(data, "score", "-").unwrap();
+        assert_eq!(result, Value::String("90-80-70-85-95".to_string()));
+    }
+
+    #[test]
+    fn test_group_concat_empty() {
+        let data = Value::Array(vec![]);
+        let result = apply_group_concat(data, "name", ", ").unwrap();
+        assert_eq!(result, Value::String("".to_string()));
+    }
+
+    // --- group_by with new aggregate functions ---
+
+    #[test]
+    fn test_group_by_median() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_by dept median(score)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        // dept A: scores 90, 70, 95 → sorted: 70, 90, 95 → median = 90.0
+        let dept_a = arr
+            .iter()
+            .find(|o| o.as_object().unwrap().get("dept") == Some(&Value::String("A".to_string())))
+            .unwrap();
+        assert_eq!(
+            dept_a.as_object().unwrap().get("median_score"),
+            Some(&Value::Float(90.0))
+        );
+        // dept B: scores 80, 85 → median = 82.5
+        let dept_b = arr
+            .iter()
+            .find(|o| o.as_object().unwrap().get("dept") == Some(&Value::String("B".to_string())))
+            .unwrap();
+        assert_eq!(
+            dept_b.as_object().unwrap().get("median_score"),
+            Some(&Value::Float(82.5))
+        );
+    }
+
+    #[test]
+    fn test_group_by_percentile() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_by dept percentile(score, 0.5)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn test_group_by_stddev() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_by dept stddev(score)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        // Just verify it returns Float values
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert!(matches!(obj.get("stddev_score"), Some(Value::Float(_))));
+        }
+    }
+
+    #[test]
+    fn test_group_by_variance() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_by dept variance(score)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert!(matches!(obj.get("variance_score"), Some(Value::Float(_))));
+        }
+    }
+
+    #[test]
+    fn test_group_by_mode() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                m.insert("grade".to_string(), Value::String("A".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                m.insert("grade".to_string(), Value::String("B".to_string()));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                m.insert("grade".to_string(), Value::String("A".to_string()));
+                Value::Object(m)
+            },
+        ]);
+        let query = parse_query(".[] | group_by dept mode(grade)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0].as_object().unwrap().get("mode_grade"),
+            Some(&Value::String("A".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_group_by_group_concat() {
+        let data = sample_scores();
+        let query = parse_query(".[] | group_by dept group_concat(name, \", \")").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        // dept A: Alice, Charlie, Eve
+        let dept_a = arr
+            .iter()
+            .find(|o| o.as_object().unwrap().get("dept") == Some(&Value::String("A".to_string())))
+            .unwrap();
+        assert_eq!(
+            dept_a.as_object().unwrap().get("group_concat_name"),
+            Some(&Value::String("Alice, Charlie, Eve".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_group_by_multiple_new_aggregates() {
+        let data = sample_scores();
+        let query =
+            parse_query(".[] | group_by dept median(score), stddev(score), mode(score)").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        for item in arr {
+            let obj = item.as_object().unwrap();
+            assert!(obj.contains_key("median_score"));
+            assert!(obj.contains_key("stddev_score"));
+            assert!(obj.contains_key("mode_score"));
+        }
     }
 }
