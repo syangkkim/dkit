@@ -17,6 +17,7 @@ fn dkit() -> Command {
 
 // ── Template Tests ──────────────────────────────────────────────────────────
 
+#[cfg(feature = "template")]
 #[test]
 fn template_inline_basic() {
     dkit()
@@ -34,6 +35,7 @@ fn template_inline_basic() {
         .stdout(predicate::str::contains("Bob <bob@example.com>"));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_with_integer_field() {
     dkit()
@@ -51,6 +53,7 @@ fn template_with_integer_field() {
         .stdout(predicate::str::contains("Bob is 25 years old"));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_upper_filter() {
     dkit()
@@ -68,6 +71,7 @@ fn template_upper_filter() {
         .stdout(predicate::str::contains("BOB"));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_lower_filter() {
     dkit()
@@ -84,6 +88,7 @@ fn template_lower_filter() {
         .stdout(predicate::str::contains("alice@example.com"));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_default_filter() {
     dkit()
@@ -100,6 +105,7 @@ fn template_default_filter() {
         .stdout(predicate::str::contains("N/A"));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_from_file() {
     let dir = TempDir::new().unwrap();
@@ -125,6 +131,7 @@ fn template_from_file() {
         ));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_without_template_flag_fails() {
     dkit()
@@ -133,6 +140,7 @@ fn template_without_template_flag_fails() {
         .failure();
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_csv_input() {
     dkit()
@@ -580,6 +588,7 @@ fn profile_field_type_inference() {
 
 // ── Combination Tests ───────────────────────────────────────────────────────
 
+#[cfg(feature = "template")]
 #[test]
 fn template_with_query_pipeline() {
     // Query first, then pipe to template
@@ -706,6 +715,7 @@ fn profile_unique_count() {
         .stdout(predicate::str::contains("unique_count"));
 }
 
+#[cfg(feature = "template")]
 #[test]
 fn template_multiline_output() {
     dkit()
