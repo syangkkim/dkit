@@ -33,7 +33,7 @@ pub struct Cli {
 pub enum Commands {
     /// Convert between data formats (JSON, CSV, YAML, TOML)
     #[command(
-        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  dkit convert '*.json' --format csv --outdir ./output\n  dkit convert data_dir/ --format yaml --outdir ./output\n  dkit convert '*.json' -f csv --outdir out --rename '{name}.converted.{ext}'\n  dkit convert dir/ -f csv --outdir out --continue-on-error\n  cat data.json | dkit convert --from json --format toml\n  dkit convert - --from json --format csv < data.json\n  dkit convert data.json -f csv | dkit query - '.items[]' --from csv"
+        after_help = "Examples:\n  dkit convert data.json --format csv\n  dkit convert data.csv --format yaml --pretty\n  dkit convert a.json b.json --format csv --outdir ./output\n  dkit convert '*.json' --format csv --outdir ./output\n  dkit convert data_dir/ --format yaml --outdir ./output\n  dkit convert '*.json' -f csv --outdir out --rename '{name}.converted.{ext}'\n  dkit convert dir/ -f csv --outdir out --continue-on-error\n  dkit convert *.json -f csv --outdir out --parallel 4\n  dkit convert *.json -f csv --outdir out --parallel auto\n  cat data.json | dkit convert --from json --format toml\n  dkit convert - --from json --format csv < data.json\n  dkit convert data.json -f csv | dkit query - '.items[]' --from csv"
     )]
     Convert {
         /// Input file path(s). Use '-' or omit for stdin (auto-detects format or use --from)
@@ -249,6 +249,12 @@ pub enum Commands {
         /// How to handle log lines that fail to parse: 'skip' (default) or 'raw'
         #[arg(long, value_name = "MODE", default_value = "skip")]
         log_error: String,
+
+        /// Number of parallel threads for batch conversion.
+        /// Use a number (e.g. 4) or 'auto' to detect CPU cores.
+        /// Only applies when converting multiple files.
+        #[arg(long, value_name = "N")]
+        parallel: Option<String>,
     },
 
     /// Query data using path expressions

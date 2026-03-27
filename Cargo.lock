@@ -881,6 +881,7 @@ dependencies = [
  "parquet",
  "predicates",
  "rand",
+ "rayon",
  "rusqlite",
  "serde",
  "serde_json",

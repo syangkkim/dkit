@@ -342,7 +342,9 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             dry_run_limit,
             log_format,
             log_error,
+            parallel,
         } => {
+            let parallel_threads = parse_parallel_option(&parallel)?;
             let run = || {
                 commands::convert::run(&commands::convert::ConvertArgs {
                     input: &input,
@@ -408,6 +410,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                     dry_run_limit,
                     log_format: log_format.as_deref(),
                     log_error: parse_log_error_mode(&log_error),
+                    parallel: parallel_threads,
                 })
             };
 
@@ -845,5 +848,25 @@ fn parse_log_error_mode(s: &str) -> LogParseErrorMode {
     match s.to_lowercase().as_str() {
         "raw" => LogParseErrorMode::Raw,
         _ => LogParseErrorMode::Skip,
+    }
+}
+
+fn parse_parallel_option(opt: &Option<String>) -> anyhow::Result<Option<usize>> {
+    match opt {
+        None => Ok(None),
+        Some(s) => {
+            let s = s.trim().to_lowercase();
+            if s == "auto" {
+                Ok(Some(std::thread::available_parallelism()?.get()))
+            } else {
+                let n: usize = s.parse().map_err(|_| {
+                    anyhow::anyhow!("--parallel must be a positive number or 'auto', got '{s}'")
+                })?;
+                if n == 0 {
+                    anyhow::bail!("--parallel must be at least 1");
+                }
+                Ok(Some(n))
+            }
+        }
     }
 }

@@ -1,8 +1,11 @@
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
+use rayon::prelude::*;
 
 use super::{
     read_file_bytes, read_file_with_encoding, read_parquet_from_bytes, read_sqlite_from_path,
@@ -65,6 +68,7 @@ pub struct ConvertArgs<'a> {
     pub dry_run_limit: usize,
     pub log_format: Option<&'a str>,
     pub log_error: LogParseErrorMode,
+    pub parallel: Option<usize>,
 }
 
 /// convert 서브커맨드 실행
@@ -262,44 +266,99 @@ pub fn run(args: &ConvertArgs) -> Result<()> {
             .with_context(|| format!("Failed to create directory {}", outdir.display()))?;
 
         let total = resolved_files.len();
-        let mut success_count = 0usize;
-        let mut error_count = 0usize;
-        let mut errors: Vec<(PathBuf, String)> = Vec::new();
 
-        for (idx, path) in resolved_files.iter().enumerate() {
-            eprint!("Converting ({}/{}) {} ... ", idx + 1, total, path.display());
+        if let Some(num_threads) = args.parallel {
+            // Parallel batch mode
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(num_threads)
+                .build()
+                .context("Failed to create thread pool")?;
 
-            match convert_single_file(path, args, target_format, &write_options, outdir) {
-                Ok(()) => {
-                    success_count += 1;
-                    eprintln!("ok");
+            let success_count = AtomicUsize::new(0);
+            let error_count = AtomicUsize::new(0);
+            let errors: Mutex<Vec<(PathBuf, String)>> = Mutex::new(Vec::new());
+
+            pool.install(|| {
+                resolved_files.par_iter().for_each(|path| {
+                    let result =
+                        convert_single_file(path, args, target_format, &write_options, outdir);
+                    match result {
+                        Ok(()) => {
+                            let done = success_count.fetch_add(1, Ordering::Relaxed) + 1;
+                            let failed = error_count.load(Ordering::Relaxed);
+                            eprintln!(
+                                "Converting ({}/{}) {} ... ok",
+                                done + failed,
+                                total,
+                                path.display()
+                            );
+                        }
+                        Err(e) => {
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                            let msg = format!("{e:#}");
+                            eprintln!("Converting {} ... FAILED: {msg}", path.display());
+                            errors.lock().unwrap().push((path.clone(), msg));
+                        }
+                    }
+                });
+            });
+
+            let success_count = success_count.load(Ordering::Relaxed);
+            let error_count = error_count.load(Ordering::Relaxed);
+            let errors = errors.into_inner().unwrap();
+
+            eprintln!();
+            eprintln!("Batch conversion complete: {success_count} succeeded, {error_count} failed out of {total} files");
+
+            if !errors.is_empty() {
+                eprintln!();
+                eprintln!("Failed files:");
+                for (path, msg) in &errors {
+                    eprintln!("  {}: {msg}", path.display());
                 }
-                Err(e) => {
-                    error_count += 1;
-                    let msg = format!("{e:#}");
-                    eprintln!("FAILED: {msg}");
-                    errors.push((path.clone(), msg));
-                    if !args.continue_on_error {
-                        bail!(
-                            "Conversion failed for {}\n  Use --continue-on-error to skip failed files",
-                            path.display()
-                        );
+                bail!("{error_count} file(s) failed to convert");
+            }
+        } else {
+            // Sequential batch mode
+            let mut success_count = 0usize;
+            let mut error_count = 0usize;
+            let mut errors: Vec<(PathBuf, String)> = Vec::new();
+
+            for (idx, path) in resolved_files.iter().enumerate() {
+                eprint!("Converting ({}/{}) {} ... ", idx + 1, total, path.display());
+
+                match convert_single_file(path, args, target_format, &write_options, outdir) {
+                    Ok(()) => {
+                        success_count += 1;
+                        eprintln!("ok");
+                    }
+                    Err(e) => {
+                        error_count += 1;
+                        let msg = format!("{e:#}");
+                        eprintln!("FAILED: {msg}");
+                        errors.push((path.clone(), msg));
+                        if !args.continue_on_error {
+                            bail!(
+                                "Conversion failed for {}\n  Use --continue-on-error to skip failed files",
+                                path.display()
+                            );
+                        }
                     }
                 }
             }
-        }
 
-        // Print summary
-        eprintln!();
-        eprintln!("Batch conversion complete: {success_count} succeeded, {error_count} failed out of {total} files");
-
-        if !errors.is_empty() {
+            // Print summary
             eprintln!();
-            eprintln!("Failed files:");
-            for (path, msg) in &errors {
-                eprintln!("  {}: {msg}", path.display());
+            eprintln!("Batch conversion complete: {success_count} succeeded, {error_count} failed out of {total} files");
+
+            if !errors.is_empty() {
+                eprintln!();
+                eprintln!("Failed files:");
+                for (path, msg) in &errors {
+                    eprintln!("  {}: {msg}", path.display());
+                }
+                bail!("{error_count} file(s) failed to convert");
             }
-            bail!("{error_count} file(s) failed to convert");
         }
 
         return Ok(());
