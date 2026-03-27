@@ -19,7 +19,8 @@ sqlite = ["dep:rusqlite"]
 parquet = ["dep:arrow", "dep:parquet-impl", "dep:bytes"]
 hcl = ["dep:hcl-rs"]
 plist = ["dep:plist", "dep:base64"]
-all = ["xml", "msgpack", "excel", "sqlite", "parquet", "hcl", "plist"]
+template = ["dep:tera"]
+all = ["xml", "msgpack", "excel", "sqlite", "parquet", "hcl", "plist", "template"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -40,6 +41,7 @@ bytes = { version = "1", optional = true }
 hcl-rs = { version = "0.19", optional = true }
 plist = { version = "1", optional = true }
 base64 = { version = "0.22", optional = true }
+tera = { version = "1", optional = true }
 jsonschema = { version = "0.17", default-features = false }
 rand = "0.8"
 regex = "1"

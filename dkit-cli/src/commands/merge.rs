@@ -105,6 +105,8 @@ pub fn run(args: &MergeArgs) -> Result<()> {
         full_html: false,
         indent: None,
         sort_keys: false,
+        template: None,
+        template_file: None,
     };
 
     if target_format == Format::Msgpack {
