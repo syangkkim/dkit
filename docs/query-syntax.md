@@ -19,6 +19,17 @@ dkit query data.json '.users[0].name'    # 배열 요소의 필드
 # 배열 이터레이션 (모든 요소)
 dkit query data.json '.users[]'
 dkit query data.json '.users[].name'     # 모든 요소의 name 필드
+
+# 배열 와일드카드
+dkit query data.json '.[*].name'         # [*]는 []와 동일
+
+# 배열 슬라이싱
+dkit query data.json '.[0:3]'            # 처음 3개 요소 (인덱스 0, 1, 2)
+dkit query data.json '.[2:]'             # 인덱스 2부터 끝까지
+dkit query data.json '.[:5]'             # 처음 5개 요소
+dkit query data.json '.[-2:]'            # 마지막 2개 요소
+dkit query data.json '.[::2]'            # 짝수 인덱스 요소 (step=2)
+dkit query data.json '.[1:5:2]'          # 인덱스 1~4 중 step=2
 ```
 
 ## Pipeline
@@ -52,6 +63,32 @@ dkit query data.json '.users[] | where age > 30 | select name, email | sort name
 | `starts_with` | ~로 시작 | `where name starts_with "A"` |
 | `ends_with` | ~로 끝남 | `where file ends_with ".json"` |
 
+### Membership Operators (IN / NOT IN)
+
+값이 목록에 포함되는지 확인한다.
+
+```bash
+# IN — 값이 목록에 포함
+dkit query data.json '.users[] | where city in ("Seoul", "Busan")'
+dkit query data.json '.[] | where status in ("active", "pending", "done")'
+
+# NOT IN — 값이 목록에 미포함
+dkit query data.json '.users[] | where status not in ("deleted", "archived")'
+```
+
+### Regex Operator (matches)
+
+정규식 패턴으로 문자열을 매칭한다.
+
+```bash
+# matches — 정규식 매칭
+dkit query data.json '.users[] | where name matches "^[A-C]"'
+dkit query data.json '.[] | where email matches "@gmail\\.com$"'
+
+# not matches — 정규식 비매칭
+dkit query data.json '.users[] | where name not matches "^test"'
+```
+
 ### Logical Operators
 
 ```bash
@@ -60,6 +97,10 @@ dkit query data.json '.users[] | where age > 25 and city == "Seoul"'
 
 # OR
 dkit query data.json '.users[] | where role == "admin" or role == "manager"'
+
+# 복합 조합
+dkit query data.json '.users[] | where city in ("Seoul", "Busan") and age > 25'
+dkit query data.json '.users[] | where name matches "^A" and role in ("engineer", "manager")'
 ```
 
 ## select — Column Selection
@@ -240,6 +281,14 @@ dkit query data.csv '.[] | select upper(name) as NAME, round(price, 2) as price_
 | `concat(a, b, ...)` | 문자열 합치기 | `concat(first, " ", last)` |
 | `replace(s, from, to)` | 문자열 치환 | `replace(name, "old", "new")` |
 | `split(s, sep)` | 문자열 분리 (배열 반환) | `split(tags, ",")` |
+| `index_of(s, substr)` | 부분 문자열 위치 반환 (-1 if not found) | `index_of(email, "@")` |
+| `rindex_of(s, substr)` | 마지막 위치 반환 | `rindex_of(path, "/")` |
+| `starts_with(s, prefix)` | 접두사 확인 (Boolean) | `starts_with(name, "Dr.")` |
+| `ends_with(s, suffix)` | 접미사 확인 (Boolean) | `ends_with(file, ".json")` |
+| `reverse(s)` | 문자열 뒤집기 | `reverse(name)` |
+| `repeat(s, n)` | 문자열 반복 | `repeat("*", 5)` |
+| `pad_left(s, width, char)` | 왼쪽 패딩 | `pad_left(to_string(id), 5, "0")` |
+| `pad_right(s, width, char)` | 오른쪽 패딩 | `pad_right(name, 10, ".")` |
 
 ### 수학 함수
 
@@ -318,10 +367,12 @@ dkit query sales.csv '.rows[] | where region == "KR"' --to json -o korea.json
 ```
 query       = path ( "|" operation )*
 path        = "." segment*
-segment     = field_access | index_access | iterate
+segment     = field_access | index_access | iterate | wildcard | slice
 field_access = IDENTIFIER ( "." IDENTIFIER )*
 index_access = "[" INTEGER "]"
 iterate     = "[" "]"
+wildcard    = "[" "*" "]"
+slice       = "[" [ INTEGER ] ":" [ INTEGER ] [ ":" INTEGER ] "]"
 
 operation   = where_op | select_op | sort_op | limit_op
             | count_op | sum_op | avg_op | min_op | max_op | distinct_op
@@ -346,9 +397,14 @@ agg_func    = "count" | "sum" | "avg" | "min" | "max"
 condition   = comparison ( logic_op comparison )*
 comparison  = IDENTIFIER compare_op value
             | IDENTIFIER string_op STRING
+            | IDENTIFIER "in" "(" value_list ")"
+            | IDENTIFIER "not" "in" "(" value_list ")"
+            | IDENTIFIER "matches" STRING
+            | IDENTIFIER "not" "matches" STRING
 compare_op  = "==" | "!=" | ">" | "<" | ">=" | "<="
 string_op   = "contains" | "starts_with" | "ends_with"
 logic_op    = "and" | "or"
+value_list  = value ( "," value )*
 
 value       = STRING | NUMBER | "true" | "false" | "null"
 ```

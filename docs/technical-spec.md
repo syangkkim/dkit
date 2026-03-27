@@ -104,6 +104,8 @@ pub struct FormatOptions {
     pub no_header: bool,              // CSV without header
     pub pretty: bool,                 // Pretty-print output
     pub compact: bool,                // Compact output (JSON)
+    pub indent: Option<String>,       // JSON indentation ("2", "4", "tab")
+    pub sort_keys: bool,              // Sort JSON object keys alphabetically
     pub flow_style: bool,             // YAML inline style
     pub root_element: Option<String>, // XML root element name
 }
@@ -207,6 +209,30 @@ pub struct FormatOptions {
 - `list_tables()`: 테이블 이름 목록 반환
 - **제한**: 입력 전용 (쓰기 불가)
 
+### INI/CFG ↔ Value
+
+- `ini` 크레이트 기반 파서 사용
+- 섹션 기반 구조: `[section]` → 중첩 `Object`
+- 데이터 모델: `Value::Object(IndexMap<String, Value::Object>)` (섹션 → 키-값)
+- 섹션 없는 키는 최상위 Object에 포함
+- 주석: `;` 또는 `#`으로 시작하는 줄 (무시)
+- 읽기: 섹션명이 최상위 키, 각 섹션 내 키-값이 중첩 Object
+- 쓰기: 중첩 Object → `[section]` + `key=value` 형식
+- 포맷 자동 감지: `.ini`, `.cfg` 확장자
+
+### .properties ↔ Value
+
+- Java `.properties` 파일 포맷 지원
+- `key=value` 또는 `key: value` 또는 `key value` 형식
+- 주석: `#` 또는 `!`로 시작하는 줄 (무시)
+- `\` 줄 연속 (multiline value) 지원
+- 데이터 모델: flat `Value::Object` (모든 값은 `Value::String`)
+- 키의 `.` 구분자는 그대로 유지 (flat key)
+- 읽기: `Value::Object(IndexMap<String, Value>)` 반환
+- 쓰기: `key=value` 형식 출력, 특수문자 포함 시 이스케이프
+- 포맷 자동 감지: `.properties` 확장자
+- **참고**: 키에 `.`이 포함된 경우 쿼리 시 중첩 구조로 해석되므로, `.` 없는 단순 키 사용 권장
+
 ### .env ↔ Value
 
 - `KEY=VALUE` 라인 기반 포맷 (환경 변수 설정 파일)
@@ -266,18 +292,25 @@ pub struct EncodingOptions {
 ```
 query       = path ("|" operation)*
 path        = "." segment*
-segment     = field | index | iterate
+segment     = field | index | iterate | wildcard | slice
 field       = identifier
 index       = "[" integer "]"
 iterate     = "[]"
+wildcard    = "[" "*" "]"
+slice       = "[" [integer] ":" [integer] [":" integer] "]"
 operation   = where | select | sort | limit
 where       = "where" condition
 condition   = expr compare_op expr (logic_op expr compare_op expr)*
+            | expr "in" "(" value_list ")"
+            | expr "not" "in" "(" value_list ")"
+            | expr "matches" string_literal
+            | expr "not" "matches" string_literal
 select      = "select" field ("," field)*
 sort        = "sort" field ["desc"]
 limit       = "limit" integer
 compare_op  = "==" | "!=" | ">" | "<" | ">=" | "<="
 logic_op    = "and" | "or"
+value_list  = value ("," value)*
 expr        = path | string_literal | number_literal
 ```
 
