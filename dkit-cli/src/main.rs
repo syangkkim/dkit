@@ -4,6 +4,7 @@ mod config;
 mod output;
 
 use std::process;
+use std::time::Instant;
 
 use clap::Parser;
 use colored::Colorize;
@@ -57,9 +58,19 @@ fn run_main() -> i32 {
         }
     }
 
+    let show_time = cli.time;
+    let start = Instant::now();
+
     if let Err(err) = run_command(cli) {
+        if show_time {
+            print_timing(start.elapsed());
+        }
         print_error(&err, verbose);
         return 1;
+    }
+
+    if show_time {
+        print_timing(start.elapsed());
     }
     0
 }
@@ -433,6 +444,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
             header_row,
             table,
             sql,
+            explain,
         } => {
             commands::query::run(&commands::query::QueryArgs {
                 input: &input,
@@ -446,6 +458,7 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
                 },
                 excel_opts: ExcelOptions { sheet, header_row },
                 sqlite_opts: SqliteOptions { table, sql },
+                explain,
             })?;
         }
         Commands::View {
@@ -842,6 +855,25 @@ fn run_command(cli: Cli) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn format_duration(d: std::time::Duration) -> String {
+    let total_secs = d.as_secs_f64();
+    if total_secs < 0.001 {
+        format!("{:.1}µs", d.as_micros() as f64)
+    } else if total_secs < 1.0 {
+        format!("{:.1}ms", total_secs * 1000.0)
+    } else {
+        format!("{:.3}s", total_secs)
+    }
+}
+
+fn print_timing(elapsed: std::time::Duration) {
+    eprintln!(
+        "{} total: {}",
+        "timing:".cyan().bold(),
+        format_duration(elapsed)
+    );
 }
 
 fn parse_log_error_mode(s: &str) -> LogParseErrorMode {
