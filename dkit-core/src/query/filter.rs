@@ -2,7 +2,7 @@ use crate::error::DkitError;
 use crate::query::functions::{evaluate_expr, expr_default_key};
 use crate::query::parser::{
     AggregateFunc, CompareOp, Comparison, Condition, Expr, GroupAggregate, LiteralValue, Operation,
-    SelectExpr,
+    SelectExpr, WindowFunc, WindowSpec,
 };
 use crate::value::Value;
 use indexmap::IndexMap;
@@ -76,13 +76,22 @@ fn apply_where(value: Value, condition: &Condition) -> Result<Value, DkitError> 
 
 /// select 절: 배열의 각 요소에 표현식을 적용하여 새 객체를 생성
 fn apply_select(value: Value, exprs: &[SelectExpr]) -> Result<Value, DkitError> {
+    // 윈도우 함수가 포함되어 있는지 확인
+    let has_window = exprs
+        .iter()
+        .any(|se| matches!(&se.expr, Expr::Window { .. }));
+
     match value {
         Value::Array(arr) => {
-            let projected: Result<Vec<Value>, DkitError> = arr
-                .into_iter()
-                .map(|item| select_exprs(&item, exprs))
-                .collect();
-            Ok(Value::Array(projected?))
+            if has_window {
+                apply_select_with_window(arr, exprs)
+            } else {
+                let projected: Result<Vec<Value>, DkitError> = arr
+                    .into_iter()
+                    .map(|item| select_exprs(&item, exprs))
+                    .collect();
+                Ok(Value::Array(projected?))
+            }
         }
         Value::Object(_) => select_exprs(&value, exprs),
         _ => Err(DkitError::QueryError(
@@ -1216,6 +1225,336 @@ fn compute_group_aggregate(
             Ok(Value::String(parts.join(separator)))
         }
     }
+}
+
+/// 윈도우 함수가 포함된 SELECT를 처리: 전체 배열을 한꺼번에 처리
+fn apply_select_with_window(arr: Vec<Value>, exprs: &[SelectExpr]) -> Result<Value, DkitError> {
+    let len = arr.len();
+
+    // 각 SelectExpr에 대해 윈도우 함수면 미리 전체 배열에 대한 결과를 계산
+    let mut window_results: Vec<Option<Vec<Value>>> = Vec::with_capacity(exprs.len());
+
+    for se in exprs {
+        if let Expr::Window { func, over } = &se.expr {
+            let results = evaluate_window_func(&arr, func, over)?;
+            window_results.push(Some(results));
+        } else {
+            window_results.push(None);
+        }
+    }
+
+    // 행별로 결과 객체 조합
+    let mut output = Vec::with_capacity(len);
+    for (i, item) in arr.iter().enumerate() {
+        match item {
+            Value::Object(map) => {
+                let mut new_map = IndexMap::new();
+                for (j, se) in exprs.iter().enumerate() {
+                    let key = se
+                        .alias
+                        .clone()
+                        .unwrap_or_else(|| expr_default_key(&se.expr));
+                    if let Some(ref win_vals) = window_results[j] {
+                        new_map.insert(key, win_vals[i].clone());
+                    } else {
+                        // 일반 표현식: 필드가 없으면 스킵
+                        if let Expr::Field(fname) = &se.expr {
+                            if se.alias.is_none() && !map.contains_key(fname) {
+                                continue;
+                            }
+                        }
+                        let val = evaluate_expr(item, &se.expr)?;
+                        new_map.insert(key, val);
+                    }
+                }
+                output.push(Value::Object(new_map));
+            }
+            _ => output.push(item.clone()),
+        }
+    }
+
+    Ok(Value::Array(output))
+}
+
+/// 윈도우 함수를 전체 배열에 대해 평가하여 각 행의 결과값 벡터를 반환
+fn evaluate_window_func(
+    arr: &[Value],
+    func: &WindowFunc,
+    spec: &WindowSpec,
+) -> Result<Vec<Value>, DkitError> {
+    let len = arr.len();
+
+    // 파티션별 인덱스 그룹 생성
+    let partitions = build_partitions(arr, &spec.partition_by);
+
+    // 각 파티션 내에서 ORDER BY로 정렬된 인덱스 계산
+    let sorted_partitions: Vec<Vec<usize>> = partitions
+        .iter()
+        .map(|indices| sort_partition(arr, indices, &spec.order_by))
+        .collect();
+
+    let mut results = vec![Value::Null; len];
+
+    for sorted_indices in &sorted_partitions {
+        match func {
+            WindowFunc::RowNumber => {
+                for (rank, &idx) in sorted_indices.iter().enumerate() {
+                    results[idx] = Value::Integer((rank + 1) as i64);
+                }
+            }
+            WindowFunc::Rank => {
+                compute_rank(arr, sorted_indices, &spec.order_by, false, &mut results);
+            }
+            WindowFunc::DenseRank => {
+                compute_rank(arr, sorted_indices, &spec.order_by, true, &mut results);
+            }
+            WindowFunc::Lag { expr, offset } => {
+                for (pos, &idx) in sorted_indices.iter().enumerate() {
+                    if pos >= *offset {
+                        let prev_idx = sorted_indices[pos - offset];
+                        results[idx] = evaluate_expr(&arr[prev_idx], expr)?;
+                    }
+                    // else remains Null
+                }
+            }
+            WindowFunc::Lead { expr, offset } => {
+                for (pos, &idx) in sorted_indices.iter().enumerate() {
+                    if pos + offset < sorted_indices.len() {
+                        let next_idx = sorted_indices[pos + offset];
+                        results[idx] = evaluate_expr(&arr[next_idx], expr)?;
+                    }
+                    // else remains Null
+                }
+            }
+            WindowFunc::FirstValue { expr } => {
+                if !sorted_indices.is_empty() {
+                    let first_idx = sorted_indices[0];
+                    let first_val = evaluate_expr(&arr[first_idx], expr)?;
+                    for &idx in sorted_indices {
+                        results[idx] = first_val.clone();
+                    }
+                }
+            }
+            WindowFunc::LastValue { expr } => {
+                if !sorted_indices.is_empty() {
+                    let last_idx = sorted_indices[sorted_indices.len() - 1];
+                    let last_val = evaluate_expr(&arr[last_idx], expr)?;
+                    for &idx in sorted_indices {
+                        results[idx] = last_val.clone();
+                    }
+                }
+            }
+            WindowFunc::Aggregate { func: agg, expr } => {
+                compute_window_aggregate(arr, sorted_indices, agg, expr, &mut results)?;
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// 파티션 구축: PARTITION BY 필드 값 기준으로 행 인덱스를 그룹화
+fn build_partitions(arr: &[Value], partition_by: &[String]) -> Vec<Vec<usize>> {
+    if partition_by.is_empty() {
+        // 파티션 없음: 전체 배열이 하나의 파티션
+        return vec![(0..arr.len()).collect()];
+    }
+
+    let mut groups: Vec<(Vec<Value>, Vec<usize>)> = Vec::new();
+
+    for (i, item) in arr.iter().enumerate() {
+        let key: Vec<Value> = partition_by
+            .iter()
+            .map(|f| {
+                if let Value::Object(map) = item {
+                    map.get(f).cloned().unwrap_or(Value::Null)
+                } else {
+                    Value::Null
+                }
+            })
+            .collect();
+
+        if let Some(group) = groups.iter_mut().find(|(k, _)| *k == key) {
+            group.1.push(i);
+        } else {
+            groups.push((key, vec![i]));
+        }
+    }
+
+    groups.into_iter().map(|(_, indices)| indices).collect()
+}
+
+/// 파티션 내 행들을 ORDER BY 기준으로 정렬
+fn sort_partition(
+    arr: &[Value],
+    indices: &[usize],
+    order_by: &[crate::query::parser::WindowOrderBy],
+) -> Vec<usize> {
+    let mut sorted = indices.to_vec();
+    if order_by.is_empty() {
+        return sorted;
+    }
+    sorted.sort_by(|&a, &b| {
+        for ob in order_by {
+            let va = extract_sort_key(&arr[a], &ob.field);
+            let vb = extract_sort_key(&arr[b], &ob.field);
+            let cmp = compare_sort_keys(&va, &vb);
+            let cmp = if ob.descending { cmp.reverse() } else { cmp };
+            if cmp != std::cmp::Ordering::Equal {
+                return cmp;
+            }
+        }
+        std::cmp::Ordering::Equal
+    });
+    sorted
+}
+
+/// RANK / DENSE_RANK 계산
+fn compute_rank(
+    arr: &[Value],
+    sorted_indices: &[usize],
+    order_by: &[crate::query::parser::WindowOrderBy],
+    dense: bool,
+    results: &mut [Value],
+) {
+    if sorted_indices.is_empty() {
+        return;
+    }
+
+    let get_order_values = |idx: usize| -> Vec<Option<Value>> {
+        order_by
+            .iter()
+            .map(|ob| extract_sort_key(&arr[idx], &ob.field))
+            .collect()
+    };
+
+    let mut current_rank: i64 = 1;
+    let mut prev_values = get_order_values(sorted_indices[0]);
+    results[sorted_indices[0]] = Value::Integer(1);
+
+    for (pos, &idx) in sorted_indices.iter().enumerate().skip(1) {
+        let current_values = get_order_values(idx);
+        if current_values == prev_values {
+            // 동점: 같은 순위
+            results[idx] = Value::Integer(current_rank);
+        } else {
+            // 새 순위
+            if dense {
+                current_rank += 1;
+            } else {
+                current_rank = (pos + 1) as i64;
+            }
+            results[idx] = Value::Integer(current_rank);
+            prev_values = current_values;
+        }
+    }
+}
+
+/// 윈도우 집계 함수 (running aggregate over the entire partition)
+fn compute_window_aggregate(
+    arr: &[Value],
+    sorted_indices: &[usize],
+    agg: &AggregateFunc,
+    expr: &Expr,
+    results: &mut [Value],
+) -> Result<(), DkitError> {
+    // 전체 파티션 집계를 계산하여 모든 행에 할당
+    let mut values = Vec::with_capacity(sorted_indices.len());
+    for &idx in sorted_indices {
+        values.push(evaluate_expr(&arr[idx], expr)?);
+    }
+
+    let agg_result = match agg {
+        AggregateFunc::Count => {
+            let count = values.iter().filter(|v| !matches!(v, Value::Null)).count();
+            Value::Integer(count as i64)
+        }
+        AggregateFunc::Sum => {
+            let mut sum_int: i64 = 0;
+            let mut sum_float: f64 = 0.0;
+            let mut has_float = false;
+            for v in &values {
+                match v {
+                    Value::Integer(n) => {
+                        sum_int += n;
+                        sum_float += *n as f64;
+                    }
+                    Value::Float(f) => {
+                        sum_float += f;
+                        has_float = true;
+                    }
+                    _ => {}
+                }
+            }
+            if has_float {
+                Value::Float(sum_float)
+            } else {
+                Value::Integer(sum_int)
+            }
+        }
+        AggregateFunc::Avg => {
+            let mut sum: f64 = 0.0;
+            let mut count = 0;
+            for v in &values {
+                match v {
+                    Value::Integer(n) => {
+                        sum += *n as f64;
+                        count += 1;
+                    }
+                    Value::Float(f) => {
+                        sum += f;
+                        count += 1;
+                    }
+                    _ => {}
+                }
+            }
+            if count > 0 {
+                Value::Float(sum / count as f64)
+            } else {
+                Value::Null
+            }
+        }
+        AggregateFunc::Min => {
+            let mut min_val = Value::Null;
+            for v in &values {
+                if matches!(v, Value::Null) {
+                    continue;
+                }
+                if matches!(min_val, Value::Null)
+                    || compare_value_ordering(v, &min_val) == std::cmp::Ordering::Less
+                {
+                    min_val = v.clone();
+                }
+            }
+            min_val
+        }
+        AggregateFunc::Max => {
+            let mut max_val = Value::Null;
+            for v in &values {
+                if matches!(v, Value::Null) {
+                    continue;
+                }
+                if matches!(max_val, Value::Null)
+                    || compare_value_ordering(v, &max_val) == std::cmp::Ordering::Greater
+                {
+                    max_val = v.clone();
+                }
+            }
+            max_val
+        }
+        _ => {
+            return Err(DkitError::QueryError(format!(
+                "unsupported window aggregate function: {:?}",
+                agg
+            )));
+        }
+    };
+
+    for &idx in sorted_indices {
+        results[idx] = agg_result.clone();
+    }
+
+    Ok(())
 }
 
 /// 오브젝트에서 지정된 필드만 추출
@@ -3954,5 +4293,404 @@ mod tests {
             assert!(obj.contains_key("stddev_score"));
             assert!(obj.contains_key("mode_score"));
         }
+    }
+
+    // --- 윈도우 함수 평가 테스트 ---
+
+    fn sample_window_data() -> Value {
+        Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Alice".to_string()));
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                m.insert("score".to_string(), Value::Integer(90));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Bob".to_string()));
+                m.insert("dept".to_string(), Value::String("B".to_string()));
+                m.insert("score".to_string(), Value::Integer(80));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Charlie".to_string()));
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                m.insert("score".to_string(), Value::Integer(85));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Dave".to_string()));
+                m.insert("dept".to_string(), Value::String("B".to_string()));
+                m.insert("score".to_string(), Value::Integer(95));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("name".to_string(), Value::String("Eve".to_string()));
+                m.insert("dept".to_string(), Value::String("A".to_string()));
+                m.insert("score".to_string(), Value::Integer(85));
+                Value::Object(m)
+            },
+        ])
+    }
+
+    #[test]
+    fn test_window_row_number() {
+        let data = sample_window_data();
+        let query = parse_query(".[] | select name, row_number() over (order by score desc) as rn")
+            .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 5);
+        // Score order desc: Dave(95), Alice(90), Charlie(85), Eve(85), Bob(80)
+        // row_number for each original position:
+        let get_rn = |name: &str| -> i64 {
+            arr.iter()
+                .find(|o| {
+                    o.as_object().unwrap().get("name") == Some(&Value::String(name.to_string()))
+                })
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("rn")
+                .unwrap()
+                .as_i64()
+                .unwrap()
+        };
+        assert_eq!(get_rn("Dave"), 1);
+        assert_eq!(get_rn("Alice"), 2);
+        // Charlie and Eve both have 85, row_number assigns sequentially
+        let charlie_rn = get_rn("Charlie");
+        let eve_rn = get_rn("Eve");
+        assert!(charlie_rn == 3 || charlie_rn == 4);
+        assert!(eve_rn == 3 || eve_rn == 4);
+        assert_ne!(charlie_rn, eve_rn);
+        assert_eq!(get_rn("Bob"), 5);
+    }
+
+    #[test]
+    fn test_window_rank() {
+        let data = sample_window_data();
+        let query =
+            parse_query(".[] | select name, rank() over (order by score desc) as r").unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        let get_r = |name: &str| -> i64 {
+            arr.iter()
+                .find(|o| {
+                    o.as_object().unwrap().get("name") == Some(&Value::String(name.to_string()))
+                })
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("r")
+                .unwrap()
+                .as_i64()
+                .unwrap()
+        };
+        assert_eq!(get_r("Dave"), 1);
+        assert_eq!(get_r("Alice"), 2);
+        // Charlie and Eve both 85 → same rank 3
+        assert_eq!(get_r("Charlie"), 3);
+        assert_eq!(get_r("Eve"), 3);
+        // Bob gets rank 5 (not 4) because rank skips
+        assert_eq!(get_r("Bob"), 5);
+    }
+
+    #[test]
+    fn test_window_dense_rank() {
+        let data = sample_window_data();
+        let query = parse_query(".[] | select name, dense_rank() over (order by score desc) as dr")
+            .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        let get_dr = |name: &str| -> i64 {
+            arr.iter()
+                .find(|o| {
+                    o.as_object().unwrap().get("name") == Some(&Value::String(name.to_string()))
+                })
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("dr")
+                .unwrap()
+                .as_i64()
+                .unwrap()
+        };
+        assert_eq!(get_dr("Dave"), 1);
+        assert_eq!(get_dr("Alice"), 2);
+        assert_eq!(get_dr("Charlie"), 3);
+        assert_eq!(get_dr("Eve"), 3);
+        // Bob gets dense_rank 4 (not 5)
+        assert_eq!(get_dr("Bob"), 4);
+    }
+
+    #[test]
+    fn test_window_partition_by_row_number() {
+        let data = sample_window_data();
+        let query = parse_query(
+            ".[] | select name, dept, row_number() over (partition by dept order by score desc) as dept_rn",
+        )
+        .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        let get_rn = |name: &str| -> i64 {
+            arr.iter()
+                .find(|o| {
+                    o.as_object().unwrap().get("name") == Some(&Value::String(name.to_string()))
+                })
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("dept_rn")
+                .unwrap()
+                .as_i64()
+                .unwrap()
+        };
+        // Dept A: Alice(90)=1, Charlie(85)=2, Eve(85)=3
+        assert_eq!(get_rn("Alice"), 1);
+        let charlie_rn = get_rn("Charlie");
+        let eve_rn = get_rn("Eve");
+        assert!(charlie_rn == 2 || charlie_rn == 3);
+        assert!(eve_rn == 2 || eve_rn == 3);
+        // Dept B: Dave(95)=1, Bob(80)=2
+        assert_eq!(get_rn("Dave"), 1);
+        assert_eq!(get_rn("Bob"), 2);
+    }
+
+    #[test]
+    fn test_window_lag() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("date".to_string(), Value::Integer(1));
+                m.insert("value".to_string(), Value::Integer(100));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("date".to_string(), Value::Integer(2));
+                m.insert("value".to_string(), Value::Integer(200));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("date".to_string(), Value::Integer(3));
+                m.insert("value".to_string(), Value::Integer(300));
+                Value::Object(m)
+            },
+        ]);
+        let query =
+            parse_query(".[] | select date, value, lag(value) over (order by date) as prev_value")
+                .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // date=1 → prev_value=Null
+        assert_eq!(
+            arr[0].as_object().unwrap().get("prev_value"),
+            Some(&Value::Null)
+        );
+        // date=2 → prev_value=100
+        assert_eq!(
+            arr[1].as_object().unwrap().get("prev_value"),
+            Some(&Value::Integer(100))
+        );
+        // date=3 → prev_value=200
+        assert_eq!(
+            arr[2].as_object().unwrap().get("prev_value"),
+            Some(&Value::Integer(200))
+        );
+    }
+
+    #[test]
+    fn test_window_lead() {
+        let data = Value::Array(vec![
+            {
+                let mut m = IndexMap::new();
+                m.insert("date".to_string(), Value::Integer(1));
+                m.insert("value".to_string(), Value::Integer(100));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("date".to_string(), Value::Integer(2));
+                m.insert("value".to_string(), Value::Integer(200));
+                Value::Object(m)
+            },
+            {
+                let mut m = IndexMap::new();
+                m.insert("date".to_string(), Value::Integer(3));
+                m.insert("value".to_string(), Value::Integer(300));
+                Value::Object(m)
+            },
+        ]);
+        let query =
+            parse_query(".[] | select date, value, lead(value) over (order by date) as next_value")
+                .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // date=1 → next_value=200
+        assert_eq!(
+            arr[0].as_object().unwrap().get("next_value"),
+            Some(&Value::Integer(200))
+        );
+        // date=2 → next_value=300
+        assert_eq!(
+            arr[1].as_object().unwrap().get("next_value"),
+            Some(&Value::Integer(300))
+        );
+        // date=3 → next_value=Null
+        assert_eq!(
+            arr[2].as_object().unwrap().get("next_value"),
+            Some(&Value::Null)
+        );
+    }
+
+    #[test]
+    fn test_window_first_last_value() {
+        let data = sample_window_data();
+        let query = parse_query(
+            ".[] | select name, first_value(name) over (partition by dept order by score desc) as top, last_value(name) over (partition by dept order by score desc) as bottom",
+        )
+        .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // Dept A: sorted by score desc → Alice(90), then Charlie/Eve(85)
+        let alice = arr
+            .iter()
+            .find(|o| {
+                o.as_object().unwrap().get("name") == Some(&Value::String("Alice".to_string()))
+            })
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(alice.get("top"), Some(&Value::String("Alice".to_string())));
+        // Dept B: Dave(95), Bob(80) → first=Dave, last=Bob
+        let bob = arr
+            .iter()
+            .find(|o| o.as_object().unwrap().get("name") == Some(&Value::String("Bob".to_string())))
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(bob.get("top"), Some(&Value::String("Dave".to_string())));
+        assert_eq!(bob.get("bottom"), Some(&Value::String("Bob".to_string())));
+    }
+
+    #[test]
+    fn test_window_aggregate_sum() {
+        let data = sample_window_data();
+        let query = parse_query(
+            ".[] | select name, dept, sum(score) over (partition by dept) as dept_total",
+        )
+        .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // Dept A: 90+85+85=260, Dept B: 80+95=175
+        let alice = arr
+            .iter()
+            .find(|o| {
+                o.as_object().unwrap().get("name") == Some(&Value::String("Alice".to_string()))
+            })
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(alice.get("dept_total"), Some(&Value::Integer(260)));
+
+        let bob = arr
+            .iter()
+            .find(|o| o.as_object().unwrap().get("name") == Some(&Value::String("Bob".to_string())))
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(bob.get("dept_total"), Some(&Value::Integer(175)));
+    }
+
+    #[test]
+    fn test_window_aggregate_avg() {
+        let data = sample_window_data();
+        let query =
+            parse_query(".[] | select name, avg(score) over (partition by dept) as dept_avg")
+                .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // Dept A avg: (90+85+85)/3 ≈ 86.666...
+        let alice = arr
+            .iter()
+            .find(|o| {
+                o.as_object().unwrap().get("name") == Some(&Value::String("Alice".to_string()))
+            })
+            .unwrap()
+            .as_object()
+            .unwrap();
+        if let Value::Float(avg) = alice.get("dept_avg").unwrap() {
+            assert!((avg - 260.0 / 3.0).abs() < 0.001);
+        } else {
+            panic!("expected Float");
+        }
+    }
+
+    #[test]
+    fn test_window_aggregate_count() {
+        let data = sample_window_data();
+        let query =
+            parse_query(".[] | select name, count(score) over (partition by dept) as dept_count")
+                .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // Dept A: 3, Dept B: 2
+        let alice = arr
+            .iter()
+            .find(|o| {
+                o.as_object().unwrap().get("name") == Some(&Value::String("Alice".to_string()))
+            })
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(alice.get("dept_count"), Some(&Value::Integer(3)));
+    }
+
+    #[test]
+    fn test_window_aggregate_min_max() {
+        let data = sample_window_data();
+        let query = parse_query(
+            ".[] | select name, min(score) over (partition by dept) as dept_min, max(score) over (partition by dept) as dept_max",
+        )
+        .unwrap();
+        let path_result = crate::query::evaluator::evaluate_path(&data, &query.path).unwrap();
+        let result = apply_operations(path_result, &query.operations).unwrap();
+        let arr = result.as_array().unwrap();
+        // Dept A: min=85, max=90
+        let alice = arr
+            .iter()
+            .find(|o| {
+                o.as_object().unwrap().get("name") == Some(&Value::String("Alice".to_string()))
+            })
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(alice.get("dept_min"), Some(&Value::Integer(85)));
+        assert_eq!(alice.get("dept_max"), Some(&Value::Integer(90)));
+        // Dept B: min=80, max=95
+        let bob = arr
+            .iter()
+            .find(|o| o.as_object().unwrap().get("name") == Some(&Value::String("Bob".to_string())))
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert_eq!(bob.get("dept_min"), Some(&Value::Integer(80)));
+        assert_eq!(bob.get("dept_max"), Some(&Value::Integer(95)));
     }
 }

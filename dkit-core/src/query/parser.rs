@@ -224,6 +224,49 @@ pub enum Expr {
         branches: Vec<(Condition, Expr)>,
         default: Option<Box<Expr>>,
     },
+    /// 윈도우 함수: `func(...) over (partition by ... order by ...)`
+    Window { func: WindowFunc, over: WindowSpec },
+}
+
+/// 윈도우 함수 종류
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum WindowFunc {
+    /// `row_number()` — 행 번호 (1부터 시작)
+    RowNumber,
+    /// `rank()` — 순위 (동점 시 같은 순위, 다음 순위 건너뜀)
+    Rank,
+    /// `dense_rank()` — 순위 (동점 시 같은 순위, 다음 순위 연속)
+    DenseRank,
+    /// `lag(expr, offset)` — 이전 행 값 참조
+    Lag { expr: Box<Expr>, offset: usize },
+    /// `lead(expr, offset)` — 다음 행 값 참조
+    Lead { expr: Box<Expr>, offset: usize },
+    /// `first_value(expr)` — 윈도우 내 첫 번째 값
+    FirstValue { expr: Box<Expr> },
+    /// `last_value(expr)` — 윈도우 내 마지막 값
+    LastValue { expr: Box<Expr> },
+    /// 윈도우 집계: `sum(expr) over (...)`
+    Aggregate {
+        func: AggregateFunc,
+        expr: Box<Expr>,
+    },
+}
+
+/// 윈도우 스펙: `OVER (PARTITION BY ... ORDER BY ...)`
+#[derive(Debug, Clone, PartialEq)]
+pub struct WindowSpec {
+    /// `PARTITION BY field1, field2`
+    pub partition_by: Vec<String>,
+    /// `ORDER BY field [ASC|DESC]`
+    pub order_by: Vec<WindowOrderBy>,
+}
+
+/// 윈도우 ORDER BY 절의 개별 항목
+#[derive(Debug, Clone, PartialEq)]
+pub struct WindowOrderBy {
+    pub field: String,
+    pub descending: bool,
 }
 
 /// SELECT 절의 컬럼 표현식
@@ -944,7 +987,20 @@ impl Parser {
                             self.pos
                         )));
                     }
-                    Ok(Expr::FuncCall { name, args })
+                    // Check for window function: `func(...) over (...)`
+                    let saved_over = self.pos;
+                    self.skip_whitespace();
+                    if self.try_consume_keyword("over") {
+                        let window_func = self.parse_window_func(&name, args)?;
+                        let over = self.parse_window_spec()?;
+                        Ok(Expr::Window {
+                            func: window_func,
+                            over,
+                        })
+                    } else {
+                        self.pos = saved_over;
+                        Ok(Expr::FuncCall { name, args })
+                    }
                 } else {
                     Ok(Expr::Field(name))
                 }
@@ -958,6 +1014,212 @@ impl Parser {
                 self.pos
             ))),
         }
+    }
+
+    /// 함수 이름과 인자로부터 WindowFunc를 결정
+    fn parse_window_func(&self, name: &str, args: Vec<Expr>) -> Result<WindowFunc, DkitError> {
+        match name {
+            "row_number" => {
+                if !args.is_empty() {
+                    return Err(DkitError::QueryError(
+                        "row_number() takes no arguments".to_string(),
+                    ));
+                }
+                Ok(WindowFunc::RowNumber)
+            }
+            "rank" => {
+                if !args.is_empty() {
+                    return Err(DkitError::QueryError(
+                        "rank() takes no arguments".to_string(),
+                    ));
+                }
+                Ok(WindowFunc::Rank)
+            }
+            "dense_rank" => {
+                if !args.is_empty() {
+                    return Err(DkitError::QueryError(
+                        "dense_rank() takes no arguments".to_string(),
+                    ));
+                }
+                Ok(WindowFunc::DenseRank)
+            }
+            "lag" => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err(DkitError::QueryError(
+                        "lag() requires 1 or 2 arguments: lag(expr[, offset])".to_string(),
+                    ));
+                }
+                let expr = Box::new(args[0].clone());
+                let offset = if args.len() == 2 {
+                    match &args[1] {
+                        Expr::Literal(LiteralValue::Integer(n)) if *n >= 0 => *n as usize,
+                        _ => {
+                            return Err(DkitError::QueryError(
+                                "lag() offset must be a non-negative integer literal".to_string(),
+                            ))
+                        }
+                    }
+                } else {
+                    1
+                };
+                Ok(WindowFunc::Lag { expr, offset })
+            }
+            "lead" => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err(DkitError::QueryError(
+                        "lead() requires 1 or 2 arguments: lead(expr[, offset])".to_string(),
+                    ));
+                }
+                let expr = Box::new(args[0].clone());
+                let offset = if args.len() == 2 {
+                    match &args[1] {
+                        Expr::Literal(LiteralValue::Integer(n)) if *n >= 0 => *n as usize,
+                        _ => {
+                            return Err(DkitError::QueryError(
+                                "lead() offset must be a non-negative integer literal".to_string(),
+                            ))
+                        }
+                    }
+                } else {
+                    1
+                };
+                Ok(WindowFunc::Lead { expr, offset })
+            }
+            "first_value" => {
+                if args.len() != 1 {
+                    return Err(DkitError::QueryError(
+                        "first_value() requires exactly 1 argument".to_string(),
+                    ));
+                }
+                Ok(WindowFunc::FirstValue {
+                    expr: Box::new(args[0].clone()),
+                })
+            }
+            "last_value" => {
+                if args.len() != 1 {
+                    return Err(DkitError::QueryError(
+                        "last_value() requires exactly 1 argument".to_string(),
+                    ));
+                }
+                Ok(WindowFunc::LastValue {
+                    expr: Box::new(args[0].clone()),
+                })
+            }
+            // Window aggregate functions: sum, avg, count, min, max
+            "sum" | "avg" | "count" | "min" | "max" => {
+                let agg_func = match name {
+                    "sum" => AggregateFunc::Sum,
+                    "avg" => AggregateFunc::Avg,
+                    "count" => AggregateFunc::Count,
+                    "min" => AggregateFunc::Min,
+                    "max" => AggregateFunc::Max,
+                    _ => unreachable!(),
+                };
+                let expr = if args.len() == 1 {
+                    Box::new(args[0].clone())
+                } else if args.is_empty() && name == "count" {
+                    Box::new(Expr::Literal(LiteralValue::Null))
+                } else {
+                    return Err(DkitError::QueryError(format!(
+                        "{}() over requires exactly 1 argument",
+                        name
+                    )));
+                };
+                Ok(WindowFunc::Aggregate {
+                    func: agg_func,
+                    expr,
+                })
+            }
+            _ => Err(DkitError::QueryError(format!(
+                "unknown window function: {}",
+                name
+            ))),
+        }
+    }
+
+    /// `OVER (PARTITION BY ... ORDER BY ...)` 절 파싱
+    fn parse_window_spec(&mut self) -> Result<WindowSpec, DkitError> {
+        self.skip_whitespace();
+        if !self.consume_char('(') {
+            return Err(DkitError::QueryError(format!(
+                "expected '(' after 'over' at position {}",
+                self.pos
+            )));
+        }
+        self.skip_whitespace();
+
+        let mut partition_by = Vec::new();
+        let mut order_by = Vec::new();
+
+        // Parse optional PARTITION BY
+        if self.try_consume_keyword("partition") {
+            self.skip_whitespace();
+            if !self.try_consume_keyword("by") {
+                return Err(DkitError::QueryError(format!(
+                    "expected 'by' after 'partition' at position {}",
+                    self.pos
+                )));
+            }
+            self.skip_whitespace();
+            partition_by = self.parse_identifier_list()?;
+            self.skip_whitespace();
+        }
+
+        // Parse optional ORDER BY
+        if self.try_consume_keyword("order") {
+            self.skip_whitespace();
+            if !self.try_consume_keyword("by") {
+                return Err(DkitError::QueryError(format!(
+                    "expected 'by' after 'order' at position {}",
+                    self.pos
+                )));
+            }
+            self.skip_whitespace();
+            order_by = self.parse_window_order_by_list()?;
+            self.skip_whitespace();
+        }
+
+        if !self.consume_char(')') {
+            return Err(DkitError::QueryError(format!(
+                "expected ')' to close window spec at position {}",
+                self.pos
+            )));
+        }
+
+        Ok(WindowSpec {
+            partition_by,
+            order_by,
+        })
+    }
+
+    /// ORDER BY 절의 컬럼 목록 파싱: `field [ASC|DESC] (, field [ASC|DESC])*`
+    fn parse_window_order_by_list(&mut self) -> Result<Vec<WindowOrderBy>, DkitError> {
+        let mut items = Vec::new();
+        let field = self.parse_identifier()?;
+        self.skip_whitespace();
+        let descending = self.try_consume_keyword("desc");
+        if !descending {
+            self.try_consume_keyword("asc");
+        }
+        items.push(WindowOrderBy { field, descending });
+
+        loop {
+            self.skip_whitespace();
+            if self.consume_char(',') {
+                self.skip_whitespace();
+                let field = self.parse_identifier()?;
+                self.skip_whitespace();
+                let descending = self.try_consume_keyword("desc");
+                if !descending {
+                    self.try_consume_keyword("asc");
+                }
+                items.push(WindowOrderBy { field, descending });
+            } else {
+                break;
+            }
+        }
+
+        Ok(items)
     }
 
     /// `if(condition, then_expr, else_expr)` 파싱
@@ -3003,6 +3265,206 @@ mod tests {
             assert!(matches!(aggregates[2].func, AggregateFunc::Stddev));
         } else {
             panic!("expected GroupBy operation");
+        }
+    }
+
+    // --- 윈도우 함수 파싱 테스트 ---
+
+    #[test]
+    fn test_parse_row_number_over() {
+        let q =
+            parse_query(".[] | select row_number() over (order by score desc) as rank").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            assert_eq!(exprs.len(), 1);
+            assert_eq!(exprs[0].alias, Some("rank".to_string()));
+            if let Expr::Window { func, over } = &exprs[0].expr {
+                assert!(matches!(func, WindowFunc::RowNumber));
+                assert!(over.partition_by.is_empty());
+                assert_eq!(over.order_by.len(), 1);
+                assert_eq!(over.order_by[0].field, "score");
+                assert!(over.order_by[0].descending);
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_rank_with_partition() {
+        let q = parse_query(
+            ".[] | select name, rank() over (partition by dept order by score desc) as dept_rank",
+        )
+        .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            assert_eq!(exprs.len(), 2);
+            if let Expr::Window { func, over } = &exprs[1].expr {
+                assert!(matches!(func, WindowFunc::Rank));
+                assert_eq!(over.partition_by, vec!["dept"]);
+                assert_eq!(over.order_by[0].field, "score");
+                assert!(over.order_by[0].descending);
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_dense_rank() {
+        let q = parse_query(".[] | select dense_rank() over (order by score) as drank").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, over } = &exprs[0].expr {
+                assert!(matches!(func, WindowFunc::DenseRank));
+                assert!(!over.order_by[0].descending);
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_lag_default_offset() {
+        let q = parse_query(".[] | select lag(value) over (order by date) as prev_value").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, .. } = &exprs[0].expr {
+                if let WindowFunc::Lag { expr, offset } = func {
+                    assert!(matches!(expr.as_ref(), Expr::Field(f) if f == "value"));
+                    assert_eq!(*offset, 1);
+                } else {
+                    panic!("expected Lag");
+                }
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_lead_with_offset() {
+        let q =
+            parse_query(".[] | select lead(value, 2) over (order by date) as next2_value").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, .. } = &exprs[0].expr {
+                if let WindowFunc::Lead { offset, .. } = func {
+                    assert_eq!(*offset, 2);
+                } else {
+                    panic!("expected Lead");
+                }
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_first_value() {
+        let q =
+            parse_query(".[] | select first_value(name) over (order by score desc) as top_name")
+                .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, .. } = &exprs[0].expr {
+                assert!(matches!(func, WindowFunc::FirstValue { .. }));
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_last_value() {
+        let q = parse_query(".[] | select last_value(name) over (order by score) as last_name")
+            .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, .. } = &exprs[0].expr {
+                assert!(matches!(func, WindowFunc::LastValue { .. }));
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_window_aggregate_sum() {
+        let q =
+            parse_query(".[] | select sum(amount) over (order by date) as running_total").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, .. } = &exprs[0].expr {
+                assert!(matches!(
+                    func,
+                    WindowFunc::Aggregate {
+                        func: AggregateFunc::Sum,
+                        ..
+                    }
+                ));
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_window_empty_over() {
+        let q = parse_query(".[] | select row_number() over () as rn").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { func, over } = &exprs[0].expr {
+                assert!(matches!(func, WindowFunc::RowNumber));
+                assert!(over.partition_by.is_empty());
+                assert!(over.order_by.is_empty());
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_window_partition_only() {
+        let q = parse_query(".[] | select count(score) over (partition by dept) as dept_count")
+            .unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { over, .. } = &exprs[0].expr {
+                assert_eq!(over.partition_by, vec!["dept"]);
+                assert!(over.order_by.is_empty());
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
+        }
+    }
+
+    #[test]
+    fn test_parse_window_multiple_order_by() {
+        let q =
+            parse_query(".[] | select rank() over (order by dept asc, score desc) as r").unwrap();
+        if let Operation::Select(exprs) = &q.operations[0] {
+            if let Expr::Window { over, .. } = &exprs[0].expr {
+                assert_eq!(over.order_by.len(), 2);
+                assert_eq!(over.order_by[0].field, "dept");
+                assert!(!over.order_by[0].descending);
+                assert_eq!(over.order_by[1].field, "score");
+                assert!(over.order_by[1].descending);
+            } else {
+                panic!("expected Window expression");
+            }
+        } else {
+            panic!("expected Select operation");
         }
     }
 }
