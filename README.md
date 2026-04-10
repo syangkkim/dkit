@@ -34,14 +34,14 @@ cargo install dkit
 ### From source
 
 ```bash
-git clone https://github.com/syangkkim/dkit.git
+git clone https://github.com/syang0531/dkit.git
 cd dkit
 cargo install --path dkit-cli
 ```
 
 ### Pre-built binaries
 
-Download from [GitHub Releases](https://github.com/syangkkim/dkit/releases).
+Download from [GitHub Releases](https://github.com/syang0531/dkit/releases).
 
 ### With cargo-binstall
 

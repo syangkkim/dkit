@@ -26,11 +26,11 @@ cargo install dkit
 cargo binstall dkit
 
 # From source
-git clone https://github.com/syangkkim/dkit.git
+git clone https://github.com/syang0531/dkit.git
 cd dkit && cargo install --path dkit-cli
 ```
 
-Pre-built binaries are available on [GitHub Releases](https://github.com/syangkkim/dkit/releases).
+Pre-built binaries are available on [GitHub Releases](https://github.com/syang0531/dkit/releases).
 
 ## Quick Start
 
@@ -70,8 +70,8 @@ dkit diff config_dev.yaml config_prod.yaml
 
 ## Documentation
 
-See the [full README](https://github.com/syangkkim/dkit) for detailed usage, query syntax, and more.
+See the [full README](https://github.com/syang0531/dkit) for detailed usage, query syntax, and more.
 
 ## License
 
-[MIT](https://github.com/syangkkim/dkit/blob/main/LICENSE)
+[MIT](https://github.com/syang0531/dkit/blob/main/LICENSE)

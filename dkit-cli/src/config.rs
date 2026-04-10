@@ -149,7 +149,7 @@ pub fn load_config() -> ConfigSource {
 /// Generate a default config file content.
 pub fn default_config_content() -> String {
     r#"# dkit configuration file
-# See: https://github.com/syangkkim/dkit
+# See: https://github.com/syang0531/dkit
 
 # Default output format (json, csv, yaml, toml, xml, md, html, table)
 # default_format = "json"
