@@ -57,10 +57,10 @@ CsvFormat::write(&mut output, &value, &Default::default())?;
 
 ## Documentation
 
-- [API Reference](https://github.com/syangkkim/dkit/blob/main/docs/api-reference.md)
-- [Technical Spec](https://github.com/syangkkim/dkit/blob/main/docs/technical-spec.md)
-- [Query Syntax](https://github.com/syangkkim/dkit/blob/main/docs/query-syntax.md)
+- [API Reference](https://github.com/syang0531/dkit/blob/main/docs/api-reference.md)
+- [Technical Spec](https://github.com/syang0531/dkit/blob/main/docs/technical-spec.md)
+- [Query Syntax](https://github.com/syang0531/dkit/blob/main/docs/query-syntax.md)
 
 ## License
 
-[MIT](https://github.com/syangkkim/dkit/blob/main/LICENSE)
+[MIT](https://github.com/syang0531/dkit/blob/main/LICENSE)

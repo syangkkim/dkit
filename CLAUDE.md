@@ -15,7 +15,7 @@ JSON, CSV, YAML, TOML 간 양방향 변환 + 통합 쿼리 + 테이블 출력.
 모든 기획, 계획, 진행, 상태 관리는 **GitHub Issues**에서 관리한다.
 저장소 내부 문서로 태스크를 관리하지 않는다.
 
-- **Issues**: https://github.com/syangkkim/dkit/issues
+- **Issues**: https://github.com/syang0531/dkit/issues
 
 ### How to Work on Issues
 

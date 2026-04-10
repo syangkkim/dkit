@@ -5,8 +5,8 @@ edition = "2021"
 rust-version = "1.75.0"
 description = "A unified CLI to convert, query, and explore data across formats"
 license = "MIT"
-repository = "https://github.com/syangkkim/dkit"
-homepage = "https://github.com/syangkkim/dkit"
+repository = "https://github.com/syang0531/dkit"
+homepage = "https://github.com/syang0531/dkit"
 keywords = ["cli", "data-format", "converter", "query", "json"]
 categories = ["command-line-utilities", "encoding"]
 
