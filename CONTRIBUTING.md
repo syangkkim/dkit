@@ -12,7 +12,7 @@ Thank you for your interest in contributing to dkit! This guide will help you ge
 ### Setting Up the Development Environment
 
 ```bash
-git clone https://github.com/syangkkim/dkit.git
+git clone https://github.com/syang0531/dkit.git
 cd dkit
 cargo build
 cargo test
@@ -46,7 +46,7 @@ See [docs/architecture.md](docs/architecture.md) for a detailed overview.
 
 ### 1. Find or Create an Issue
 
-- Check [open issues](https://github.com/syangkkim/dkit/issues) for tasks to work on.
+- Check [open issues](https://github.com/syang0531/dkit/issues) for tasks to work on.
 - For new features or bugs, open an issue first to discuss the approach.
 
 ### 2. Create a Branch
@@ -143,4 +143,4 @@ Benchmark results are saved to `target/criterion/` with HTML reports.
 
 ## Questions?
 
-Open an issue on [GitHub](https://github.com/syangkkim/dkit/issues) for any questions about contributing.
+Open an issue on [GitHub](https://github.com/syang0531/dkit/issues) for any questions about contributing.

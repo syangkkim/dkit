@@ -1,6 +1,6 @@
 # dkit Roadmap
 
-> v0.4.0 ~ v1.0.0 로드맵. 세부 이슈는 [GitHub Issues](https://github.com/syangkkim/dkit/issues)에서 관리.
+> v0.4.0 ~ v1.0.0 로드맵. 세부 이슈는 [GitHub Issues](https://github.com/syang0531/dkit/issues)에서 관리.
 
 ## 버전 요약
 

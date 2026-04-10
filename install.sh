@@ -1,10 +1,10 @@
 #!/bin/sh
 # dkit installer script
-# Usage: curl -sSL https://raw.githubusercontent.com/syangkkim/dkit/main/install.sh | sh
+# Usage: curl -sSL https://raw.githubusercontent.com/syang0531/dkit/main/install.sh | sh
 
 set -eu
 
-REPO="syangkkim/dkit"
+REPO="syang0531/dkit"
 BINARY_NAME="dkit"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
