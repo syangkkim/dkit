@@ -1,6 +1,6 @@
 [package]
 name = "dkit"
-version = "1.5.0"
+version = "1.5.1"
 edition = "2021"
 rust-version = "1.75.0"
 description = "A unified CLI to convert, query, and explore data across formats"
@@ -31,7 +31,7 @@ template = ["dkit-core/template"]
 all = ["xml", "msgpack", "excel", "sqlite", "parquet", "hcl", "plist", "template"]
 
 [dependencies]
-dkit-core = { version = "1.5.0", path = "../dkit-core" }
+dkit-core = { version = "1.5.1", path = "../dkit-core" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
