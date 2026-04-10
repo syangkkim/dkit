@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-04-10
+
+### Changed
+
+- **Repository migration**: All URLs updated from `syangkkim/dkit` to `syang0531/dkit` — Cargo.toml metadata, README, CHANGELOG, CI workflows, Homebrew Formula, install script, and documentation links.
+
 ## [1.5.0] - 2026-03-27
 
 ### Added
@@ -218,19 +224,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline**: GitHub Actions workflow with test (Linux/macOS/Windows), clippy, and rustfmt checks.
 - **Test suite**: Integration tests covering all conversion paths, query operations, table view, fixture data, edge cases (unicode, empty input, quoted CSV fields).
 
-[Unreleased]: https://github.com/syangkkim/dkit/compare/v1.5.0...HEAD
-[1.5.0]: https://github.com/syangkkim/dkit/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/syangkkim/dkit/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/syangkkim/dkit/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/syangkkim/dkit/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/syangkkim/dkit/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/syangkkim/dkit/compare/v0.9.0...v1.0.0
-[0.9.0]: https://github.com/syangkkim/dkit/releases/tag/v0.9.0
-[0.8.0]: https://github.com/syangkkim/dkit/releases/tag/v0.8.0
-[0.7.0]: https://github.com/syangkkim/dkit/releases/tag/v0.7.0
-[0.6.0]: https://github.com/syangkkim/dkit/releases/tag/v0.6.0
-[0.5.0]: https://github.com/syangkkim/dkit/releases/tag/v0.5.0
-[0.4.0]: https://github.com/syangkkim/dkit/releases/tag/v0.4.0
-[0.3.0]: https://github.com/syangkkim/dkit/releases/tag/v0.3.0
-[0.2.0]: https://github.com/syangkkim/dkit/releases/tag/v0.2.0
-[0.1.0]: https://github.com/syangkkim/dkit/releases/tag/v0.1.0
+[Unreleased]: https://github.com/syang0531/dkit/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/syang0531/dkit/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/syang0531/dkit/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/syang0531/dkit/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/syang0531/dkit/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/syang0531/dkit/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/syang0531/dkit/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/syang0531/dkit/compare/v0.9.0...v1.0.0
+[0.9.0]: https://github.com/syang0531/dkit/releases/tag/v0.9.0
+[0.8.0]: https://github.com/syang0531/dkit/releases/tag/v0.8.0
+[0.7.0]: https://github.com/syang0531/dkit/releases/tag/v0.7.0
+[0.6.0]: https://github.com/syang0531/dkit/releases/tag/v0.6.0
+[0.5.0]: https://github.com/syang0531/dkit/releases/tag/v0.5.0
+[0.4.0]: https://github.com/syang0531/dkit/releases/tag/v0.4.0
+[0.3.0]: https://github.com/syang0531/dkit/releases/tag/v0.3.0
+[0.2.0]: https://github.com/syang0531/dkit/releases/tag/v0.2.0
+[0.1.0]: https://github.com/syang0531/dkit/releases/tag/v0.1.0
